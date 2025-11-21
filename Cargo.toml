@@ -17,6 +17,7 @@ alloc = []
 std = ["alloc"]
 
 [dependencies]
+zerocopy = { version = "0.8", features = ["derive"] }
 
 [lints.rust]
 deprecated-safe = "warn"
