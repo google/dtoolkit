@@ -1,0 +1,38 @@
+[package]
+name = "dtoolkit"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+rust-version = "1.88"
+description = "A library for parsing and manipulating Flattened Device Tree (FDT) blobs."
+repository = "https://github.com/google/dtoolkit"
+homepage = "https://github.com/google/dtoolkit"
+authors = ["Mateusz Maćkowski <mmac@google.com>"]
+categories = ["embedded", "encoding", "no-std::no-alloc", "parsing"]
+keywords = ["device-tree", "fdt", "dtb", "dts", "parser", "no_std"]
+
+[features]
+default = []
+alloc = []
+std = ["alloc"]
+
+[dependencies]
+
+[lints.rust]
+deprecated-safe = "warn"
+keyword-idents = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unreachable_pub = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+unstable_features = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "warn"
