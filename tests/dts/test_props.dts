@@ -1,0 +1,13 @@
+/dts-v1/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    test-props {
+        u32-prop = <0x12345678>;
+        u64-prop = <0x11223344 0x55667788>;
+        str-prop = "hello world";
+        str-list-prop = "first", "second", "third";
+    };
+};
