@@ -1,0 +1,22 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        target-path = "/a";
+        __overlay__ {
+            prop-a = "overlay";
+            prop-c = <2>;
+        };
+    };
+
+    fragment@1 {
+        target-path = "/";
+        __overlay__ {
+            c {
+                phandle = <4>;
+                prop-d = "new";
+            };
+        };
+    };
+};

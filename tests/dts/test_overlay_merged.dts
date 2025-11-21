@@ -1,0 +1,22 @@
+/dts-v1/;
+
+/ {
+    compatible = "google,base";
+    phandle = <1>;
+
+    a {
+        phandle = <2>;
+        prop-a = "overlay";
+        prop-c = <2>;
+    };
+
+    b {
+        phandle = <3>;
+        prop-b = <1>;
+    };
+
+    c {
+        phandle = <4>;
+        prop-d = "new";
+    };
+};

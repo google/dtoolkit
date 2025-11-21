@@ -1,0 +1,7 @@
+/dts-v1/;
+
+/memreserve/ 0x1000 0x100;
+/memreserve/ 0x2000 0x200;
+
+/ {
+};

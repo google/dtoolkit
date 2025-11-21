@@ -18,7 +18,79 @@
 //! The library is written purely in Rust and is `#![no_std]` compatible. If
 //! you don't need the Device Tree manipulation functionality, the library is
 //! also no-`alloc`-compatible.
+//!
+//! ## Read-Only API
+//!
+//! The read-only API is centered around the [`Fdt`](fdt::Fdt) struct, which
+//! provides a safe, zero-copy view of an FDT blob. You can use this API
+//! to traverse the device tree, inspect nodes and properties, and read
+//! property values.
+//!
+//! Note that because the [`Fdt`](fdt::Fdt) struct is zero-copy, certains
+//! operations such as node or lookups run in linear time. If you need to
+//! perform these operations often and you can spare extra memory, it might be
+//! beneficial to convert from [`Fdt`](fdt::Fdt) to
+//! [`DeviceTree`](model::DeviceTree) first.
+//!
+//! ## Read-Write API
+//!
+//! The read-write API is centered around the [`DeviceTree`](model::DeviceTree)
+//! struct, which provides a mutable, in-memory representation of a device tree.
+//! You can use this API to create new device trees from scratch, modify
+//! existing ones, and serialize them back to an FDT blob.
+//!
+//! Internally it is built upon hash maps, meaning that most lookup and
+//! modification operations run in constant time.
+//!
+//! ## Device Tree Overlays
+//!
+//! This library also provides support for applying device tree overlays. See
+//! the [`DeviceTree::apply_overlay`](model::DeviceTree::apply_overlay) method
+//! for more information.
+//!
+//! # Examples
+//!
+//! ```
+//! use dtoolkit::fdt::Fdt;
+//! use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
+//!
+//! // Create a new device tree from scratch.
+//! let mut tree = DeviceTree::new(DeviceTreeNode::new("/"));
+//!
+//! // Add a child node to the root.
+//! let child = DeviceTreeNode::builder("child")
+//!     .property(DeviceTreeProperty::new("my-property", "hello\0"))
+//!     .build();
+//! tree.root_mut().add_child(child);
+//!
+//! // Serialize the device tree to a DTB.
+//! let dtb = tree.to_dtb();
+//!
+//! // Parse the DTB with the read-only API.
+//! let fdt = Fdt::new(&dtb).unwrap();
+//!
+//! // Find the child node and read its property.
+//! let child_node = fdt.find_node("/child").unwrap().unwrap();
+//! let prop = child_node.property("my-property").unwrap().unwrap();
+//! assert_eq!(prop.as_str().unwrap(), "hello");
+//!
+//! // Display the DTS
+//! println!("{}", fdt);
+//! ```
 
 #![no_std]
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+
+pub mod memreserve;
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+pub mod error;
+pub mod fdt;
+#[cfg(feature = "write")]
+#[cfg_attr(docsrs, doc(cfg(feature = "write")))]
+pub mod model;
+#[cfg(feature = "write")]
+mod writer;

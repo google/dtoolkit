@@ -1,0 +1,16 @@
+/dts-v1/;
+
+/ {
+    compatible = "google,base";
+    phandle = <1>;
+
+    a {
+        phandle = <2>;
+        prop-a = "base";
+    };
+
+    b {
+        phandle = <3>;
+        prop-b = <1>;
+    };
+};

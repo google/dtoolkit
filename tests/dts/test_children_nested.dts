@@ -1,0 +1,15 @@
+/dts-v1/;
+
+/ {
+    child1 {
+        prop1 = <0x02>;
+
+        child2 {
+            prop2 = <0x02>;
+        };
+    };
+
+    child3 {
+        prop3 = <0x02>;
+    };
+};
