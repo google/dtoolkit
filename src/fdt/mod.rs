@@ -15,17 +15,25 @@
 //!
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
+use crate::error::{FdtError, FdtErrorKind};
+mod node;
+use core::ffi::CStr;
 use core::mem::offset_of;
 use core::ptr;
 
+pub use node::FdtNode;
 use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
-use crate::error::{FdtError, FdtErrorKind};
-
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
+pub(crate) const FDT_TAGSIZE: usize = size_of::<u32>();
 pub(crate) const FDT_MAGIC: u32 = 0xd00d_feed;
+pub(crate) const FDT_BEGIN_NODE: u32 = 0x1;
+pub(crate) const FDT_END_NODE: u32 = 0x2;
+pub(crate) const FDT_END: u32 = 0x9;
+pub(crate) const FDT_PROP: u32 = 0x3;
+pub(crate) const FDT_NOP: u32 = 0x4;
 
 #[repr(C, packed)]
 #[derive(Debug, Copy, Clone, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
@@ -98,6 +106,31 @@ impl FdtHeader {
 #[derive(Debug, Clone, Copy)]
 pub struct Fdt<'a> {
     pub(crate) data: &'a [u8],
+}
+
+/// A token in the device tree structure.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum FdtToken {
+    BeginNode,
+    EndNode,
+    Prop,
+    Nop,
+    End,
+}
+
+impl TryFrom<u32> for FdtToken {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            FDT_BEGIN_NODE => Ok(FdtToken::BeginNode),
+            FDT_END_NODE => Ok(FdtToken::EndNode),
+            FDT_PROP => Ok(FdtToken::Prop),
+            FDT_NOP => Ok(FdtToken::Nop),
+            FDT_END => Ok(FdtToken::End),
+            _ => Err(value),
+        }
+    }
 }
 
 impl<'a> Fdt<'a> {
@@ -275,6 +308,173 @@ impl<'a> Fdt<'a> {
     #[must_use]
     pub fn boot_cpuid_phys(&self) -> u32 {
         self.header().boot_cpuid_phys()
+    }
+
+    /// Returns the root node of the device tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`FdtErrorKind::InvalidLength`] if the FDT structure is
+    /// truncated or an [`FdtErrorKind::BadToken`] if the first token is not
+    /// `FDT_BEGIN_NODE`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let root = fdt.root().unwrap();
+    /// assert_eq!(root.name().unwrap(), "");
+    /// ```
+    pub fn root(&self) -> Result<FdtNode<'_>, FdtError> {
+        let offset = self.header().off_dt_struct() as usize;
+        let token = self.read_token(offset)?;
+        if token != FdtToken::BeginNode {
+            return Err(FdtError::new(
+                FdtErrorKind::BadToken(FDT_BEGIN_NODE),
+                offset,
+            ));
+        }
+        Ok(FdtNode { fdt: self, offset })
+    }
+
+    /// Finds a node by its path.
+    ///
+    /// # Performance
+    ///
+    /// This method traverses the device tree and its performance is linear in
+    /// the number of nodes in the path. If you need to call this often,
+    /// consider using
+    /// [`DeviceTree::from_fdt`](crate::model::DeviceTree::from_fdt)
+    /// first. [`DeviceTree`](crate::model::DeviceTree) stores the nodes in a
+    /// hash map for constant-time lookup.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/a/b/c").unwrap().unwrap();
+    /// assert_eq!(node.name().unwrap(), "c");
+    /// ```
+    #[must_use]
+    pub fn find_node(&self, path: &str) -> Option<Result<FdtNode<'_>, FdtError>> {
+        if !path.starts_with('/') {
+            return None;
+        }
+        let mut current_node = match self.root() {
+            Ok(node) => node,
+            Err(e) => return Some(Err(e)),
+        };
+        if path == "/" {
+            return Some(Ok(current_node));
+        }
+        for component in path.split('/').filter(|s| !s.is_empty()) {
+            match current_node.children().find(|child| {
+                child
+                    .as_ref()
+                    .is_ok_and(|c| c.name().is_ok_and(|n| n == component))
+            }) {
+                Some(Ok(node)) => current_node = node,
+                Some(Err(e)) => return Some(Err(e)),
+                None => return None,
+            }
+        }
+        Some(Ok(current_node))
+    }
+
+    pub(crate) fn read_token(&self, offset: usize) -> Result<FdtToken, FdtError> {
+        let val = big_endian::U32::ref_from_prefix(&self.data[offset..])
+            .map(|(val, _)| val.get())
+            .map_err(|_e| FdtError::new(FdtErrorKind::InvalidLength, offset))?;
+        FdtToken::try_from(val).map_err(|t| FdtError::new(FdtErrorKind::BadToken(t), offset))
+    }
+
+    /// Return a NUL-terminated string from a given offset.
+    pub(crate) fn string_at_offset(
+        &self,
+        offset: usize,
+        end: Option<usize>,
+    ) -> Result<&'a str, FdtError> {
+        let slice = match end {
+            Some(end) => self.data.get(offset..end),
+            None => self.data.get(offset..),
+        };
+        let slice = slice.ok_or(FdtError::new(FdtErrorKind::InvalidOffset, offset))?;
+
+        match CStr::from_bytes_until_nul(slice).map(|val| val.to_str()) {
+            Ok(Ok(val)) => Ok(val),
+            _ => Err(FdtError::new(FdtErrorKind::InvalidString, offset)),
+        }
+    }
+
+    pub(crate) fn find_string_end(&self, start: usize) -> Result<usize, FdtError> {
+        let mut offset = start;
+        loop {
+            match self.data.get(offset) {
+                Some(0) => return Ok(offset + 1),
+                Some(_) => {}
+                None => return Err(FdtError::new(FdtErrorKind::InvalidString, start)),
+            }
+            offset += 1;
+        }
+    }
+
+    pub(crate) fn next_sibling_offset(&self, mut offset: usize) -> Result<usize, FdtError> {
+        offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
+
+        // Skip node name
+        offset = self.find_string_end(offset)?;
+        offset = Self::align_tag_offset(offset);
+
+        // Skip properties
+        loop {
+            let token = self.read_token(offset)?;
+            match token {
+                FdtToken::Prop => {
+                    offset += FDT_TAGSIZE; // skip FDT_PROP
+                    offset = self.next_property_offset(offset)?;
+                }
+                FdtToken::Nop => offset += FDT_TAGSIZE,
+                _ => break,
+            }
+        }
+
+        // Skip child nodes
+        loop {
+            let token = self.read_token(offset)?;
+            match token {
+                FdtToken::BeginNode => {
+                    offset = self.next_sibling_offset(offset)?;
+                }
+                FdtToken::EndNode => {
+                    offset += FDT_TAGSIZE;
+                    break;
+                }
+                FdtToken::Nop => offset += FDT_TAGSIZE,
+                _ => {}
+            }
+        }
+
+        Ok(offset)
+    }
+
+    pub(crate) fn next_property_offset(&self, mut offset: usize) -> Result<usize, FdtError> {
+        let len = big_endian::U32::ref_from_prefix(&self.data[offset..])
+            .map(|(val, _)| val.get())
+            .map_err(|_e| FdtError::new(FdtErrorKind::InvalidLength, offset))?
+            as usize;
+        offset += FDT_TAGSIZE; // skip value length
+        offset += FDT_TAGSIZE; // skip name offset
+        offset += len; // skip property value
+
+        Ok(Self::align_tag_offset(offset))
+    }
+
+    pub(crate) fn align_tag_offset(offset: usize) -> usize {
+        offset.next_multiple_of(FDT_TAGSIZE)
     }
 }
 
