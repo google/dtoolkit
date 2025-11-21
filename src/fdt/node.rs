@@ -8,6 +8,8 @@
 
 //! A read-only API for inspecting a device tree node.
 
+use core::fmt;
+
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::error::FdtError;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
@@ -148,6 +150,43 @@ impl<'a> FdtNode<'a> {
             fdt: self.fdt,
             offset: self.offset,
         }
+    }
+
+    pub(crate) fn fmt_recursive(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        let name = self.name().map_err(|_| fmt::Error)?;
+        if name.is_empty() {
+            writeln!(f, "{:indent$}/ {{", "", indent = indent)?;
+        } else {
+            writeln!(f, "{:indent$}{} {{", "", name, indent = indent)?;
+        }
+
+        let mut has_properties = false;
+        for prop in self.properties() {
+            has_properties = true;
+            match prop {
+                Ok(prop) => prop.fmt(f, indent + 4)?,
+                Err(_e) => {
+                    writeln!(f, "<Error reading property>")?;
+                }
+            }
+        }
+
+        let mut first_child = true;
+        for child in self.children() {
+            if !first_child || has_properties {
+                writeln!(f)?;
+            }
+
+            first_child = false;
+            match child {
+                Ok(child) => child.fmt_recursive(f, indent + 4)?,
+                Err(_e) => {
+                    writeln!(f, "<Error reading child node>")?;
+                }
+            }
+        }
+
+        writeln!(f, "{:indent$}}};", "", indent = indent)
     }
 }
 

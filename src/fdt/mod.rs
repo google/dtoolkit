@@ -20,7 +20,7 @@ mod node;
 mod property;
 use core::ffi::CStr;
 use core::mem::offset_of;
-use core::ptr;
+use core::{fmt, ptr};
 
 pub use node::FdtNode;
 pub use property::FdtProperty;
@@ -488,6 +488,15 @@ impl<'a> Fdt<'a> {
 
     pub(crate) fn align_tag_offset(offset: usize) -> usize {
         offset.next_multiple_of(FDT_TAGSIZE)
+    }
+}
+
+impl fmt::Display for Fdt<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "/dts-v1/;")?;
+        writeln!(f)?;
+        let root = self.root().map_err(|_| fmt::Error)?;
+        root.fmt_recursive(f, 0)
     }
 }
 

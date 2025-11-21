@@ -140,3 +140,14 @@ fn find_node_by_path() {
     assert!(fdt.find_node("/x").is_none());
     assert!(fdt.find_node("").is_none());
 }
+
+#[test]
+fn pretty_print() {
+    let dtb = include_bytes!("dtb/test_pretty_print.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let s = fdt.to_string();
+    let expected = include_str!("dts/test_pretty_print.dts")
+        // account for Windows newlines, if needed
+        .replace("\r\n", "\n");
+    assert_eq!(s, expected);
+}

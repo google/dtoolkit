@@ -9,6 +9,7 @@
 //! A read-only API for inspecting a device tree property.
 
 use core::ffi::CStr;
+use core::fmt;
 
 use zerocopy::{FromBytes, big_endian};
 
@@ -124,6 +125,59 @@ impl<'a> FdtProperty<'a> {
     /// ```
     pub fn as_str_list(&self) -> impl Iterator<Item = &'a str> {
         FdtStringListIterator { value: self.value }
+    }
+
+    pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+        write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
+
+        if self.value.is_empty() {
+            writeln!(f, ";")?;
+            return Ok(());
+        }
+
+        let is_printable = self
+            .value
+            .iter()
+            .all(|&ch| ch.is_ascii_graphic() || ch == b' ' || ch == 0);
+        let has_empty = self.value.windows(2).any(|window| window == [0, 0]);
+        if is_printable && self.value.ends_with(&[0]) && !has_empty {
+            let mut strings = self.as_str_list();
+            if let Some(first) = strings.next() {
+                write!(f, " = \"{first}\"")?;
+                for s in strings {
+                    write!(f, ", \"{s}\"")?;
+                }
+                writeln!(f, ";")?;
+                return Ok(());
+            }
+        }
+
+        if self.value.len().is_multiple_of(4) {
+            write!(f, " = <")?;
+            for (i, chunk) in self.value.chunks_exact(4).enumerate() {
+                if i > 0 {
+                    write!(f, " ")?;
+                }
+                let val = u32::from_be_bytes(
+                    chunk
+                        .try_into()
+                        .expect("u32::from_be_bytes() should always succeed with 4 bytes"),
+                );
+                write!(f, "0x{val:02x}")?;
+            }
+            writeln!(f, ">;")?;
+        } else {
+            write!(f, " = [")?;
+            for (i, byte) in self.value.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " ")?;
+                }
+                write!(f, "{byte:02x}")?;
+            }
+            writeln!(f, "];")?;
+        }
+
+        Ok(())
     }
 }
 
