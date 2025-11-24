@@ -14,12 +14,14 @@
 //! flattened device tree blob.
 
 use alloc::vec::Vec;
+use core::fmt::Display;
 
 use crate::error::FdtError;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 mod node;
 mod property;
+mod writer;
 pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
 pub use property::DeviceTreeProperty;
 
@@ -85,6 +87,17 @@ impl DeviceTree {
         })
     }
 
+    /// Serializes the `DeviceTree` to a flattened device tree blob.
+    ///
+    /// # Panics
+    ///
+    /// This may panic if any of the lengths written to the DTB (block sizes,
+    /// property value length, etc.) exceed [`u32::MAX`].
+    #[must_use]
+    pub fn to_dtb(&self) -> Vec<u8> {
+        writer::to_bytes(self)
+    }
+
     /// Finds a node by its path and returns a mutable reference to it.
     ///
     /// # Performance
@@ -123,5 +136,13 @@ impl DeviceTree {
 impl Default for DeviceTree {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Display for DeviceTree {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Fdt::new(&self.to_dtb())
+            .expect("DeviceTree::to_dtb() should always generate a valid FDT")
+            .fmt(f)
     }
 }

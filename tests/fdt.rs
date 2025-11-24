@@ -173,3 +173,26 @@ fn pretty_print() {
         assert_eq!(s, expected, "Mismatch for {name}");
     }
 }
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip() {
+    const FILE_CONTENTS: [&'static [u8]; 7] = [
+        include_bytes!("dtb/test_children_nested.dtb"),
+        include_bytes!("dtb/test_children.dtb"),
+        include_bytes!("dtb/test_memreserve.dtb"),
+        include_bytes!("dtb/test_pretty_print.dtb"),
+        include_bytes!("dtb/test_props.dtb"),
+        include_bytes!("dtb/test_traversal.dtb"),
+        include_bytes!("dtb/test.dtb"),
+    ];
+
+    for dtb in FILE_CONTENTS {
+        use dtoolkit::model::DeviceTree;
+
+        let fdt = Fdt::new(dtb).unwrap();
+        let ir = DeviceTree::from_fdt(&fdt).unwrap();
+        let new_dtb = ir.to_dtb();
+        assert_eq!(dtb.to_vec(), new_dtb);
+    }
+}
