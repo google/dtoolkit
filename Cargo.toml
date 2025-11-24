@@ -15,8 +15,11 @@ keywords = ["device-tree", "fdt", "dtb", "dts", "parser", "no_std"]
 default = []
 alloc = []
 std = ["alloc"]
+write = ["alloc", "dep:indexmap", "dep:twox-hash"]
 
 [dependencies]
+indexmap = { version = "2", optional = true, default-features = false }
+twox-hash = { version = "2", optional = true, features = ["xxhash64"], default-features = false }
 zerocopy = { version = "0.8.28", features = ["derive"] }
 
 [lints.rust]
