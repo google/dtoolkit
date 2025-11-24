@@ -43,6 +43,11 @@ pub enum FdtErrorKind {
     InvalidOffset,
     /// An invalid string was encountered.
     InvalidString,
+    /// Memory reservation block has not been terminated with a null entry.
+    MemReserveNotTerminated,
+    /// Memory reservation block has an entry that is unaligned or has invalid
+    /// size.
+    MemReserveInvalid,
 }
 
 impl fmt::Display for FdtError {
@@ -65,6 +70,14 @@ impl fmt::Display for FdtErrorKind {
             FdtErrorKind::BadToken(token) => write!(f, "bad FDT token: 0x{token:x}"),
             FdtErrorKind::InvalidOffset => write!(f, "invalid offset in FDT"),
             FdtErrorKind::InvalidString => write!(f, "invalid string in FDT"),
+            FdtErrorKind::MemReserveNotTerminated => write!(
+                f,
+                "memory reservation block not terminated with a null entry"
+            ),
+            FdtErrorKind::MemReserveInvalid => write!(
+                f,
+                "memory reservation block has an entry that is unaligned or has invalid size"
+            ),
         }
     }
 }
