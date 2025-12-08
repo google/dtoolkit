@@ -109,7 +109,7 @@ pub struct Fdt<'a> {
 }
 
 /// A token in the device tree structure.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FdtToken {
     BeginNode,
     EndNode,
@@ -344,11 +344,7 @@ impl<'a> Fdt<'a> {
     /// # Performance
     ///
     /// This method traverses the device tree and its performance is linear in
-    /// the number of nodes in the path. If you need to call this often,
-    /// consider using
-    /// [`DeviceTree::from_fdt`](crate::model::DeviceTree::from_fdt)
-    /// first. [`DeviceTree`](crate::model::DeviceTree) stores the nodes in a
-    /// hash map for constant-time lookup.
+    /// the number of nodes in the path.
     ///
     /// # Examples
     ///

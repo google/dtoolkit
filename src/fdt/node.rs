@@ -51,11 +51,7 @@ impl<'a> FdtNode<'a> {
     /// # Performance
     ///
     /// This method's performance is linear in the number of children of this
-    /// node because it iterates through the children. If you need to call this
-    /// often, consider converting to a
-    /// [`DeviceTreeNode`](crate::model::DeviceTreeNode) first. Child lookup
-    /// on a [`DeviceTreeNode`](crate::model::DeviceTreeNode) is a
-    /// constant-time operation.
+    /// node because it iterates through the children.
     ///
     /// # Errors
     ///
