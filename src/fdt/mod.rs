@@ -174,7 +174,7 @@ impl<'a> Fdt<'a> {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
     /// let ptr = dtb.as_ptr();
