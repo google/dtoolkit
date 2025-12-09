@@ -140,3 +140,35 @@ fn find_node_by_path() {
     assert!(fdt.find_node("/x").is_none());
     assert!(fdt.find_node("").is_none());
 }
+
+#[macro_export]
+macro_rules! load_dtb_dts_pair {
+    ($name:expr) => {
+        (
+            include_bytes!(concat!("dtb/", $name, ".dtb")).as_slice(),
+            include_str!(concat!("dts/", $name, ".dts")),
+            $name,
+        )
+    };
+}
+
+const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
+    load_dtb_dts_pair!("test_children_nested"),
+    load_dtb_dts_pair!("test_children"),
+    load_dtb_dts_pair!("test_pretty_print"),
+    load_dtb_dts_pair!("test_props"),
+    load_dtb_dts_pair!("test_traversal"),
+    load_dtb_dts_pair!("test"),
+];
+
+#[test]
+fn pretty_print() {
+    for (dtb, expected_dts, name) in ALL_DT_FILES {
+        let fdt = Fdt::new(dtb).unwrap();
+        let s = fdt.to_string();
+        let expected = expected_dts
+            // account for Windows newlines, if needed
+            .replace("\r\n", "\n");
+        assert_eq!(s, expected, "Mismatch for {name}");
+    }
+}

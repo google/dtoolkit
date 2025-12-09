@@ -1,0 +1,27 @@
+/dts-v1/;
+
+/ {
+    #address-cells = <0x01>;
+    #size-cells = <0x01>;
+    compatible = "acme,coyote";
+    model = "ACME Coyote";
+    phandle = <0x01>;
+    str-list = "first", "second";
+    empty-prop;
+    byte-array = [01 23 45 67 89 ab cd];
+
+    cpus {
+        #address-cells = <0x01>;
+        #size-cells = <0x00>;
+
+        cpu@0 {
+            compatible = "arm,cortex-a9";
+            reg = <0x00>;
+        };
+    };
+
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x80000000 0x20000000>;
+    };
+};

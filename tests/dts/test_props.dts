@@ -1,8 +1,8 @@
 /dts-v1/;
 
 / {
-    #address-cells = <2>;
-    #size-cells = <2>;
+    #address-cells = <0x02>;
+    #size-cells = <0x02>;
 
     test-props {
         u32-prop = <0x12345678>;
