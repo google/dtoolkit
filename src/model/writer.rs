@@ -23,7 +23,7 @@ const LAST_COMP_VERSION: u32 = 16;
 
 pub(crate) fn to_bytes(tree: &DeviceTree) -> Vec<u8> {
     let memory_reservations = write_memory_reservations(&tree.memory_reservations);
-    let (struct_block, strings_block) = write_root(tree.root());
+    let (struct_block, strings_block) = write_root(&tree.root);
 
     let off_mem_rsvmap = size_of::<FdtHeader>();
     let off_dt_struct = off_mem_rsvmap + memory_reservations.len();

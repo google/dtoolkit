@@ -112,16 +112,14 @@ fn find_node_mut() {
 
 #[test]
 fn device_tree_format() {
-    let tree = DeviceTree::new(
-        DeviceTreeNode::builder("")
-            .child(
-                DeviceTreeNode::builder("child-a")
-                    .child(DeviceTreeNode::builder("child-a-a").build())
-                    .build(),
-            )
-            .child(DeviceTreeNode::builder("child-b").build())
+    let mut tree = DeviceTree::new();
+    tree.root.add_child(
+        DeviceTreeNode::builder("child-a")
+            .child(DeviceTreeNode::builder("child-a-a").build())
             .build(),
     );
+    tree.root
+        .add_child(DeviceTreeNode::builder("child-b").build());
 
     let fds = tree.to_string();
 
