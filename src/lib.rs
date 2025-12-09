@@ -23,7 +23,6 @@
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub mod memreserve;
-
 pub mod error;
 pub mod fdt;
+pub mod memreserve;
