@@ -390,7 +390,7 @@ impl<'a> Fdt<'a> {
         FdtToken::try_from(val).map_err(|t| FdtError::new(FdtErrorKind::BadToken(t), offset))
     }
 
-    /// Return a string from the string block.
+    /// Returns a string from the string block.
     pub(crate) fn string(&self, string_block_offset: usize) -> Result<&'a str, FdtError> {
         let header = self.header();
         let str_block_start = header.off_dt_strings() as usize;
@@ -405,7 +405,7 @@ impl<'a> Fdt<'a> {
         self.string_at_offset(str_start, Some(str_block_end))
     }
 
-    /// Return a NUL-terminated string from a given offset.
+    /// Returns a NUL-terminated string from a given offset.
     pub(crate) fn string_at_offset(
         &self,
         offset: usize,

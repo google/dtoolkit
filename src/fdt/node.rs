@@ -52,11 +52,6 @@ impl<'a> FdtNode<'a> {
     /// # Performance
     ///
     /// This method iterates through all properties of the node.
-    /// If you need to call this often, consider using
-    /// [`DeviceTree::from_fdt`](crate::model::DeviceTree::from_fdt) or
-    /// [`DeviceTreeNode::try_from`](crate::model::DeviceTreeNode::try_from)
-    /// first. [`DeviceTreeNode`](crate::model::DeviceTreeNode) stores
-    /// the properties in a hash map for constant-time lookup.
     ///
     /// # Examples
     ///

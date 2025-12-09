@@ -35,6 +35,7 @@ impl<'a> FdtProperty<'a> {
     pub fn value(&self) -> &'a [u8] {
         self.value
     }
+
     /// Returns the value of this property as a `u32`.
     ///
     /// # Errors
