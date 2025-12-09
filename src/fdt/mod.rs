@@ -17,11 +17,13 @@
 
 use crate::error::{FdtError, FdtErrorKind};
 mod node;
+mod property;
 use core::ffi::CStr;
 use core::mem::offset_of;
 use core::ptr;
 
 pub use node::FdtNode;
+pub use property::FdtProperty;
 use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
@@ -388,7 +390,22 @@ impl<'a> Fdt<'a> {
         FdtToken::try_from(val).map_err(|t| FdtError::new(FdtErrorKind::BadToken(t), offset))
     }
 
-    /// Return a NUL-terminated string from a given offset.
+    /// Returns a string from the string block.
+    pub(crate) fn string(&self, string_block_offset: usize) -> Result<&'a str, FdtError> {
+        let header = self.header();
+        let str_block_start = header.off_dt_strings() as usize;
+        let str_block_size = header.size_dt_strings() as usize;
+        let str_block_end = str_block_start + str_block_size;
+        let str_start = str_block_start + string_block_offset;
+
+        if str_start >= str_block_end {
+            return Err(FdtError::new(FdtErrorKind::InvalidLength, str_start));
+        }
+
+        self.string_at_offset(str_start, Some(str_block_end))
+    }
+
+    /// Returns a NUL-terminated string from a given offset.
     pub(crate) fn string_at_offset(
         &self,
         offset: usize,

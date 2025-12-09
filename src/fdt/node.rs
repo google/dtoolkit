@@ -10,6 +10,7 @@
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::error::FdtError;
+use crate::fdt::property::{FdtPropIter, FdtProperty};
 
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
@@ -44,6 +45,57 @@ impl<'a> FdtNode<'a> {
     pub fn name(&self) -> Result<&'a str, FdtError> {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt.string_at_offset(name_offset, None)
+    }
+
+    /// Returns a property by its name.
+    ///
+    /// # Performance
+    ///
+    /// This method iterates through all properties of the node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
+    /// let prop = node.property("u32-prop").unwrap().unwrap();
+    /// assert_eq!(prop.name(), "u32-prop");
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read.
+    pub fn property(&self, name: &str) -> Result<Option<FdtProperty<'a>>, FdtError> {
+        for property in self.properties() {
+            let property = property?;
+            if property.name() == name {
+                return Ok(Some(property));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Returns an iterator over the properties of this node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
+    /// let mut props = node.properties();
+    /// assert_eq!(props.next().unwrap().unwrap().name(), "u32-prop");
+    /// assert_eq!(props.next().unwrap().unwrap().name(), "u64-prop");
+    /// assert_eq!(props.next().unwrap().unwrap().name(), "str-prop");
+    /// ```
+    pub fn properties(&self) -> impl Iterator<Item = Result<FdtProperty<'a>, FdtError>> + use<'a> {
+        FdtPropIter::Start {
+            fdt: self.fdt,
+            offset: self.offset,
+        }
     }
 
     /// Returns a child node by its name.
