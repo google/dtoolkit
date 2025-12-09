@@ -1,0 +1,11 @@
+/dts-v1/;
+
+/ {
+    child1 {
+        prop1 = <0x12345678>;
+    };
+
+    child2 {
+        prop2 = "hello";
+    };
+};
