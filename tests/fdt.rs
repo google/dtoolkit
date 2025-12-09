@@ -169,6 +169,6 @@ fn pretty_print() {
         let expected = expected_dts
             // account for Windows newlines, if needed
             .replace("\r\n", "\n");
-        assert_eq!(s, expected, "Mismatch for {}", name);
+        assert_eq!(s, expected, "Mismatch for {name}");
     }
 }
