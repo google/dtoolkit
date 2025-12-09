@@ -16,6 +16,7 @@
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
 use crate::error::{FdtError, FdtErrorKind};
+use crate::memreserve::MemoryReservation;
 mod node;
 mod property;
 use core::ffi::CStr;
@@ -312,6 +313,34 @@ impl<'a> Fdt<'a> {
         self.header().boot_cpuid_phys()
     }
 
+    /// Returns an iterator over the memory reservation block.
+    pub fn memory_reservations(
+        &self,
+    ) -> impl Iterator<Item = Result<MemoryReservation, FdtError>> + '_ {
+        let mut offset = self.header().off_mem_rsvmap() as usize;
+        core::iter::from_fn(move || {
+            if offset >= self.header().off_dt_struct() as usize {
+                return Some(Err(FdtError::new(
+                    FdtErrorKind::MemReserveNotTerminated,
+                    offset,
+                )));
+            }
+
+            let reservation = match MemoryReservation::ref_from_prefix(&self.data[offset..])
+                .map_err(|_| FdtError::new(FdtErrorKind::MemReserveInvalid, offset))
+            {
+                Ok((reservation, _)) => *reservation,
+                Err(e) => return Some(Err(e)),
+            };
+            offset += size_of::<MemoryReservation>();
+
+            if reservation == MemoryReservation::TERMINATOR {
+                return None;
+            }
+            Some(Ok(reservation))
+        })
+    }
+
     /// Returns the root node of the device tree.
     ///
     /// # Errors
@@ -494,6 +523,15 @@ impl<'a> Fdt<'a> {
 impl fmt::Display for Fdt<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "/dts-v1/;")?;
+        for reservation in self.memory_reservations() {
+            let reservation = reservation.map_err(|_| fmt::Error)?;
+            writeln!(
+                f,
+                "/memreserve/ {:#x} {:#x};",
+                reservation.address(),
+                reservation.size()
+            )?;
+        }
         writeln!(f)?;
         let root = self.root().map_err(|_| fmt::Error)?;
         root.fmt_recursive(f, 0)

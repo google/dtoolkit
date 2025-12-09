@@ -25,3 +25,4 @@
 
 pub mod error;
 pub mod fdt;
+pub mod memreserve;

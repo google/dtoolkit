@@ -155,6 +155,7 @@ macro_rules! load_dtb_dts_pair {
 const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
     load_dtb_dts_pair!("test_children_nested"),
     load_dtb_dts_pair!("test_children"),
+    load_dtb_dts_pair!("test_memreserve"),
     load_dtb_dts_pair!("test_pretty_print"),
     load_dtb_dts_pair!("test_props"),
     load_dtb_dts_pair!("test_traversal"),
