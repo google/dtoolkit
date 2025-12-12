@@ -7,6 +7,8 @@
 // except according to those terms.
 
 use dtoolkit::fdt::Fdt;
+#[cfg(feature = "write")]
+use dtoolkit::model::DeviceTree;
 
 #[test]
 fn read_child_nodes() {
@@ -183,9 +185,18 @@ fn pretty_print() {
 #[cfg(feature = "write")]
 fn round_trip() {
     for (dtb, _dts, name) in ALL_DT_FILES {
-        use dtoolkit::model::DeviceTree;
-
         let fdt = Fdt::new(dtb).unwrap();
+        let ir = DeviceTree::from_fdt(&fdt).unwrap();
+        let new_dtb = ir.to_dtb();
+        assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
+    }
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw() {
+    for (dtb, _dts, name) in ALL_DT_FILES {
+        let fdt = unsafe { Fdt::from_raw(dtb.as_ptr()).unwrap() };
         let ir = DeviceTree::from_fdt(&fdt).unwrap();
         let new_dtb = ir.to_dtb();
         assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");

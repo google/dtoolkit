@@ -31,3 +31,14 @@ All submissions, including submissions by project members, require review. We
 use GitHub pull requests for this purpose. Consult
 [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on using pull requests.
+
+### Unsafe code policy
+
+* The use of `unsafe` code is generally disallowed. The Device Tree parser
+  must validate all input data, treating it as untrusted. This includes bounds
+  checking for all offsets and indices to prevent vulnerabilities.
+* Should a compelling justification arise for the inclusion of `unsafe` code
+  (beyond performance optimization) it must be accompanied by
+  an `#[expect(unsafe_code)]` attribute, stating the rationale.
+* All `unsafe` code must be tested. The CI suite includes Miri to detect any
+  undefined behavior.

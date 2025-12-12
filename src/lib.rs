@@ -21,6 +21,7 @@
 
 #![no_std]
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
+#![deny(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "write")]
