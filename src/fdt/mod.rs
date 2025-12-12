@@ -425,18 +425,8 @@ impl<'a> Fdt<'a> {
             return Ok(Some(current_node));
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
-            let include_address = component.contains('@');
-            match current_node.children().find(|child| {
-                child.as_ref().is_ok_and(|c| {
-                    if include_address {
-                        c.name().is_ok_and(|n| n == component)
-                    } else {
-                        c.name_without_address().is_ok_and(|n| n == component)
-                    }
-                })
-            }) {
-                Some(Ok(node)) => current_node = node,
-                Some(Err(e)) => return Err(e),
+            match current_node.child(component)? {
+                Some(node) => current_node = node,
                 None => return Ok(None),
             }
         }
