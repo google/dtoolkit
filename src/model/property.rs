@@ -8,7 +8,7 @@
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::str;
+use core::{fmt, str};
 
 use crate::error::FdtError;
 use crate::fdt::FdtProperty;
@@ -21,6 +21,17 @@ pub enum PropertyError {
     /// The property's value is not a valid string.
     InvalidString,
 }
+
+impl fmt::Display for PropertyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PropertyError::InvalidLength => write!(f, "property has an invalid length"),
+            PropertyError::InvalidString => write!(f, "property is not a valid string"),
+        }
+    }
+}
+
+impl core::error::Error for PropertyError {}
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq)]

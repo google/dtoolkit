@@ -32,14 +32,15 @@ pub use property::DeviceTreeProperty;
 ///
 /// ```
 /// # use dtoolkit::model::{DeviceTree, DeviceTreeNode};
-/// let root = DeviceTreeNode::new("/");
-/// let mut tree = DeviceTree::new(root);
-/// tree.root_mut().add_child(DeviceTreeNode::new("child"));
+/// let mut tree = DeviceTree::new();
+/// tree.root.add_child(DeviceTreeNode::new("child"));
 /// let child = tree.find_node_mut("/child").unwrap();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DeviceTree {
-    pub(self) root: DeviceTreeNode,
+    /// The root node for this device tree.
+    pub root: DeviceTreeNode,
     /// The memory reservations for this device tree.
     pub memory_reservations: Vec<MemoryReservation>,
 }
@@ -51,13 +52,12 @@ impl DeviceTree {
     ///
     /// ```
     /// # use dtoolkit::model::{DeviceTree, DeviceTreeNode};
-    /// let root = DeviceTreeNode::new("/");
-    /// let tree = DeviceTree::new(root);
+    /// let tree = DeviceTree::new();
     /// ```
     #[must_use]
-    pub fn new(root: DeviceTreeNode) -> Self {
+    pub fn new() -> Self {
         Self {
-            root,
+            root: DeviceTreeNode::new("/"),
             memory_reservations: Vec::new(),
         }
     }
@@ -85,17 +85,6 @@ impl DeviceTree {
         })
     }
 
-    /// Returns a reference to the root node of the device tree.
-    #[must_use]
-    pub fn root(&self) -> &DeviceTreeNode {
-        &self.root
-    }
-
-    /// Returns a mutable reference to the root node of the device tree.
-    pub fn root_mut(&mut self) -> &mut DeviceTreeNode {
-        &mut self.root
-    }
-
     /// Finds a node by its path and returns a mutable reference to it.
     ///
     /// # Performance
@@ -108,8 +97,8 @@ impl DeviceTree {
     ///
     /// ```
     /// # use dtoolkit::model::{DeviceTree, DeviceTreeNode};
-    /// let mut tree = DeviceTree::new(DeviceTreeNode::new("/"));
-    /// tree.root_mut().add_child(DeviceTreeNode::new("child"));
+    /// let mut tree = DeviceTree::new();
+    /// tree.root.add_child(DeviceTreeNode::new("child"));
     /// let child = tree.find_node_mut("/child").unwrap();
     /// assert_eq!(child.name(), "child");
     /// ```
@@ -128,5 +117,11 @@ impl DeviceTree {
             }
         }
         Some(current_node)
+    }
+}
+
+impl Default for DeviceTree {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -13,9 +13,7 @@ keywords = ["device-tree", "fdt", "dtb", "dts", "parser", "no_std"]
 
 [features]
 default = []
-alloc = []
-std = ["alloc"]
-write = ["alloc", "dep:indexmap", "dep:twox-hash"]
+write = ["dep:indexmap", "dep:twox-hash"]
 
 [dependencies]
 indexmap = { version = "2", optional = true, default-features = false }
