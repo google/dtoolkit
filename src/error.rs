@@ -35,6 +35,20 @@ pub enum FdtError {
         /// The number of 4 byte cells expected in each element of the array.
         chunk: usize,
     },
+    /// Tried to convert the address part of a `reg` property to a type which
+    /// was too small.
+    #[error("Reg address too big for chosen type ({cells} cells)")]
+    AddressTooBig {
+        /// The value of the relevant `#address-cells` property.
+        cells: usize,
+    },
+    /// Tried to convert the size part of a `reg` property to a type which was
+    /// too small.
+    #[error("Reg size too big for chosen type ({cells} cells)")]
+    SizeTooBig {
+        /// The value of the relevant `#size-cells` property.
+        cells: usize,
+    },
 }
 
 /// An error that can occur when parsing a device tree.

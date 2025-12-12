@@ -375,7 +375,7 @@ impl<'a> Fdt<'a> {
                 offset,
             ));
         }
-        Ok(FdtNode { fdt: self, offset })
+        Ok(FdtNode::new(self, offset))
     }
 
     /// Finds a node by its path.

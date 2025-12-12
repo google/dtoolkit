@@ -9,15 +9,17 @@
 //! Standard nodes and properties.
 
 mod memory;
+mod reg;
 mod status;
 
 pub use self::memory::{InitialMappedArea, Memory};
+pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
 use crate::fdt::FdtNode;
 
-const DEFAULT_ADDRESS_CELLS: u32 = 2;
-const DEFAULT_SIZE_CELLS: u32 = 1;
+pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
+pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 
 impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `compatible` property.
@@ -132,6 +134,30 @@ impl<'a> FdtNode<'a> {
             model.as_u32()?
         } else {
             DEFAULT_SIZE_CELLS
+        })
+    }
+
+    /// Returns the value of the standard `reg` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of address and
+    /// size cells.
+    pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, FdtError> {
+        let address_cells = self.parent_address_cells;
+        let size_cells = self.parent_size_cells;
+        Ok(if let Some(property) = self.property("reg")? {
+            Some(
+                property
+                    .as_prop_encoded_array((address_cells + size_cells) as usize)?
+                    .map(move |element| {
+                        let (address, size) = element.split_at(address_cells as usize);
+                        Reg { address, size }
+                    }),
+            )
+        } else {
+            None
         })
     }
 

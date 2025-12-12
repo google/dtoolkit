@@ -9,7 +9,7 @@
 use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
-use dtoolkit::standard::{InitialMappedArea, Status};
+use dtoolkit::standard::{InitialMappedArea, Reg, Status};
 
 #[test]
 fn read_child_nodes() {
@@ -127,6 +127,28 @@ fn standard_properties() {
             .collect::<Vec<_>>(),
         vec!["abc,def", "some,other"]
     );
+    let reg = standard_props_node
+        .reg()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reg,
+        vec![
+            Reg {
+                address: &[0x1234_5678.into(), 0x3000.into()],
+                size: &[0.into(), 32.into()],
+            },
+            Reg {
+                address: &[0.into(), 0xfe00.into()],
+                size: &[0.into(), 256.into()],
+            },
+        ]
+    );
+    assert_eq!(reg[0].address::<u64>().unwrap(), 0x1234_5678_0000_3000);
+    assert_eq!(reg[0].size::<u64>().unwrap(), 32);
+    assert_eq!(reg[1].address::<u64>().unwrap(), 0xfe00);
+    assert_eq!(reg[1].size::<u64>().unwrap(), 256);
 }
 
 #[test]
@@ -203,6 +225,17 @@ fn memory() {
     let fdt = Fdt::new(dtb).unwrap();
 
     let memory = fdt.memory().unwrap();
+    let reg = memory.reg().unwrap().unwrap().collect::<Vec<_>>();
+    assert_eq!(reg.len(), 1);
+    assert_eq!(reg[0].address::<u32>().unwrap(), 0x8000_0000);
+    assert_eq!(reg[0].size::<u32>().unwrap(), 0x2000_0000);
+    assert_eq!(
+        reg,
+        vec![Reg {
+            address: &[0x8000_0000.into()],
+            size: &[0x2000_0000.into()]
+        }]
+    );
     assert!(memory.hotpluggable().unwrap());
     assert_eq!(
         memory
