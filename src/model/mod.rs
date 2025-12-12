@@ -16,7 +16,7 @@
 use alloc::vec::Vec;
 use core::fmt::Display;
 
-use crate::error::FdtError;
+use crate::error::FdtParseError;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 mod node;
@@ -78,7 +78,7 @@ impl DeviceTree {
     /// # Errors
     ///
     /// Returns an error if the root node of the `Fdt` cannot be parsed.
-    pub fn from_fdt(fdt: &Fdt<'_>) -> Result<Self, FdtError> {
+    pub fn from_fdt(fdt: &Fdt<'_>) -> Result<Self, FdtParseError> {
         let root = DeviceTreeNode::try_from(fdt.root()?)?;
         let memory_reservations: Result<Vec<_>, _> = fdt.memory_reservations().collect();
         Ok(DeviceTree {

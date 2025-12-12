@@ -15,10 +15,9 @@
 //!
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
-use crate::error::{FdtError, FdtErrorKind};
-use crate::memreserve::MemoryReservation;
 mod node;
 mod property;
+
 use core::ffi::CStr;
 use core::mem::offset_of;
 use core::{fmt, ptr};
@@ -27,6 +26,9 @@ pub use node::FdtNode;
 pub use property::FdtProperty;
 use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+
+use crate::error::{FdtErrorKind, FdtParseError};
+use crate::memreserve::MemoryReservation;
 
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
@@ -161,29 +163,29 @@ impl<'a> Fdt<'a> {
     /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// ```
-    pub fn new(data: &'a [u8]) -> Result<Self, FdtError> {
+    pub fn new(data: &'a [u8]) -> Result<Self, FdtParseError> {
         if data.len() < size_of::<FdtHeader>() {
-            return Err(FdtError::new(FdtErrorKind::InvalidLength, 0));
+            return Err(FdtParseError::new(FdtErrorKind::InvalidLength, 0));
         }
 
         let fdt = Fdt { data };
         let header = fdt.header();
 
         if header.magic() != FDT_MAGIC {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidMagic,
                 offset_of!(FdtHeader, magic),
             ));
         }
         if !(header.last_comp_version()..=header.version()).contains(&FDT_VERSION) {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::UnsupportedVersion(header.version()),
                 offset_of!(FdtHeader, version),
             ));
         }
 
         if header.totalsize() as usize != data.len() {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidLength,
                 offset_of!(FdtHeader, totalsize),
             ));
@@ -222,7 +224,7 @@ impl<'a> Fdt<'a> {
         embedded applications, where the binary only gets a pointer to DT from the firmware or \
         a bootloader. The user must ensure it trusts the data."
     )]
-    pub unsafe fn from_raw(data: *const u8) -> Result<Self, FdtError> {
+    pub unsafe fn from_raw(data: *const u8) -> Result<Self, FdtParseError> {
         // SAFETY: The caller guarantees that `data` is a valid pointer to a Flattened
         // Device Tree (FDT) blob. We are reading an `FdtHeader` from this
         // pointer, which is a `#[repr(C, packed)]` struct. The `totalsize`
@@ -238,7 +240,7 @@ impl<'a> Fdt<'a> {
         Fdt::new(slice)
     }
 
-    fn validate_header(&self) -> Result<(), FdtError> {
+    fn validate_header(&self) -> Result<(), FdtParseError> {
         let header = self.header();
         let data = &self.data;
 
@@ -246,19 +248,19 @@ impl<'a> Fdt<'a> {
         let off_dt_struct = header.off_dt_struct() as usize;
         let off_dt_strings = header.off_dt_strings() as usize;
         if off_mem_rsvmap > off_dt_struct {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("dt_struct not after memrsvmap"),
                 offset_of!(FdtHeader, off_mem_rsvmap),
             ));
         }
         if off_dt_struct > data.len() {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("struct offset out of bounds"),
                 offset_of!(FdtHeader, off_dt_struct),
             ));
         }
         if off_dt_strings > data.len() {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings offset out of bounds"),
                 offset_of!(FdtHeader, off_dt_strings),
             ));
@@ -267,19 +269,19 @@ impl<'a> Fdt<'a> {
         let size_dt_struct = header.size_dt_struct() as usize;
         let size_dt_strings = header.size_dt_strings() as usize;
         if off_dt_struct.saturating_add(size_dt_struct) > data.len() {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("struct block overflows"),
                 offset_of!(FdtHeader, size_dt_struct),
             ));
         }
         if off_dt_strings.saturating_add(size_dt_strings) > data.len() {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings block overflows"),
                 offset_of!(FdtHeader, size_dt_strings),
             ));
         }
         if off_dt_struct.saturating_add(size_dt_struct) > off_dt_strings {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings block not after struct block"),
                 offset_of!(FdtHeader, off_dt_strings),
             ));
@@ -322,18 +324,18 @@ impl<'a> Fdt<'a> {
     /// Returns an iterator over the memory reservation block.
     pub fn memory_reservations(
         &self,
-    ) -> impl Iterator<Item = Result<MemoryReservation, FdtError>> + '_ {
+    ) -> impl Iterator<Item = Result<MemoryReservation, FdtParseError>> + '_ {
         let mut offset = self.header().off_mem_rsvmap() as usize;
         core::iter::from_fn(move || {
             if offset >= self.header().off_dt_struct() as usize {
-                return Some(Err(FdtError::new(
+                return Some(Err(FdtParseError::new(
                     FdtErrorKind::MemReserveNotTerminated,
                     offset,
                 )));
             }
 
             let reservation = match MemoryReservation::ref_from_prefix(&self.data[offset..])
-                .map_err(|_| FdtError::new(FdtErrorKind::MemReserveInvalid, offset))
+                .map_err(|_| FdtParseError::new(FdtErrorKind::MemReserveInvalid, offset))
             {
                 Ok((reservation, _)) => *reservation,
                 Err(e) => return Some(Err(e)),
@@ -364,11 +366,11 @@ impl<'a> Fdt<'a> {
     /// let root = fdt.root().unwrap();
     /// assert_eq!(root.name().unwrap(), "");
     /// ```
-    pub fn root(&self) -> Result<FdtNode<'_>, FdtError> {
+    pub fn root(&self) -> Result<FdtNode<'_>, FdtParseError> {
         let offset = self.header().off_dt_struct() as usize;
         let token = self.read_token(offset)?;
         if token != FdtToken::BeginNode {
-            return Err(FdtError::new(
+            return Err(FdtParseError::new(
                 FdtErrorKind::BadToken(FDT_BEGIN_NODE),
                 offset,
             ));
@@ -422,7 +424,7 @@ impl<'a> Fdt<'a> {
     /// let node = fdt.find_node("/child2@42").unwrap().unwrap();
     /// assert_eq!(node.name().unwrap(), "child2@42");
     /// ```
-    pub fn find_node(&self, path: &str) -> Result<Option<FdtNode<'_>>, FdtError> {
+    pub fn find_node(&self, path: &str) -> Result<Option<FdtNode<'_>>, FdtParseError> {
         if !path.starts_with('/') {
             return Ok(None);
         }
@@ -439,15 +441,15 @@ impl<'a> Fdt<'a> {
         Ok(Some(current_node))
     }
 
-    pub(crate) fn read_token(&self, offset: usize) -> Result<FdtToken, FdtError> {
+    pub(crate) fn read_token(&self, offset: usize) -> Result<FdtToken, FdtParseError> {
         let val = big_endian::U32::ref_from_prefix(&self.data[offset..])
             .map(|(val, _)| val.get())
-            .map_err(|_e| FdtError::new(FdtErrorKind::InvalidLength, offset))?;
-        FdtToken::try_from(val).map_err(|t| FdtError::new(FdtErrorKind::BadToken(t), offset))
+            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?;
+        FdtToken::try_from(val).map_err(|t| FdtParseError::new(FdtErrorKind::BadToken(t), offset))
     }
 
     /// Returns a string from the string block.
-    pub(crate) fn string(&self, string_block_offset: usize) -> Result<&'a str, FdtError> {
+    pub(crate) fn string(&self, string_block_offset: usize) -> Result<&'a str, FdtParseError> {
         let header = self.header();
         let str_block_start = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
@@ -455,7 +457,7 @@ impl<'a> Fdt<'a> {
         let str_start = str_block_start + string_block_offset;
 
         if str_start >= str_block_end {
-            return Err(FdtError::new(FdtErrorKind::InvalidLength, str_start));
+            return Err(FdtParseError::new(FdtErrorKind::InvalidLength, str_start));
         }
 
         self.string_at_offset(str_start, Some(str_block_end))
@@ -466,32 +468,32 @@ impl<'a> Fdt<'a> {
         &self,
         offset: usize,
         end: Option<usize>,
-    ) -> Result<&'a str, FdtError> {
+    ) -> Result<&'a str, FdtParseError> {
         let slice = match end {
             Some(end) => self.data.get(offset..end),
             None => self.data.get(offset..),
         };
-        let slice = slice.ok_or(FdtError::new(FdtErrorKind::InvalidOffset, offset))?;
+        let slice = slice.ok_or(FdtParseError::new(FdtErrorKind::InvalidOffset, offset))?;
 
         match CStr::from_bytes_until_nul(slice).map(|val| val.to_str()) {
             Ok(Ok(val)) => Ok(val),
-            _ => Err(FdtError::new(FdtErrorKind::InvalidString, offset)),
+            _ => Err(FdtParseError::new(FdtErrorKind::InvalidString, offset)),
         }
     }
 
-    pub(crate) fn find_string_end(&self, start: usize) -> Result<usize, FdtError> {
+    pub(crate) fn find_string_end(&self, start: usize) -> Result<usize, FdtParseError> {
         let mut offset = start;
         loop {
             match self.data.get(offset) {
                 Some(0) => return Ok(offset + 1),
                 Some(_) => {}
-                None => return Err(FdtError::new(FdtErrorKind::InvalidString, start)),
+                None => return Err(FdtParseError::new(FdtErrorKind::InvalidString, start)),
             }
             offset += 1;
         }
     }
 
-    pub(crate) fn next_sibling_offset(&self, mut offset: usize) -> Result<usize, FdtError> {
+    pub(crate) fn next_sibling_offset(&self, mut offset: usize) -> Result<usize, FdtParseError> {
         offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
 
         // Skip node name
@@ -530,10 +532,10 @@ impl<'a> Fdt<'a> {
         Ok(offset)
     }
 
-    pub(crate) fn next_property_offset(&self, mut offset: usize) -> Result<usize, FdtError> {
+    pub(crate) fn next_property_offset(&self, mut offset: usize) -> Result<usize, FdtParseError> {
         let len = big_endian::U32::ref_from_prefix(&self.data[offset..])
             .map(|(val, _)| val.get())
-            .map_err(|_e| FdtError::new(FdtErrorKind::InvalidLength, offset))?
+            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?
             as usize;
         offset += FDT_TAGSIZE; // skip value length
         offset += FDT_TAGSIZE; // skip name offset

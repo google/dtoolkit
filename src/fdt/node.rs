@@ -11,7 +11,7 @@
 use core::fmt;
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
-use crate::error::FdtError;
+use crate::error::FdtParseError;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
 
 /// A node in a flattened device tree.
@@ -42,7 +42,7 @@ impl<'a> FdtNode<'a> {
     /// let child = root.child("child1").unwrap().unwrap();
     /// assert_eq!(child.name().unwrap(), "child1");
     /// ```
-    pub fn name(&self) -> Result<&'a str, FdtError> {
+    pub fn name(&self) -> Result<&'a str, FdtParseError> {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt.string_at_offset(name_offset, None)
     }
@@ -56,7 +56,7 @@ impl<'a> FdtNode<'a> {
     /// if the name offset is invalid or an
     /// [`FdtErrorKind::InvalidString`](crate::error::FdtErrorKind::InvalidString) if the string at the offset is not null-terminated
     /// or contains invalid UTF-8.
-    pub fn name_without_address(&self) -> Result<&'a str, FdtError> {
+    pub fn name_without_address(&self) -> Result<&'a str, FdtParseError> {
         let name = self.name()?;
         if let Some((name, _)) = name.split_once('@') {
             Ok(name)
@@ -85,7 +85,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if a property's name or value cannot be read.
-    pub fn property(&self, name: &str) -> Result<Option<FdtProperty<'a>>, FdtError> {
+    pub fn property(&self, name: &str) -> Result<Option<FdtProperty<'a>>, FdtParseError> {
         for property in self.properties() {
             let property = property?;
             if property.name() == name {
@@ -109,7 +109,9 @@ impl<'a> FdtNode<'a> {
     /// assert_eq!(props.next().unwrap().unwrap().name(), "u64-prop");
     /// assert_eq!(props.next().unwrap().unwrap().name(), "str-prop");
     /// ```
-    pub fn properties(&self) -> impl Iterator<Item = Result<FdtProperty<'a>, FdtError>> + use<'a> {
+    pub fn properties(
+        &self,
+    ) -> impl Iterator<Item = Result<FdtProperty<'a>, FdtParseError>> + use<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
             offset: self.offset,
@@ -161,7 +163,7 @@ impl<'a> FdtNode<'a> {
     /// let child = root.child("child2@42").unwrap().unwrap();
     /// assert_eq!(child.name().unwrap(), "child2@42");
     /// ```
-    pub fn child(&self, name: &str) -> Result<Option<FdtNode<'a>>, FdtError> {
+    pub fn child(&self, name: &str) -> Result<Option<FdtNode<'a>>, FdtParseError> {
         let include_address = name.contains('@');
         for child in self.children() {
             let child = child?;
@@ -193,7 +195,7 @@ impl<'a> FdtNode<'a> {
     /// );
     /// assert!(children.next().is_none());
     /// ```
-    pub fn children(&self) -> impl Iterator<Item = Result<FdtNode<'a>, FdtError>> + use<'a> {
+    pub fn children(&self) -> impl Iterator<Item = Result<FdtNode<'a>, FdtParseError>> + use<'a> {
         FdtChildIter::Start {
             fdt: self.fdt,
             offset: self.offset,
@@ -246,7 +248,7 @@ enum FdtChildIter<'a> {
 }
 
 impl<'a> Iterator for FdtChildIter<'a> {
-    type Item = Result<FdtNode<'a>, FdtError>;
+    type Item = Result<FdtNode<'a>, FdtParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
@@ -278,7 +280,10 @@ impl<'a> Iterator for FdtChildIter<'a> {
 }
 
 impl<'a> FdtChildIter<'a> {
-    fn try_next(fdt: &'a Fdt<'a>, offset: &mut usize) -> Option<Result<FdtNode<'a>, FdtError>> {
+    fn try_next(
+        fdt: &'a Fdt<'a>,
+        offset: &mut usize,
+    ) -> Option<Result<FdtNode<'a>, FdtParseError>> {
         loop {
             let token = match fdt.read_token(*offset) {
                 Ok(token) => token,

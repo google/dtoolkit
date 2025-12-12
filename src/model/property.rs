@@ -10,7 +10,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::{fmt, str};
 
-use crate::error::FdtError;
+use crate::error::FdtParseError;
 use crate::fdt::FdtProperty;
 
 /// An error that can occur when parsing a property.
@@ -126,7 +126,7 @@ impl DeviceTreeProperty {
 }
 
 impl<'a> TryFrom<FdtProperty<'a>> for DeviceTreeProperty {
-    type Error = FdtError;
+    type Error = FdtParseError;
 
     fn try_from(prop: FdtProperty<'a>) -> Result<Self, Self::Error> {
         let name = prop.name().to_string();

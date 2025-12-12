@@ -8,25 +8,35 @@
 
 //! Error types for the `dtoolkit` crate.
 
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
+
+use thiserror::Error;
+
+/// An error that can occur when parsing or accessing a device tree.
+#[derive(Clone, Debug, Eq, PartialEq, Error)]
+pub enum FdtError {
+    /// There was an error parsing the device tree.
+    #[error("{0}")]
+    Parse(#[from] FdtParseError),
+}
 
 /// An error that can occur when parsing a device tree.
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
-pub struct FdtError {
+pub struct FdtParseError {
     offset: usize,
     /// The type of the error that has occurred.
     pub kind: FdtErrorKind,
 }
 
-impl FdtError {
+impl FdtParseError {
     pub(crate) fn new(kind: FdtErrorKind, offset: usize) -> Self {
         Self { offset, kind }
     }
 }
 
 /// The kind of an error that can occur when parsing a device tree.
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum FdtErrorKind {
     /// The magic number of the device tree is invalid.
@@ -50,14 +60,14 @@ pub enum FdtErrorKind {
     MemReserveInvalid,
 }
 
-impl fmt::Display for FdtError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for FdtParseError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{} at offset {}", self.kind, self.offset)
     }
 }
 
-impl fmt::Display for FdtErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for FdtErrorKind {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             FdtErrorKind::InvalidMagic => write!(f, "invalid FDT magic number"),
             FdtErrorKind::UnsupportedVersion(version) => {
@@ -82,4 +92,4 @@ impl fmt::Display for FdtErrorKind {
     }
 }
 
-impl core::error::Error for FdtError {}
+impl core::error::Error for FdtParseError {}
