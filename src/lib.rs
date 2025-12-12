@@ -23,6 +23,11 @@
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(feature = "write")]
+extern crate alloc;
+
 pub mod error;
 pub mod fdt;
 pub mod memreserve;
+#[cfg(feature = "write")]
+pub mod model;
