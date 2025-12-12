@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::fdt::Fdt;
+use dtoolkit::fdt::{Fdt, Status};
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 
@@ -78,6 +78,42 @@ fn get_property_by_name() {
     assert_eq!(prop.as_str().unwrap(), "hello world");
 
     assert!(node.property("non-existent-prop").unwrap().is_none());
+}
+
+#[test]
+fn standard_properties() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let root = fdt.root().unwrap();
+    let test_props_node = root.child("test-props").unwrap().unwrap();
+    let standard_props_node = root.child("standard-props").unwrap().unwrap();
+
+    // Default values.
+    assert_eq!(test_props_node.address_cells().unwrap(), 2);
+    assert_eq!(test_props_node.size_cells().unwrap(), 1);
+    assert_eq!(test_props_node.status().unwrap(), Status::Okay);
+    assert_eq!(test_props_node.model().unwrap(), None);
+    assert!(!test_props_node.dma_coherent().unwrap());
+    assert_eq!(test_props_node.phandle().unwrap(), None);
+    assert_eq!(test_props_node.virtual_reg().unwrap(), None);
+    assert!(test_props_node.compatible().unwrap().is_none());
+
+    // Explicit values.
+    assert_eq!(standard_props_node.address_cells().unwrap(), 8);
+    assert_eq!(standard_props_node.size_cells().unwrap(), 4);
+    assert_eq!(standard_props_node.status().unwrap(), Status::Fail);
+    assert_eq!(standard_props_node.model().unwrap(), Some("Some Model"));
+    assert!(standard_props_node.dma_coherent().unwrap());
+    assert_eq!(standard_props_node.phandle().unwrap(), Some(0x1234));
+    assert_eq!(standard_props_node.virtual_reg().unwrap(), Some(0xabcd));
+    assert_eq!(
+        standard_props_node
+            .compatible()
+            .unwrap()
+            .unwrap()
+            .collect::<Vec<_>>(),
+        vec!["abc,def", "some,other"]
+    );
 }
 
 #[test]

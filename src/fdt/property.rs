@@ -8,6 +8,8 @@
 
 //! A read-only API for inspecting a device tree property.
 
+pub(super) mod status;
+
 use core::ffi::CStr;
 use core::fmt;
 

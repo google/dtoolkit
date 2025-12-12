@@ -22,11 +22,12 @@ use core::ffi::CStr;
 use core::mem::offset_of;
 use core::{fmt, ptr};
 
-pub use node::FdtNode;
-pub use property::FdtProperty;
 use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
+pub use self::node::FdtNode;
+pub use self::property::FdtProperty;
+pub use self::property::status::Status;
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
 

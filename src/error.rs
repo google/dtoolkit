@@ -18,6 +18,9 @@ pub enum FdtError {
     /// There was an error parsing the device tree.
     #[error("{0}")]
     Parse(#[from] FdtParseError),
+    /// The `status` property of a node had an invalid value.
+    #[error("Invalid status value")]
+    InvalidStatus,
 }
 
 /// An error that can occur when parsing a device tree.
