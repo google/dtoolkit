@@ -390,6 +390,13 @@ impl<'a> Fdt<'a> {
     /// first. [`DeviceTree`](crate::model::DeviceTree) stores the nodes in a
     /// hash map for constant-time lookup.
     ///
+    /// # Errors
+    ///
+    /// Returns an [`FdtErrorKind::InvalidLength`] if the FDT structure is
+    /// truncated or, an [`FdtErrorKind::BadToken`] if an unexpected token is
+    /// encountered while searching, or an [`FdtErrorKind::InvalidString`] if a
+    /// node has an invalid name.
+    ///
     /// # Examples
     ///
     /// ```
@@ -409,17 +416,13 @@ impl<'a> Fdt<'a> {
     /// let node = fdt.find_node("/child2@42").unwrap().unwrap();
     /// assert_eq!(node.name().unwrap(), "child2@42");
     /// ```
-    #[must_use]
-    pub fn find_node(&self, path: &str) -> Option<Result<FdtNode<'_>, FdtError>> {
+    pub fn find_node(&self, path: &str) -> Result<Option<FdtNode<'_>>, FdtError> {
         if !path.starts_with('/') {
-            return None;
+            return Ok(None);
         }
-        let mut current_node = match self.root() {
-            Ok(node) => node,
-            Err(e) => return Some(Err(e)),
-        };
+        let mut current_node = self.root()?;
         if path == "/" {
-            return Some(Ok(current_node));
+            return Ok(Some(current_node));
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
             let include_address = component.contains('@');
@@ -433,11 +436,11 @@ impl<'a> Fdt<'a> {
                 })
             }) {
                 Some(Ok(node)) => current_node = node,
-                Some(Err(e)) => return Some(Err(e)),
-                None => return None,
+                Some(Err(e)) => return Err(e),
+                None => return Ok(None),
             }
         }
-        Some(Ok(current_node))
+        Ok(Some(current_node))
     }
 
     pub(crate) fn read_token(&self, offset: usize) -> Result<FdtToken, FdtError> {
