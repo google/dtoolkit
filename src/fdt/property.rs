@@ -14,7 +14,7 @@ use core::fmt;
 use zerocopy::{FromBytes, big_endian};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
-use crate::error::{FdtErrorKind, FdtParseError};
+use crate::error::{FdtError, FdtErrorKind, FdtParseError};
 
 /// A property of a device tree node.
 #[derive(Debug, PartialEq)]
@@ -125,6 +125,26 @@ impl<'a> FdtProperty<'a> {
     /// ```
     pub fn as_str_list(&self) -> impl Iterator<Item = &'a str> + use<'a> {
         FdtStringListIterator { value: self.value }
+    }
+
+    pub(crate) fn as_prop_encoded_array(
+        &self,
+        chunk_cells: usize,
+    ) -> Result<impl Iterator<Item = &'a [big_endian::U32]> + use<'a>, FdtError> {
+        let chunk_bytes = chunk_cells * size_of::<u32>();
+        if !self.value.len().is_multiple_of(chunk_bytes) {
+            return Err(FdtError::PropEncodedArraySizeMismatch {
+                size: self.value.len(),
+                chunk: chunk_cells,
+            });
+        }
+        // `ref_from_bytes` shouldn't panic because each chunk will always be a multiple
+        // of 4 bytes because of `chunks_exact`.
+        #[allow(clippy::unwrap_used)]
+        Ok(self
+            .value
+            .chunks_exact(chunk_bytes)
+            .map(|chunk| <[big_endian::U32]>::ref_from_bytes(chunk).unwrap()))
     }
 
     pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {

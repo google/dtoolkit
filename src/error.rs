@@ -21,6 +21,20 @@ pub enum FdtError {
     /// The `status` property of a node had an invalid value.
     #[error("Invalid status value")]
     InvalidStatus,
+    /// The required `/memory` node wasn't found.
+    #[error("/memory node missing")]
+    MemoryMissing,
+    /// The size of a prop-encoded-array property wasn't a multiple of the
+    /// expected element size.
+    #[error(
+        "prop-encoded-array property was {size} bytes, but should have been a multiple of {chunk} cells"
+    )]
+    PropEncodedArraySizeMismatch {
+        /// The size in bytes of the prop-encoded-array property.
+        size: usize,
+        /// The number of 4 byte cells expected in each element of the array.
+        chunk: usize,
+    },
 }
 
 /// An error that can occur when parsing a device tree.

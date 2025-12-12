@@ -8,10 +8,11 @@
 
 //! Standard nodes and properties.
 
+mod memory;
 mod status;
 
-pub use status::Status;
-
+pub use self::memory::{InitialMappedArea, Memory};
+pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
 use crate::fdt::FdtNode;
 
