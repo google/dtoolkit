@@ -372,6 +372,15 @@ impl<'a> Fdt<'a> {
 
     /// Finds a node by its path.
     ///
+    /// If a name in the given path contains a _unit-address_ (the part after
+    /// the `@` sign) then both the _node-name_ and _unit-address_ must
+    /// match. If it doesn't have a _unit-address_, then nodes with any
+    /// _unit-address_ or none will be allowed.
+    ///
+    /// For example, searching for `/cpus/cpu` would match either `/cpus/cpu`,
+    /// `/cpus/cpu@0` or `/cpus/cpu@1`, while `/cpus/cpu@1` would match only the
+    /// latter.
+    ///
     /// # Performance
     ///
     /// This method traverses the device tree and its performance is linear in
@@ -390,6 +399,16 @@ impl<'a> Fdt<'a> {
     /// let node = fdt.find_node("/a/b/c").unwrap().unwrap();
     /// assert_eq!(node.name().unwrap(), "c");
     /// ```
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/child2").unwrap().unwrap();
+    /// assert_eq!(node.name().unwrap(), "child2@42");
+    /// let node = fdt.find_node("/child2@42").unwrap().unwrap();
+    /// assert_eq!(node.name().unwrap(), "child2@42");
+    /// ```
     #[must_use]
     pub fn find_node(&self, path: &str) -> Option<Result<FdtNode<'_>, FdtError>> {
         if !path.starts_with('/') {
@@ -403,10 +422,15 @@ impl<'a> Fdt<'a> {
             return Some(Ok(current_node));
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
+            let include_address = component.contains('@');
             match current_node.children().find(|child| {
-                child
-                    .as_ref()
-                    .is_ok_and(|c| c.name().is_ok_and(|n| n == component))
+                child.as_ref().is_ok_and(|c| {
+                    if include_address {
+                        c.name().is_ok_and(|n| n == component)
+                    } else {
+                        c.name_without_address().is_ok_and(|n| n == component)
+                    }
+                })
             }) {
                 Some(Ok(node)) => current_node = node,
                 Some(Err(e)) => return Some(Err(e)),

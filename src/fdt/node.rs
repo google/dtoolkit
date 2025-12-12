@@ -24,8 +24,6 @@ pub struct FdtNode<'a> {
 impl<'a> FdtNode<'a> {
     /// Returns the name of this node.
     ///
-    /// # Examples
-    ///
     /// # Errors
     ///
     /// Returns an
@@ -47,6 +45,24 @@ impl<'a> FdtNode<'a> {
     pub fn name(&self) -> Result<&'a str, FdtError> {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt.string_at_offset(name_offset, None)
+    }
+
+    /// Returns the name of this node without the unit address, if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns an
+    /// [`FdtErrorKind::InvalidOffset`](crate::error::FdtErrorKind::InvalidOffset)
+    /// if the name offset is invalid or an
+    /// [`FdtErrorKind::InvalidString`](crate::error::FdtErrorKind::InvalidString) if the string at the offset is not null-terminated
+    /// or contains invalid UTF-8.
+    pub fn name_without_address(&self) -> Result<&'a str, FdtError> {
+        let name = self.name()?;
+        if let Some((name, _)) = name.split_once('@') {
+            Ok(name)
+        } else {
+            Ok(name)
+        }
     }
 
     /// Returns a property by its name.
@@ -102,6 +118,15 @@ impl<'a> FdtNode<'a> {
 
     /// Returns a child node by its name.
     ///
+    /// If the given name contains a _unit-address_ (the part after the `@`
+    /// sign) then both the _node-name_ and _unit-address_ must match. If it
+    /// doesn't have a _unit-address_, then nodes with any _unit-address_ or
+    /// none will be allowed.
+    ///
+    /// For example, searching for `memory` as a child of `/` would match either
+    /// `/memory` or `/memory@4000`, while `memory@4000` would match only the
+    /// latter.
+    ///
     /// # Performance
     ///
     /// This method's performance is linear in the number of children of this
@@ -125,10 +150,26 @@ impl<'a> FdtNode<'a> {
     /// let child = root.child("child1").unwrap().unwrap();
     /// assert_eq!(child.name().unwrap(), "child1");
     /// ```
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let root = fdt.root().unwrap();
+    /// let child = root.child("child2").unwrap().unwrap();
+    /// assert_eq!(child.name().unwrap(), "child2@42");
+    /// let child = root.child("child2@42").unwrap().unwrap();
+    /// assert_eq!(child.name().unwrap(), "child2@42");
+    /// ```
     pub fn child(&self, name: &str) -> Result<Option<FdtNode<'a>>, FdtError> {
+        let include_address = name.contains('@');
         for child in self.children() {
             let child = child?;
-            if child.name()? == name {
+            if if include_address {
+                child.name()? == name
+            } else {
+                child.name_without_address()? == name
+            } {
                 return Ok(Some(child));
             }
         }
@@ -146,7 +187,10 @@ impl<'a> FdtNode<'a> {
     /// let root = fdt.root().unwrap();
     /// let mut children = root.children();
     /// assert_eq!(children.next().unwrap().unwrap().name().unwrap(), "child1");
-    /// assert_eq!(children.next().unwrap().unwrap().name().unwrap(), "child2");
+    /// assert_eq!(
+    ///     children.next().unwrap().unwrap().name().unwrap(),
+    ///     "child2@42"
+    /// );
     /// assert!(children.next().is_none());
     /// ```
     pub fn children(&self) -> impl Iterator<Item = Result<FdtNode<'a>, FdtError>> + use<'a> {
