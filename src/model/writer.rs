@@ -67,7 +67,9 @@ pub(crate) fn to_bytes(tree: &DeviceTree) -> Vec<u8> {
             .into(),
     };
 
-    dtb[..size_of::<FdtHeader>()].copy_from_slice(header.as_bytes());
+    header
+        .write_to_prefix(&mut dtb)
+        .expect("writing the header should succeed because we've allocated the space for it");
 
     dtb
 }
