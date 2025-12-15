@@ -18,6 +18,7 @@ use crate::fdt::{
 };
 use crate::memreserve::MemoryReservation;
 use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
+use crate::{Node, Property};
 
 // https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html#header
 const LAST_VERSION: u32 = 17;

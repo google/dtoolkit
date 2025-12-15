@@ -11,6 +11,7 @@
 use core::fmt::{self, Display, Formatter};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
+use crate::Node;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
 use crate::standard::AddressSpaceProperties;
 
@@ -24,14 +25,8 @@ pub struct FdtNode<'a> {
     pub(crate) parent_address_space: AddressSpaceProperties,
 }
 
-impl<'a> FdtNode<'a> {
-    pub(crate) fn new(fdt: Fdt<'a>, offset: usize) -> Self {
-        Self {
-            fdt,
-            offset,
-            parent_address_space: AddressSpaceProperties::default(),
-        }
-    }
+impl<'a> Node<'a> for FdtNode<'a> {
+    type Property = FdtProperty<'a>;
 
     /// Returns the name of this node.
     ///
@@ -44,63 +39,20 @@ impl<'a> FdtNode<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let root = fdt.root();
     /// let child = root.child("child1").unwrap();
     /// assert_eq!(child.name(), "child1");
     /// ```
-    #[must_use]
-    pub fn name(&self) -> &'a str {
+    fn name(&self) -> &'a str {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt
             .string_at_offset(name_offset, None)
             .expect("Fdt should be valid")
-    }
-
-    /// Returns the name of this node without the unit address, if any.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
-    #[must_use]
-    pub fn name_without_address(&self) -> &'a str {
-        let name = self.name();
-        if let Some((name, _)) = name.split_once('@') {
-            name
-        } else {
-            name
-        }
-    }
-
-    /// Returns a property by its name.
-    ///
-    /// # Performance
-    ///
-    /// This method iterates through all properties of the node.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("u32-prop").unwrap();
-    /// assert_eq!(prop.name(), "u32-prop");
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
-    #[must_use]
-    pub fn property(&self, name: &str) -> Option<FdtProperty<'a>> {
-        self.properties().find(|property| property.name() == name)
     }
 
     /// Returns an iterator over the properties of this node.
@@ -108,7 +60,9 @@ impl<'a> FdtNode<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Property};
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/test-props").unwrap();
@@ -117,70 +71,11 @@ impl<'a> FdtNode<'a> {
     /// assert_eq!(props.next().unwrap().name(), "u64-prop");
     /// assert_eq!(props.next().unwrap().name(), "str-prop");
     /// ```
-    pub fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
+    fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
             offset: self.offset,
         }
-    }
-
-    /// Returns a child node by its name.
-    ///
-    /// If the given name contains a _unit-address_ (the part after the `@`
-    /// sign) then both the _node-name_ and _unit-address_ must match. If it
-    /// doesn't have a _unit-address_, then nodes with any _unit-address_ or
-    /// none will be allowed.
-    ///
-    /// For example, searching for `memory` as a child of `/` would match either
-    /// `/memory` or `/memory@4000`, while `memory@4000` would match only the
-    /// latter.
-    ///
-    /// # Performance
-    ///
-    /// This method's performance is linear in the number of children of this
-    /// node because it iterates through the children. If you need to call this
-    /// often, consider converting to a
-    /// [`DeviceTreeNode`](crate::model::DeviceTreeNode) first. Child lookup
-    /// on a [`DeviceTreeNode`](crate::model::DeviceTreeNode) is a
-    /// constant-time operation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root();
-    /// let child = root.child("child1").unwrap();
-    /// assert_eq!(child.name(), "child1");
-    /// ```
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root();
-    /// let child = root.child("child2").unwrap();
-    /// assert_eq!(child.name(), "child2@42");
-    /// let child = root.child("child2@42").unwrap();
-    /// assert_eq!(child.name(), "child2@42");
-    /// ```
-    #[must_use]
-    pub fn child(&self, name: &str) -> Option<FdtNode<'a>> {
-        let include_address = name.contains('@');
-        self.children().find(|&child| {
-            if include_address {
-                child.name() == name
-            } else {
-                child.name_without_address() == name
-            }
-        })
     }
 
     /// Returns an iterator over the children of this node.
@@ -188,7 +83,9 @@ impl<'a> FdtNode<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let root = fdt.root();
@@ -197,8 +94,18 @@ impl<'a> FdtNode<'a> {
     /// assert_eq!(children.next().unwrap().name(), "child2@42");
     /// assert!(children.next().is_none());
     /// ```
-    pub fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
+    fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
         FdtChildIter::Start { node: *self }
+    }
+}
+
+impl<'a> FdtNode<'a> {
+    pub(crate) fn new(fdt: Fdt<'a>, offset: usize) -> Self {
+        Self {
+            fdt,
+            offset,
+            parent_address_space: AddressSpaceProperties::default(),
+        }
     }
 
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
