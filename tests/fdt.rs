@@ -141,9 +141,9 @@ fn find_node_by_path() {
     let d = fdt.find_node("/d").unwrap().unwrap();
     assert_eq!(d.name().unwrap(), "d");
 
-    assert!(fdt.find_node("/a/c").is_none());
-    assert!(fdt.find_node("/x").is_none());
-    assert!(fdt.find_node("").is_none());
+    assert!(fdt.find_node("/a/c").unwrap().is_none());
+    assert!(fdt.find_node("/x").unwrap().is_none());
+    assert!(fdt.find_node("").unwrap().is_none());
 }
 
 #[macro_export]
