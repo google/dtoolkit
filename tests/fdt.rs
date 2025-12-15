@@ -30,6 +30,18 @@ fn read_child_nodes() {
 }
 
 #[test]
+fn name_outlives_fdt_and_node() {
+    let dtb = include_bytes!("dtb/test_children.dtb");
+    let name = {
+        let fdt = Fdt::new(dtb).unwrap();
+        let child1 = fdt.find_node("/child1").unwrap().unwrap();
+        child1.name().unwrap()
+    };
+
+    assert_eq!(name, "child1");
+}
+
+#[test]
 fn read_prop_values() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let fdt = Fdt::new(dtb).unwrap();

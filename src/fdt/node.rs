@@ -17,7 +17,7 @@ use crate::fdt::property::{FdtPropIter, FdtProperty};
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
 pub struct FdtNode<'a> {
-    pub(crate) fdt: &'a Fdt<'a>,
+    pub(crate) fdt: Fdt<'a>,
     pub(crate) offset: usize,
 }
 
@@ -242,8 +242,8 @@ impl<'a> FdtNode<'a> {
 
 /// An iterator over the children of a device tree node.
 enum FdtChildIter<'a> {
-    Start { fdt: &'a Fdt<'a>, offset: usize },
-    Running { fdt: &'a Fdt<'a>, offset: usize },
+    Start { fdt: Fdt<'a>, offset: usize },
+    Running { fdt: Fdt<'a>, offset: usize },
     Error,
 }
 
@@ -263,10 +263,10 @@ impl<'a> Iterator for FdtChildIter<'a> {
                     }
                 };
                 offset = Fdt::align_tag_offset(offset);
-                *self = Self::Running { fdt, offset };
+                *self = Self::Running { fdt: *fdt, offset };
                 self.next()
             }
-            Self::Running { fdt, offset } => match Self::try_next(fdt, offset) {
+            Self::Running { fdt, offset } => match Self::try_next(*fdt, offset) {
                 Some(Ok(val)) => Some(Ok(val)),
                 Some(Err(e)) => {
                     *self = Self::Error;
@@ -280,10 +280,7 @@ impl<'a> Iterator for FdtChildIter<'a> {
 }
 
 impl<'a> FdtChildIter<'a> {
-    fn try_next(
-        fdt: &'a Fdt<'a>,
-        offset: &mut usize,
-    ) -> Option<Result<FdtNode<'a>, FdtParseError>> {
+    fn try_next(fdt: Fdt<'a>, offset: &mut usize) -> Option<Result<FdtNode<'a>, FdtParseError>> {
         loop {
             let token = match fdt.read_token(*offset) {
                 Ok(token) => token,
