@@ -10,7 +10,8 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::StandardError;
-use crate::fdt::{Cells, Fdt, FdtNode};
+use crate::fdt::{Fdt, FdtNode};
+use crate::{Cells, Node};
 
 impl<'a> Fdt<'a> {
     /// Returns the `/cpus` node.
@@ -22,7 +23,7 @@ impl<'a> Fdt<'a> {
     /// Returns a parse error if there was a problem reading the FDT structure
     /// to find the node, or `FdtError::CpusMissing` if the CPUs node is
     /// missing.
-    pub fn cpus(self) -> Result<Cpus<'a>, StandardError> {
+    pub fn cpus(self) -> Result<Cpus<FdtNode<'a>>, StandardError> {
         let node = self.find_node("/cpus").ok_or(StandardError::CpusMissing)?;
         Ok(Cpus { node })
     }
@@ -30,27 +31,27 @@ impl<'a> Fdt<'a> {
 
 /// Typed wrapper for a `/cpus` node.
 #[derive(Clone, Copy, Debug)]
-pub struct Cpus<'a> {
-    node: FdtNode<'a>,
+pub struct Cpus<N> {
+    node: N,
 }
 
-impl<'a> Deref for Cpus<'a> {
-    type Target = FdtNode<'a>;
+impl<N> Deref for Cpus<N> {
+    type Target = N;
 
     fn deref(&self) -> &Self::Target {
         &self.node
     }
 }
 
-impl Display for Cpus<'_> {
+impl<N: Display> Display for Cpus<N> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.node.fmt(f)
     }
 }
 
-impl<'a> Cpus<'a> {
+impl<'a, N: Node<'a>> Cpus<N> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus(&self) -> impl Iterator<Item = Cpu<'a>> + use<'a> {
+    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
         self.node.children().filter_map(|child| {
             if child.name_without_address() == "cpu" {
                 Some(Cpu { node: child })
@@ -63,25 +64,25 @@ impl<'a> Cpus<'a> {
 
 /// Typed wrapper for a `/cpus/cpu` node.
 #[derive(Clone, Copy, Debug)]
-pub struct Cpu<'a> {
-    node: FdtNode<'a>,
+pub struct Cpu<N> {
+    node: N,
 }
 
-impl<'a> Deref for Cpu<'a> {
-    type Target = FdtNode<'a>;
+impl<N> Deref for Cpu<N> {
+    type Target = N;
 
     fn deref(&self) -> &Self::Target {
         &self.node
     }
 }
 
-impl Display for Cpu<'_> {
+impl<N: Display> Display for Cpu<N> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.node.fmt(f)
     }
 }
 
-impl<'a> Cpu<'a> {
+impl<'a> Cpu<FdtNode<'a>> {
     /// Returns an iterator over the IDs of the CPU, from the standard `reg`
     /// property.
     ///
@@ -92,6 +93,7 @@ impl<'a> Cpu<'a> {
     /// the expected number of address and size cells.
     pub fn ids(&self) -> Result<impl Iterator<Item = Cells<'a>> + use<'a>, StandardError> {
         Ok(self
+            .node
             .reg()?
             .ok_or(StandardError::CpuMissingReg)?
             .map(|reg| reg.address))

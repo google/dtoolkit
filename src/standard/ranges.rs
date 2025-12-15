@@ -9,8 +9,8 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
+use crate::Cells;
 use crate::error::StandardError;
-use crate::fdt::Cells;
 
 /// One of the values of a `ranges` property.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
