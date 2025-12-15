@@ -13,7 +13,7 @@ use core::fmt::{self, Display, Formatter};
 use thiserror::Error;
 
 /// An error that can occur when parsing or accessing a device tree.
-#[derive(Clone, Debug, Eq, PartialEq, Error)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum FdtError {
     /// There was an error parsing the device tree.
     #[error("{0}")]
@@ -24,7 +24,7 @@ pub enum FdtError {
 }
 
 /// An error that can occur when parsing a device tree.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub struct FdtParseError {
     offset: usize,
@@ -38,61 +38,41 @@ impl FdtParseError {
     }
 }
 
-/// The kind of an error that can occur when parsing a device tree.
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum FdtErrorKind {
-    /// The magic number of the device tree is invalid.
-    InvalidMagic,
-    /// The Device Tree version is not supported by this library.
-    UnsupportedVersion(u32),
-    /// The length of the device tree is invalid.
-    InvalidLength,
-    /// The header failed validation.
-    InvalidHeader(&'static str),
-    /// An invalid token was encountered.
-    BadToken(u32),
-    /// A read from data at invalid offset was attempted.
-    InvalidOffset,
-    /// An invalid string was encountered.
-    InvalidString,
-    /// Memory reservation block has not been terminated with a null entry.
-    MemReserveNotTerminated,
-    /// Memory reservation block has an entry that is unaligned or has invalid
-    /// size.
-    MemReserveInvalid,
-}
-
 impl Display for FdtParseError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{} at offset {}", self.kind, self.offset)
     }
 }
-
-impl Display for FdtErrorKind {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            FdtErrorKind::InvalidMagic => write!(f, "invalid FDT magic number"),
-            FdtErrorKind::UnsupportedVersion(version) => {
-                write!(f, "the FDT version {version} is not supported")
-            }
-            FdtErrorKind::InvalidLength => write!(f, "invalid FDT length"),
-            FdtErrorKind::InvalidHeader(msg) => {
-                write!(f, "FDT header has failed validation: {msg}")
-            }
-            FdtErrorKind::BadToken(token) => write!(f, "bad FDT token: 0x{token:x}"),
-            FdtErrorKind::InvalidOffset => write!(f, "invalid offset in FDT"),
-            FdtErrorKind::InvalidString => write!(f, "invalid string in FDT"),
-            FdtErrorKind::MemReserveNotTerminated => write!(
-                f,
-                "memory reservation block not terminated with a null entry"
-            ),
-            FdtErrorKind::MemReserveInvalid => write!(
-                f,
-                "memory reservation block has an entry that is unaligned or has invalid size"
-            ),
-        }
-    }
+/// The kind of an error that can occur when parsing a device tree.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum FdtErrorKind {
+    /// The magic number of the device tree is invalid.
+    #[error("Invalid FDT magic number")]
+    InvalidMagic,
+    /// The Device Tree version is not supported by this library.
+    #[error("FDT version {0} is not supported")]
+    UnsupportedVersion(u32),
+    /// The length of the device tree is invalid.
+    #[error("Invalid FDT length")]
+    InvalidLength,
+    /// The header failed validation.
+    #[error("FDT header has failed validation: {0}")]
+    InvalidHeader(&'static str),
+    /// An invalid token was encountered.
+    #[error("Bad FDT token: {0:#x}")]
+    BadToken(u32),
+    /// A read from data at invalid offset was attempted.
+    #[error("Invalid offset in FDT")]
+    InvalidOffset,
+    /// An invalid string was encountered.
+    #[error("Invalid string in FDT")]
+    InvalidString,
+    /// Memory reservation block has not been terminated with a null entry.
+    #[error("Memory reservation block was not terminated with a null entry")]
+    MemReserveNotTerminated,
+    /// Memory reservation block has an entry that is unaligned or has invalid
+    /// size.
+    #[error("Memory reservation block has an entry that is unaligned or has invalid size")]
+    MemReserveInvalid,
 }
-
-impl core::error::Error for FdtParseError {}
