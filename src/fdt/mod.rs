@@ -27,7 +27,6 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
-pub use self::property::status::Status;
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
 

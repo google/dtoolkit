@@ -6,9 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::fdt::{Fdt, Status};
+use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
+use dtoolkit::standard::Status;
 
 #[test]
 fn read_child_nodes() {

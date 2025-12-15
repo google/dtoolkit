@@ -85,3 +85,4 @@ pub mod fdt;
 pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;
+pub mod standard;
