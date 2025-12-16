@@ -216,6 +216,12 @@ impl<'a> Fdt<'a> {
     /// let ptr = dtb.as_ptr();
     /// let fdt = unsafe { Fdt::from_raw(ptr).unwrap() };
     /// ```
+    #[expect(
+        unsafe_code,
+        reason = "Having a methods that reads a Device Tree from a raw pointer is useful for \
+        embedded applications, where the binary only gets a pointer to DT from the firmware or \
+        a bootloader. The user must ensure it trusts the data."
+    )]
     pub unsafe fn from_raw(data: *const u8) -> Result<Self, FdtError> {
         // SAFETY: The caller guarantees that `data` is a valid pointer to a Flattened
         // Device Tree (FDT) blob. We are reading an `FdtHeader` from this
