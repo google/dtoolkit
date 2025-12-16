@@ -26,9 +26,9 @@
 //! to traverse the device tree, inspect nodes and properties, and read
 //! property values.
 //!
-//! Note that because the [`Fdt`](fdt::Fdt) struct is zero-copy, certains
-//! operations such as node or lookups run in linear time. If you need to
-//! perform these operations often and you can spare extra memory, it might be
+//! Note that because the [`Fdt`](fdt::Fdt) struct is zero-copy, certain
+//! operations such as node or property lookups run in linear time. If you need to
+//! perform these operations often, and you can spare extra memory, it might be
 //! beneficial to convert from [`Fdt`](fdt::Fdt) to
 //! [`DeviceTree`](model::DeviceTree) first.
 //!
