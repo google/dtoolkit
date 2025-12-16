@@ -38,8 +38,8 @@ impl DeviceTree {
         let mut dtb = Vec::with_capacity(header.totalsize() as usize);
         dtb.extend_from_slice(header.as_bytes());
 
-        Self::write_memory_reservations(&mut dtb, &self.memory_reservations);
-        Self::write_root(&mut dtb, &string_map, &self.root);
+        self.write_memory_reservations(&mut dtb);
+        self.write_root(&mut dtb, &string_map);
         string_map.write_string_block(&mut dtb);
 
         debug_assert_eq!(
@@ -131,15 +131,15 @@ impl DeviceTree {
         size
     }
 
-    fn write_memory_reservations(dtb: &mut Vec<u8>, reservations: &[MemoryReservation]) {
-        for reservation in reservations {
+    fn write_memory_reservations(&self, dtb: &mut Vec<u8>) {
+        for reservation in &self.memory_reservations {
             dtb.extend_from_slice(reservation.as_bytes());
         }
         dtb.extend_from_slice(MemoryReservation::TERMINATOR.as_bytes());
     }
 
-    fn write_root(dtb: &mut Vec<u8>, string_map: &StringMap, root_node: &DeviceTreeNode) {
-        Self::write_node(dtb, string_map, root_node);
+    fn write_root(&self, dtb: &mut Vec<u8>, string_map: &StringMap) {
+        Self::write_node(dtb, string_map, &self.root);
         dtb.extend_from_slice(&FDT_END.to_be_bytes());
     }
 
