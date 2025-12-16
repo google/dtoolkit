@@ -87,17 +87,6 @@ impl DeviceTree {
         })
     }
 
-    /// Serializes the `DeviceTree` to a flattened device tree blob.
-    ///
-    /// # Panics
-    ///
-    /// This may panic if any of the lengths written to the DTB (block sizes,
-    /// property value length, etc.) exceed [`u32::MAX`].
-    #[must_use]
-    pub fn to_dtb(&self) -> Vec<u8> {
-        writer::to_bytes(self)
-    }
-
     /// Finds a node by its path and returns a mutable reference to it.
     ///
     /// # Performance
