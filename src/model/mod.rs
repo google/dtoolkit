@@ -14,12 +14,14 @@
 //! flattened device tree blob.
 
 use alloc::vec::Vec;
+use core::fmt::Display;
 
 use crate::error::FdtError;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 mod node;
 mod property;
+mod writer;
 pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
 pub use property::DeviceTreeProperty;
 
@@ -123,5 +125,13 @@ impl DeviceTree {
 impl Default for DeviceTree {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Display for DeviceTree {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Fdt::new(&self.to_dtb())
+            .expect("DeviceTree::to_dtb() should always generate a valid FDT")
+            .fmt(f)
     }
 }

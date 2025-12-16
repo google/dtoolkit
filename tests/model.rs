@@ -109,3 +109,33 @@ fn find_node_mut() {
     // Find a non-existent node
     assert!(tree.find_node_mut("/child-a/child-c").is_none());
 }
+
+#[test]
+fn device_tree_format() {
+    let mut tree = DeviceTree::new();
+    tree.root.add_child(
+        DeviceTreeNode::builder("child-a")
+            .child(DeviceTreeNode::builder("child-a-a").build())
+            .build(),
+    );
+    tree.root
+        .add_child(DeviceTreeNode::builder("child-b").build());
+
+    let fds = tree.to_string();
+
+    assert_eq!(
+        fds,
+        r#"/dts-v1/;
+
+/ {
+    child-a {
+        child-a-a {
+        };
+    };
+
+    child-b {
+    };
+};
+"#
+    );
+}

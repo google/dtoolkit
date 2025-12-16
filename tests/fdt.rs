@@ -178,3 +178,16 @@ fn pretty_print() {
         assert_eq!(s, expected, "Mismatch for {name}");
     }
 }
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip() {
+    for (dtb, _dts, name) in ALL_DT_FILES {
+        use dtoolkit::model::DeviceTree;
+
+        let fdt = Fdt::new(dtb).unwrap();
+        let ir = DeviceTree::from_fdt(&fdt).unwrap();
+        let new_dtb = ir.to_dtb();
+        assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
+    }
+}
