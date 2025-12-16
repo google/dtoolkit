@@ -1,11 +1,14 @@
 /dts-v1/;
 
 / {
+    #address-cells = <0x01>;
+    #size-cells = <0x00>;
+
     child1 {
         prop1 = <0x12345678>;
     };
 
-    child2 {
-        prop2 = "hello";
+    child2@42 {
+        reg = <0x00>;
     };
 };

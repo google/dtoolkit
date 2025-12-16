@@ -17,9 +17,11 @@ fn read_child_nodes() {
 
     let child1 = children.next().unwrap().unwrap();
     assert_eq!(child1.name().unwrap(), "child1");
+    assert_eq!(child1.name_without_address().unwrap(), "child1");
 
-    let child2 = children.next().unwrap().unwrap();
-    assert_eq!(child2.name().unwrap(), "child2");
+    let child3 = children.next().unwrap().unwrap();
+    assert_eq!(child3.name().unwrap(), "child2@42");
+    assert_eq!(child3.name_without_address().unwrap(), "child2");
 
     assert!(children.next().is_none());
 }
@@ -86,7 +88,10 @@ fn get_child_by_name() {
     assert_eq!(child1.name().unwrap(), "child1");
 
     let child2 = root.child("child2").unwrap().unwrap();
-    assert_eq!(child2.name().unwrap(), "child2");
+    assert_eq!(child2.name().unwrap(), "child2@42");
+
+    let child2_with_address = root.child("child2@42").unwrap().unwrap();
+    assert_eq!(child2_with_address.name().unwrap(), "child2@42");
 
     assert!(root.child("non-existent-child").unwrap().is_none());
 }
@@ -136,9 +141,9 @@ fn find_node_by_path() {
     let d = fdt.find_node("/d").unwrap().unwrap();
     assert_eq!(d.name().unwrap(), "d");
 
-    assert!(fdt.find_node("/a/c").is_none());
-    assert!(fdt.find_node("/x").is_none());
-    assert!(fdt.find_node("").is_none());
+    assert!(fdt.find_node("/a/c").unwrap().is_none());
+    assert!(fdt.find_node("/x").unwrap().is_none());
+    assert!(fdt.find_node("").unwrap().is_none());
 }
 
 #[macro_export]
