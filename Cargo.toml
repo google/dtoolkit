@@ -18,6 +18,7 @@ write = ["dep:indexmap", "dep:twox-hash"]
 
 [dependencies]
 indexmap = { version = "2", optional = true, default-features = false }
+thiserror = { version = "2", default-features = false }
 twox-hash = { version = "2", optional = true, features = ["xxhash64"], default-features = false }
 zerocopy = { version = "0.8.28", features = ["derive"] }
 

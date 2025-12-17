@@ -14,7 +14,7 @@ use indexmap::IndexMap;
 use twox_hash::xxhash64;
 
 use super::property::DeviceTreeProperty;
-use crate::error::FdtError;
+use crate::error::FdtParseError;
 use crate::fdt::FdtNode;
 
 /// A mutable, in-memory representation of a device tree node.
@@ -258,7 +258,7 @@ impl DeviceTreeNode {
 }
 
 impl<'a> TryFrom<FdtNode<'a>> for DeviceTreeNode {
-    type Error = FdtError;
+    type Error = FdtParseError;
 
     fn try_from(node: FdtNode<'a>) -> Result<Self, Self::Error> {
         let name = node.name()?.to_string();

@@ -10,4 +10,15 @@
         str-prop = "hello world";
         str-list-prop = "first", "second", "third";
     };
+
+    standard-props {
+        #address-cells = <0x08>;
+        #size-cells = <0x04>;
+        compatible = "abc,def", "some,other";
+        status = "fail";
+        model = "Some Model";
+        phandle = <0x1234>;
+        virtual-reg = <0xabcd>;
+        dma-coherent;
+    };
 };
