@@ -11,14 +11,17 @@
         str-list-prop = "first", "second", "third";
     };
 
-    standard-props {
-        #address-cells = <0x08>;
-        #size-cells = <0x04>;
+    standard-props@1 {
+        #address-cells = <0x01>;
+        #size-cells = <0x01>;
+        reg = <0x12345678 0x3000 0x00 0x20 0x00 0xfe00 0x00 0x100>;
         compatible = "abc,def", "some,other";
         status = "fail";
         model = "Some Model";
         phandle = <0x1234>;
         virtual-reg = <0xabcd>;
+        ranges = <0x11110000 0x22220000 0x33330000 0x44440000>;
+        dma-ranges = <0xaaaa 0xbbbb 0xcccc 0xdddd>;
         dma-coherent;
     };
 };

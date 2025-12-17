@@ -9,15 +9,19 @@
 //! Standard nodes and properties.
 
 mod memory;
+mod ranges;
+mod reg;
 mod status;
 
 pub use self::memory::{InitialMappedArea, Memory};
+pub use self::ranges::Range;
+pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
 use crate::fdt::FdtNode;
 
-const DEFAULT_ADDRESS_CELLS: u32 = 2;
-const DEFAULT_SIZE_CELLS: u32 = 1;
+pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
+pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 
 impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `compatible` property.
@@ -135,6 +139,41 @@ impl<'a> FdtNode<'a> {
         })
     }
 
+    /// Returns the values of the standard `#address-cells` and `#size_cells`
+    /// properties.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// values aren't valid u32s.
+    pub fn address_space(&self) -> Result<AddressSpaceProperties, FdtParseError> {
+        Ok(AddressSpaceProperties {
+            address_cells: self.address_cells()?,
+            size_cells: self.size_cells()?,
+        })
+    }
+
+    /// Returns the value of the standard `reg` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of address and
+    /// size cells.
+    pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, FdtError> {
+        let address_cells = self.parent_address_space.address_cells as usize;
+        let size_cells = self.parent_address_space.size_cells as usize;
+        Ok(if let Some(property) = self.property("reg")? {
+            Some(
+                property
+                    .as_prop_encoded_array([address_cells, size_cells])?
+                    .map(Reg::from_cells),
+            )
+        } else {
+            None
+        })
+    }
+
     /// Returns the value of the standard `virtual-reg` property.
     ///
     /// # Errors
@@ -149,6 +188,52 @@ impl<'a> FdtNode<'a> {
         })
     }
 
+    /// Returns the value of the standard `ranges` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of cells.
+    pub fn ranges(&self) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, FdtError> {
+        Ok(if let Some(property) = self.property("ranges")? {
+            Some(
+                property
+                    .as_prop_encoded_array([
+                        self.address_cells()? as usize,
+                        self.parent_address_space.address_cells as usize,
+                        self.size_cells()? as usize,
+                    ])?
+                    .map(Range::from_cells),
+            )
+        } else {
+            None
+        })
+    }
+
+    /// Returns the value of the standard `dma-ranges` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of cells.
+    pub fn dma_ranges(
+        &self,
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, FdtError> {
+        Ok(if let Some(property) = self.property("dma-ranges")? {
+            Some(
+                property
+                    .as_prop_encoded_array([
+                        self.address_cells()? as usize,
+                        self.parent_address_space.address_cells as usize,
+                        self.size_cells()? as usize,
+                    ])?
+                    .map(Range::from_cells),
+            )
+        } else {
+            None
+        })
+    }
+
     /// Returns whether the standard `dma-coherent` property is present.
     ///
     /// # Errors
@@ -156,5 +241,23 @@ impl<'a> FdtNode<'a> {
     /// Returns an error if a property can't be read.
     pub fn dma_coherent(&self) -> Result<bool, FdtParseError> {
         Ok(self.property("dma-coherent")?.is_some())
+    }
+}
+
+/// The `#address-cells` and `#size-cells` properties of a node.
+#[derive(Debug, Clone, Copy)]
+pub struct AddressSpaceProperties {
+    /// The `#address-cells` property.
+    pub address_cells: u32,
+    /// The `#size-cells` property.
+    pub size_cells: u32,
+}
+
+impl Default for AddressSpaceProperties {
+    fn default() -> Self {
+        Self {
+            address_cells: DEFAULT_ADDRESS_CELLS,
+            size_cells: DEFAULT_SIZE_CELLS,
+        }
     }
 }

@@ -26,7 +26,7 @@ use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub use self::node::FdtNode;
-pub use self::property::FdtProperty;
+pub use self::property::{Cells, FdtProperty};
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
 
@@ -240,7 +240,7 @@ impl<'a> Fdt<'a> {
         Fdt::new(slice)
     }
 
-    fn validate_header(&self) -> Result<(), FdtParseError> {
+    fn validate_header(self) -> Result<(), FdtParseError> {
         let header = self.header();
         let data = &self.data;
 
@@ -291,7 +291,7 @@ impl<'a> Fdt<'a> {
     }
 
     /// Returns the header of the device tree.
-    pub(crate) fn header(&self) -> &FdtHeader {
+    pub(crate) fn header(self) -> &'a FdtHeader {
         let (header, _remaining_bytes) = FdtHeader::ref_from_prefix(self.data)
             .expect("new() checks if the slice is at least as big as the header");
         header
@@ -299,32 +299,32 @@ impl<'a> Fdt<'a> {
 
     /// Returns the underlying data slice of the FDT.
     #[must_use]
-    pub fn data(&self) -> &'a [u8] {
+    pub fn data(self) -> &'a [u8] {
         self.data
     }
 
     /// Returns the version of the FDT.
     #[must_use]
-    pub fn version(&self) -> u32 {
+    pub fn version(self) -> u32 {
         self.header().version()
     }
 
     /// Returns the last compatible version of the FDT.
     #[must_use]
-    pub fn last_comp_version(&self) -> u32 {
+    pub fn last_comp_version(self) -> u32 {
         self.header().last_comp_version()
     }
 
     /// Returns the physical ID of the boot CPU.
     #[must_use]
-    pub fn boot_cpuid_phys(&self) -> u32 {
+    pub fn boot_cpuid_phys(self) -> u32 {
         self.header().boot_cpuid_phys()
     }
 
     /// Returns an iterator over the memory reservation block.
     pub fn memory_reservations(
-        &self,
-    ) -> impl Iterator<Item = Result<MemoryReservation, FdtParseError>> + '_ {
+        self,
+    ) -> impl Iterator<Item = Result<MemoryReservation, FdtParseError>> + 'a {
         let mut offset = self.header().off_mem_rsvmap() as usize;
         core::iter::from_fn(move || {
             if offset >= self.header().off_dt_struct() as usize {
@@ -366,7 +366,7 @@ impl<'a> Fdt<'a> {
     /// let root = fdt.root().unwrap();
     /// assert_eq!(root.name().unwrap(), "");
     /// ```
-    pub fn root(&self) -> Result<FdtNode<'_>, FdtParseError> {
+    pub fn root(self) -> Result<FdtNode<'a>, FdtParseError> {
         let offset = self.header().off_dt_struct() as usize;
         let token = self.read_token(offset)?;
         if token != FdtToken::BeginNode {
@@ -375,7 +375,7 @@ impl<'a> Fdt<'a> {
                 offset,
             ));
         }
-        Ok(FdtNode { fdt: self, offset })
+        Ok(FdtNode::new(self, offset))
     }
 
     /// Finds a node by its path.
@@ -424,7 +424,7 @@ impl<'a> Fdt<'a> {
     /// let node = fdt.find_node("/child2@42").unwrap().unwrap();
     /// assert_eq!(node.name().unwrap(), "child2@42");
     /// ```
-    pub fn find_node(&self, path: &str) -> Result<Option<FdtNode<'_>>, FdtParseError> {
+    pub fn find_node(self, path: &str) -> Result<Option<FdtNode<'a>>, FdtParseError> {
         if !path.starts_with('/') {
             return Ok(None);
         }
@@ -441,7 +441,7 @@ impl<'a> Fdt<'a> {
         Ok(Some(current_node))
     }
 
-    pub(crate) fn read_token(&self, offset: usize) -> Result<FdtToken, FdtParseError> {
+    pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {
         let val = big_endian::U32::ref_from_prefix(&self.data[offset..])
             .map(|(val, _)| val.get())
             .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?;
@@ -449,7 +449,7 @@ impl<'a> Fdt<'a> {
     }
 
     /// Returns a string from the string block.
-    pub(crate) fn string(&self, string_block_offset: usize) -> Result<&'a str, FdtParseError> {
+    pub(crate) fn string(self, string_block_offset: usize) -> Result<&'a str, FdtParseError> {
         let header = self.header();
         let str_block_start = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
@@ -465,7 +465,7 @@ impl<'a> Fdt<'a> {
 
     /// Returns a NUL-terminated string from a given offset.
     pub(crate) fn string_at_offset(
-        &self,
+        self,
         offset: usize,
         end: Option<usize>,
     ) -> Result<&'a str, FdtParseError> {
@@ -481,7 +481,7 @@ impl<'a> Fdt<'a> {
         }
     }
 
-    pub(crate) fn find_string_end(&self, start: usize) -> Result<usize, FdtParseError> {
+    pub(crate) fn find_string_end(self, start: usize) -> Result<usize, FdtParseError> {
         let mut offset = start;
         loop {
             match self.data.get(offset) {
@@ -493,7 +493,7 @@ impl<'a> Fdt<'a> {
         }
     }
 
-    pub(crate) fn next_sibling_offset(&self, mut offset: usize) -> Result<usize, FdtParseError> {
+    pub(crate) fn next_sibling_offset(self, mut offset: usize) -> Result<usize, FdtParseError> {
         offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
 
         // Skip node name
@@ -532,7 +532,7 @@ impl<'a> Fdt<'a> {
         Ok(offset)
     }
 
-    pub(crate) fn next_property_offset(&self, mut offset: usize) -> Result<usize, FdtParseError> {
+    pub(crate) fn next_property_offset(self, mut offset: usize) -> Result<usize, FdtParseError> {
         let len = big_endian::U32::ref_from_prefix(&self.data[offset..])
             .map(|(val, _)| val.get())
             .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?

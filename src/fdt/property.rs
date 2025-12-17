@@ -9,7 +9,8 @@
 //! A read-only API for inspecting a device tree property.
 
 use core::ffi::CStr;
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
+use core::ops::{BitOr, Shl};
 
 use zerocopy::{FromBytes, big_endian};
 
@@ -127,10 +128,11 @@ impl<'a> FdtProperty<'a> {
         FdtStringListIterator { value: self.value }
     }
 
-    pub(crate) fn as_prop_encoded_array(
+    pub(crate) fn as_prop_encoded_array<const N: usize>(
         &self,
-        chunk_cells: usize,
-    ) -> Result<impl Iterator<Item = &'a [big_endian::U32]> + use<'a>, FdtError> {
+        fields_cells: [usize; N],
+    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, FdtError> {
+        let chunk_cells = fields_cells.iter().sum();
         let chunk_bytes = chunk_cells * size_of::<u32>();
         if !self.value.len().is_multiple_of(chunk_bytes) {
             return Err(FdtError::PropEncodedArraySizeMismatch {
@@ -138,13 +140,18 @@ impl<'a> FdtProperty<'a> {
                 chunk: chunk_cells,
             });
         }
-        Ok(self.value.chunks_exact(chunk_bytes).map(|chunk| {
-            <[big_endian::U32]>::ref_from_bytes(chunk)
-                .expect("chunk should be a multiple of 4 bytes because of chunks_exact")
+        Ok(self.value.chunks_exact(chunk_bytes).map(move |chunk| {
+            let mut cells = <[big_endian::U32]>::ref_from_bytes(chunk)
+                .expect("chunk should be a multiple of 4 bytes because of chunks_exact");
+            fields_cells.map(|field_cells| {
+                let field;
+                (field, cells) = cells.split_at(field_cells);
+                Cells(field)
+            })
         }))
     }
 
-    pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+    pub(crate) fn fmt(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
 
         if self.value.is_empty() {
@@ -200,8 +207,8 @@ impl<'a> FdtProperty<'a> {
 
 /// An iterator over the properties of a device tree node.
 pub(crate) enum FdtPropIter<'a> {
-    Start { fdt: &'a Fdt<'a>, offset: usize },
-    Running { fdt: &'a Fdt<'a>, offset: usize },
+    Start { fdt: Fdt<'a>, offset: usize },
+    Running { fdt: Fdt<'a>, offset: usize },
     Error,
 }
 
@@ -221,10 +228,10 @@ impl<'a> Iterator for FdtPropIter<'a> {
                     }
                 };
                 offset = Fdt::align_tag_offset(offset);
-                *self = Self::Running { fdt, offset };
+                *self = Self::Running { fdt: *fdt, offset };
                 self.next()
             }
-            Self::Running { fdt, offset } => match Self::try_next(fdt, offset) {
+            Self::Running { fdt, offset } => match Self::try_next(*fdt, offset) {
                 Some(Ok(val)) => Some(Ok(val)),
                 Some(Err(e)) => {
                     *self = Self::Error;
@@ -239,7 +246,7 @@ impl<'a> Iterator for FdtPropIter<'a> {
 
 impl<'a> FdtPropIter<'a> {
     fn try_next(
-        fdt: &'a Fdt<'a>,
+        fdt: Fdt<'a>,
         offset: &mut usize,
     ) -> Option<Result<FdtProperty<'a>, FdtParseError>> {
         loop {
@@ -306,5 +313,47 @@ impl<'a> Iterator for FdtStringListIterator<'a> {
         let s = cstr.to_str().ok()?;
         self.value = &self.value[s.len() + 1..];
         Some(s)
+    }
+}
+
+/// An integer value split into several big-endian u32 parts.
+///
+/// This is generally used in prop-encoded-array properties.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
+
+impl Cells<'_> {
+    /// Converts the value to the given integer type.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FdtError::TooManyCells` if the value has too many cells to fit
+    /// in the given type.
+    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+        self,
+    ) -> Result<T, FdtError> {
+        if size_of::<T>() < self.0.len() * size_of::<u32>() {
+            Err(FdtError::TooManyCells {
+                cells: self.0.len(),
+            })
+        } else if let [size] = self.0 {
+            Ok(size.get().into())
+        } else {
+            let mut value = Default::default();
+            for cell in self.0 {
+                value = value << 32 | cell.get().into();
+            }
+            Ok(value)
+        }
+    }
+}
+
+impl Display for Cells<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("0x")?;
+        for part in self.0 {
+            write!(f, "{part:08x}")?;
+        }
+        Ok(())
     }
 }

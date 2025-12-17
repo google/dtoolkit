@@ -35,6 +35,13 @@ pub enum FdtError {
         /// The number of 4 byte cells expected in each element of the array.
         chunk: usize,
     },
+    /// Tried to convert part of a prop-encoded-array property to a type which
+    /// was too small.
+    #[error("prop-encoded-array field too big for chosen type ({cells} cells)")]
+    TooManyCells {
+        /// The number of (32-bit) cells in the field.
+        cells: usize,
+    },
 }
 
 /// An error that can occur when parsing a device tree.
