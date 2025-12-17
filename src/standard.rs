@@ -16,7 +16,7 @@ pub use self::memory::{InitialMappedArea, Memory};
 pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
-use crate::fdt::FdtNode;
+use crate::fdt::{Cells, FdtNode};
 
 pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
@@ -153,7 +153,10 @@ impl<'a> FdtNode<'a> {
                     .as_prop_encoded_array((address_cells + size_cells) as usize)?
                     .map(move |element| {
                         let (address, size) = element.split_at(address_cells as usize);
-                        Reg { address, size }
+                        Reg {
+                            address: Cells(address),
+                            size: Cells(size),
+                        }
                     }),
             )
         } else {

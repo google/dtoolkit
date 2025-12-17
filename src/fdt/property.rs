@@ -9,7 +9,8 @@
 //! A read-only API for inspecting a device tree property.
 
 use core::ffi::CStr;
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
+use core::ops::{BitOr, Shl};
 
 use zerocopy::{FromBytes, big_endian};
 
@@ -144,7 +145,7 @@ impl<'a> FdtProperty<'a> {
         }))
     }
 
-    pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+    pub(crate) fn fmt(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
 
         if self.value.is_empty() {
@@ -306,5 +307,49 @@ impl<'a> Iterator for FdtStringListIterator<'a> {
         let s = cstr.to_str().ok()?;
         self.value = &self.value[s.len() + 1..];
         Some(s)
+    }
+}
+
+/// An integer value split into several big-endian u32 parts.
+///
+/// This is generally used in prop-encoded-array properties.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Cells<'a>(pub &'a [big_endian::U32]);
+
+impl Cells<'_> {
+    /// Converts the value to the given integer type.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FdtError::TooManyCells` if the value has too many cells to fit
+    /// in the given type.
+    pub fn to_intsize<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+        self,
+        field: &'static str,
+    ) -> Result<T, FdtError> {
+        if size_of::<T>() < self.0.len() * size_of::<u32>() {
+            Err(FdtError::TooManyCells {
+                field,
+                cells: self.0.len(),
+            })
+        } else if let [size] = self.0 {
+            Ok(size.get().into())
+        } else {
+            let mut value = Default::default();
+            for cell in self.0 {
+                value = value << 32 | cell.get().into();
+            }
+            Ok(value)
+        }
+    }
+}
+
+impl Display for Cells<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str("0x")?;
+        for part in self.0 {
+            write!(f, "{part:08x}")?;
+        }
+        Ok(())
     }
 }

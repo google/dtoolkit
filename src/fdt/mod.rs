@@ -26,7 +26,7 @@ use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub use self::node::FdtNode;
-pub use self::property::FdtProperty;
+pub use self::property::{Cells, FdtProperty};
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
 

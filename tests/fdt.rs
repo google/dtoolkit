@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::fdt::Fdt;
+use dtoolkit::fdt::{Cells, Fdt};
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 use dtoolkit::standard::{InitialMappedArea, Reg, Status};
@@ -136,12 +136,12 @@ fn standard_properties() {
         reg,
         vec![
             Reg {
-                address: &[0x1234_5678.into(), 0x3000.into()],
-                size: &[0.into(), 32.into()],
+                address: Cells(&[0x1234_5678.into(), 0x3000.into()]),
+                size: Cells(&[0.into(), 32.into()]),
             },
             Reg {
-                address: &[0.into(), 0xfe00.into()],
-                size: &[0.into(), 256.into()],
+                address: Cells(&[0.into(), 0xfe00.into()]),
+                size: Cells(&[0.into(), 256.into()]),
             },
         ]
     );
@@ -232,8 +232,8 @@ fn memory() {
     assert_eq!(
         reg,
         vec![Reg {
-            address: &[0x8000_0000.into()],
-            size: &[0x2000_0000.into()]
+            address: Cells(&[0x8000_0000.into()]),
+            size: Cells(&[0x2000_0000.into()]),
         }]
     );
     assert!(memory.hotpluggable().unwrap());
