@@ -9,10 +9,12 @@
 //! Standard nodes and properties.
 
 mod memory;
+mod ranges;
 mod reg;
 mod status;
 
 pub use self::memory::{InitialMappedArea, Memory};
+pub use self::ranges::Range;
 pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
@@ -167,6 +169,52 @@ impl<'a> FdtNode<'a> {
     pub fn virtual_reg(&self) -> Result<Option<u32>, FdtParseError> {
         Ok(if let Some(property) = self.property("virtual-reg")? {
             Some(property.as_u32()?)
+        } else {
+            None
+        })
+    }
+
+    /// Returns the value of the standard `ranges` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of cells.
+    pub fn ranges(&self) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, FdtError> {
+        Ok(if let Some(property) = self.property("ranges")? {
+            Some(
+                property
+                    .as_prop_encoded_array([
+                        self.address_cells()? as usize,
+                        self.parent_address_cells as usize,
+                        self.size_cells()? as usize,
+                    ])?
+                    .map(Range::from_cells),
+            )
+        } else {
+            None
+        })
+    }
+
+    /// Returns the value of the standard `dma-ranges` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// size of the value isn't a multiple of the expected number of cells.
+    pub fn dma_ranges(
+        &self,
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, FdtError> {
+        Ok(if let Some(property) = self.property("dma-ranges")? {
+            Some(
+                property
+                    .as_prop_encoded_array([
+                        self.address_cells()? as usize,
+                        self.parent_address_cells as usize,
+                        self.size_cells()? as usize,
+                    ])?
+                    .map(Range::from_cells),
+            )
         } else {
             None
         })

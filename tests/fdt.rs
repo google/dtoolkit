@@ -109,11 +109,13 @@ fn standard_properties() {
     assert!(!test_props_node.dma_coherent().unwrap());
     assert_eq!(test_props_node.phandle().unwrap(), None);
     assert_eq!(test_props_node.virtual_reg().unwrap(), None);
+    assert!(test_props_node.ranges().unwrap().is_none());
+    assert!(test_props_node.dma_ranges().unwrap().is_none());
     assert!(test_props_node.compatible().unwrap().is_none());
 
     // Explicit values.
-    assert_eq!(standard_props_node.address_cells().unwrap(), 8);
-    assert_eq!(standard_props_node.size_cells().unwrap(), 4);
+    assert_eq!(standard_props_node.address_cells().unwrap(), 1);
+    assert_eq!(standard_props_node.size_cells().unwrap(), 1);
     assert_eq!(standard_props_node.status().unwrap(), Status::Fail);
     assert_eq!(standard_props_node.model().unwrap(), Some("Some Model"));
     assert!(standard_props_node.dma_coherent().unwrap());
@@ -127,6 +129,7 @@ fn standard_properties() {
             .collect::<Vec<_>>(),
         vec!["abc,def", "some,other"]
     );
+
     let reg = standard_props_node
         .reg()
         .unwrap()
@@ -149,6 +152,32 @@ fn standard_properties() {
     assert_eq!(reg[0].size::<u64>().unwrap(), 32);
     assert_eq!(reg[1].address::<u64>().unwrap(), 0xfe00);
     assert_eq!(reg[1].size::<u64>().unwrap(), 256);
+
+    let ranges = standard_props_node
+        .ranges()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(ranges.len(), 1);
+    assert_eq!(ranges[0].child_bus_address::<u32>().unwrap(), 0x1111_0000);
+    assert_eq!(
+        ranges[0].parent_bus_address::<u64>().unwrap(),
+        0x2222_0000_3333_0000
+    );
+    assert_eq!(ranges[0].length::<u32>().unwrap(), 0x4444_0000);
+
+    let dma_ranges = standard_props_node
+        .dma_ranges()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(dma_ranges.len(), 1);
+    assert_eq!(dma_ranges[0].child_bus_address::<u32>().unwrap(), 0xaaaa);
+    assert_eq!(
+        dma_ranges[0].parent_bus_address::<u64>().unwrap(),
+        0xbbbb_0000_cccc
+    );
+    assert_eq!(dma_ranges[0].length::<u32>().unwrap(), 0xdddd);
 }
 
 #[test]
