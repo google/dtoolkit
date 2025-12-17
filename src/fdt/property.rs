@@ -319,8 +319,8 @@ impl<'a> Iterator for FdtStringListIterator<'a> {
 /// An integer value split into several big-endian u32 parts.
 ///
 /// This is generally used in prop-encoded-array properties.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Cells<'a>(pub &'a [big_endian::U32]);
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
 
 impl Cells<'_> {
     /// Converts the value to the given integer type.
@@ -329,13 +329,11 @@ impl Cells<'_> {
     ///
     /// Returns `FdtError::TooManyCells` if the value has too many cells to fit
     /// in the given type.
-    pub fn to_intsize<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
-        field: &'static str,
     ) -> Result<T, FdtError> {
         if size_of::<T>() < self.0.len() * size_of::<u32>() {
             Err(FdtError::TooManyCells {
-                field,
                 cells: self.0.len(),
             })
         } else if let [size] = self.0 {

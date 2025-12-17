@@ -13,17 +13,16 @@ use core::fmt;
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::error::FdtParseError;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
-use crate::standard::{DEFAULT_ADDRESS_CELLS, DEFAULT_SIZE_CELLS};
+use crate::standard::AddressSpaceProperties;
 
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
 pub struct FdtNode<'a> {
     pub(crate) fdt: Fdt<'a>,
     pub(crate) offset: usize,
-    /// The `#size-cells` property of this node's parent node.
-    pub(crate) parent_size_cells: u32,
-    /// The `#address-cells` property of this node's parent node.
-    pub(crate) parent_address_cells: u32,
+    /// The `#address-cells` and `#size-cells` properties of this node's parent
+    /// node.
+    pub(crate) parent_address_space: AddressSpaceProperties,
 }
 
 impl<'a> FdtNode<'a> {
@@ -31,8 +30,7 @@ impl<'a> FdtNode<'a> {
         Self {
             fdt,
             offset,
-            parent_address_cells: DEFAULT_ADDRESS_CELLS,
-            parent_size_cells: DEFAULT_SIZE_CELLS,
+            parent_address_space: AddressSpaceProperties::default(),
         }
     }
 
@@ -259,8 +257,7 @@ enum FdtChildIter<'a> {
     Running {
         fdt: Fdt<'a>,
         offset: usize,
-        address_cells: u32,
-        size_cells: u32,
+        address_space: AddressSpaceProperties,
     },
     Error,
 }
@@ -271,11 +268,7 @@ impl<'a> Iterator for FdtChildIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Start { node } => {
-                let address_cells = match node.address_cells() {
-                    Ok(value) => value,
-                    Err(e) => return Some(Err(e)),
-                };
-                let size_cells = match node.size_cells() {
+                let address_space = match node.address_space() {
                     Ok(value) => value,
                     Err(e) => return Some(Err(e)),
                 };
@@ -292,17 +285,15 @@ impl<'a> Iterator for FdtChildIter<'a> {
                 *self = Self::Running {
                     fdt: node.fdt,
                     offset,
-                    address_cells,
-                    size_cells,
+                    address_space,
                 };
                 self.next()
             }
             Self::Running {
                 fdt,
                 offset,
-                address_cells,
-                size_cells,
-            } => match Self::try_next(*fdt, offset, *address_cells, *size_cells) {
+                address_space,
+            } => match Self::try_next(*fdt, offset, *address_space) {
                 Some(Ok(val)) => Some(Ok(val)),
                 Some(Err(e)) => {
                     *self = Self::Error;
@@ -319,8 +310,7 @@ impl<'a> FdtChildIter<'a> {
     fn try_next(
         fdt: Fdt<'a>,
         offset: &mut usize,
-        parent_address_cells: u32,
-        parent_size_cells: u32,
+        parent_address_space: AddressSpaceProperties,
     ) -> Option<Result<FdtNode<'a>, FdtParseError>> {
         loop {
             let token = match fdt.read_token(*offset) {
@@ -337,8 +327,7 @@ impl<'a> FdtChildIter<'a> {
                     return Some(Ok(FdtNode {
                         fdt,
                         offset: node_offset,
-                        parent_address_cells,
-                        parent_size_cells,
+                        parent_address_space,
                     }));
                 }
                 FdtToken::Prop => {

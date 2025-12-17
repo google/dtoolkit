@@ -88,15 +88,20 @@ pub struct InitialMappedArea {
 }
 
 impl InitialMappedArea {
+    /// Creates an `InitialMappedArea` from an array of three `Cells` containing
+    /// the effective address, physical address and size respectively.
+    ///
+    /// These `Cells` must contain 2, 2 and 1 cells respectively, or the method
+    /// will panic.
     #[expect(
         clippy::unwrap_used,
         reason = "The Cells passed are always the correct size"
     )]
     fn from_cells([ea, pa, size]: [Cells; 3]) -> Self {
         Self {
-            effective_address: ea.to_intsize("effective address").unwrap(),
-            physical_address: pa.to_intsize("physical address").unwrap(),
-            size: size.to_intsize("size").unwrap(),
+            effective_address: ea.to_int().unwrap(),
+            physical_address: pa.to_int().unwrap(),
+            size: size.to_int().unwrap(),
         }
     }
 }

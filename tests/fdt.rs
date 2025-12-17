@@ -6,10 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::fdt::{Cells, Fdt};
+use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
-use dtoolkit::standard::{InitialMappedArea, Reg, Status};
+use dtoolkit::standard::{InitialMappedArea, Status};
 
 #[test]
 fn read_child_nodes() {
@@ -135,19 +135,7 @@ fn standard_properties() {
         .unwrap()
         .unwrap()
         .collect::<Vec<_>>();
-    assert_eq!(
-        reg,
-        vec![
-            Reg {
-                address: Cells(&[0x1234_5678.into(), 0x3000.into()]),
-                size: Cells(&[0.into(), 32.into()]),
-            },
-            Reg {
-                address: Cells(&[0.into(), 0xfe00.into()]),
-                size: Cells(&[0.into(), 256.into()]),
-            },
-        ]
-    );
+    assert_eq!(reg.len(), 2);
     assert_eq!(reg[0].address::<u64>().unwrap(), 0x1234_5678_0000_3000);
     assert_eq!(reg[0].size::<u64>().unwrap(), 32);
     assert_eq!(reg[1].address::<u64>().unwrap(), 0xfe00);
@@ -258,13 +246,6 @@ fn memory() {
     assert_eq!(reg.len(), 1);
     assert_eq!(reg[0].address::<u32>().unwrap(), 0x8000_0000);
     assert_eq!(reg[0].size::<u32>().unwrap(), 0x2000_0000);
-    assert_eq!(
-        reg,
-        vec![Reg {
-            address: Cells(&[0x8000_0000.into()]),
-            size: Cells(&[0x2000_0000.into()]),
-        }]
-    );
     assert!(memory.hotpluggable().unwrap());
     assert_eq!(
         memory

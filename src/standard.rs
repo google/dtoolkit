@@ -139,6 +139,20 @@ impl<'a> FdtNode<'a> {
         })
     }
 
+    /// Returns the values of the standard `#address-cells` and `#size_cells`
+    /// properties.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read, or the
+    /// values aren't valid u32s.
+    pub fn address_space(&self) -> Result<AddressSpaceProperties, FdtParseError> {
+        Ok(AddressSpaceProperties {
+            address_cells: self.address_cells()?,
+            size_cells: self.size_cells()?,
+        })
+    }
+
     /// Returns the value of the standard `reg` property.
     ///
     /// # Errors
@@ -147,8 +161,8 @@ impl<'a> FdtNode<'a> {
     /// size of the value isn't a multiple of the expected number of address and
     /// size cells.
     pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, FdtError> {
-        let address_cells = self.parent_address_cells as usize;
-        let size_cells = self.parent_size_cells as usize;
+        let address_cells = self.parent_address_space.address_cells as usize;
+        let size_cells = self.parent_address_space.size_cells as usize;
         Ok(if let Some(property) = self.property("reg")? {
             Some(
                 property
@@ -186,7 +200,7 @@ impl<'a> FdtNode<'a> {
                 property
                     .as_prop_encoded_array([
                         self.address_cells()? as usize,
-                        self.parent_address_cells as usize,
+                        self.parent_address_space.address_cells as usize,
                         self.size_cells()? as usize,
                     ])?
                     .map(Range::from_cells),
@@ -210,7 +224,7 @@ impl<'a> FdtNode<'a> {
                 property
                     .as_prop_encoded_array([
                         self.address_cells()? as usize,
-                        self.parent_address_cells as usize,
+                        self.parent_address_space.address_cells as usize,
                         self.size_cells()? as usize,
                     ])?
                     .map(Range::from_cells),
@@ -227,5 +241,23 @@ impl<'a> FdtNode<'a> {
     /// Returns an error if a property can't be read.
     pub fn dma_coherent(&self) -> Result<bool, FdtParseError> {
         Ok(self.property("dma-coherent")?.is_some())
+    }
+}
+
+/// The `#address-cells` and `#size-cells` properties of a node.
+#[derive(Debug, Clone, Copy)]
+pub struct AddressSpaceProperties {
+    /// The `#address-cells` property.
+    pub address_cells: u32,
+    /// The `#size-cells` property.
+    pub size_cells: u32,
+}
+
+impl Default for AddressSpaceProperties {
+    fn default() -> Self {
+        Self {
+            address_cells: DEFAULT_ADDRESS_CELLS,
+            size_cells: DEFAULT_SIZE_CELLS,
+        }
     }
 }

@@ -46,7 +46,7 @@ impl<'a> Range<'a> {
     >(
         &self,
     ) -> Result<T, FdtError> {
-        self.child_bus_address.to_intsize("child-bus-address")
+        self.child_bus_address.to_int()
     }
 
     /// Attempts to return the parent-bus-address as the given type, if it will
@@ -61,7 +61,7 @@ impl<'a> Range<'a> {
     >(
         &self,
     ) -> Result<T, FdtError> {
-        self.parent_bus_address.to_intsize("parent-bus-address")
+        self.parent_bus_address.to_int()
     }
 
     /// Attempts to return the length as the given type, if it will fit.
@@ -72,7 +72,7 @@ impl<'a> Range<'a> {
     pub fn length<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         &self,
     ) -> Result<T, FdtError> {
-        self.length.to_intsize("length")
+        self.length.to_int()
     }
 }
 

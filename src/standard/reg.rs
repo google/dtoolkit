@@ -34,7 +34,7 @@ impl<'a> Reg<'a> {
     pub fn address<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, FdtError> {
-        self.address.to_intsize("address")
+        self.address.to_int()
     }
 
     /// Attempts to return the size as the given type, if it will fit.
@@ -45,7 +45,7 @@ impl<'a> Reg<'a> {
     pub fn size<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, FdtError> {
-        self.size.to_intsize("size")
+        self.size.to_int()
     }
 }
 
@@ -80,10 +80,7 @@ mod tests {
         };
         assert_eq!(
             reg.address::<u32>(),
-            Err(FdtError::TooManyCells {
-                field: "address",
-                cells: 2
-            })
+            Err(FdtError::TooManyCells { cells: 2 })
         );
         assert_eq!(reg.address::<u64>(), Ok(0x1234_5678_abcd_0000));
         assert_eq!(reg.size::<u32>(), Ok(0x1122_3344));

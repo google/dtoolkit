@@ -37,11 +37,9 @@ pub enum FdtError {
     },
     /// Tried to convert part of a prop-encoded-array property to a type which
     /// was too small.
-    #[error("{field} too big for chosen type ({cells} cells)")]
+    #[error("prop-encoded-array field too big for chosen type ({cells} cells)")]
     TooManyCells {
-        /// The name of the field.
-        field: &'static str,
-        /// The value of the relevant `#address-cells` property.
+        /// The number of (32-bit) cells in the field.
         cells: usize,
     },
 }
