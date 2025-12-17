@@ -61,18 +61,22 @@ mod tests {
 
     #[test]
     fn format_reg() {
+        let address = [0x123_45678.into(), 0xabcd_0000.into()];
+        let size = [0x1122_3344.into()];
         let reg = Reg {
-            address: Cells(&[0x123_45678.into(), 0xabcd_0000.into()]),
-            size: Cells(&[0x1122_3344.into()]),
+            address: Cells(&address),
+            size: Cells(&size),
         };
         assert_eq!(reg.to_string(), "0x12345678abcd0000 0x11223344");
     }
 
     #[test]
     fn address_size() {
+        let address = [0x123_45678.into(), 0xabcd_0000.into()];
+        let size = [0x1122_3344.into()];
         let reg = Reg {
-            address: Cells(&[0x123_45678.into(), 0xabcd_0000.into()]),
-            size: Cells(&[0x1122_3344.into()]),
+            address: Cells(&address),
+            size: Cells(&size),
         };
         assert_eq!(
             reg.address::<u32>(),

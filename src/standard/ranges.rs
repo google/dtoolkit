@@ -92,10 +92,13 @@ mod tests {
 
     #[test]
     fn format_range() {
+        let child_bus_address = [0x0.into(), 0x4000.into()];
+        let parent_bus_address = [0xe000_0000.into()];
+        let length = [0x10_0000.into()];
         let range = Range {
-            child_bus_address: Cells(&[0x0.into(), 0x4000.into()]),
-            parent_bus_address: Cells(&[0xe000_0000.into()]),
-            length: Cells(&[0x10_0000.into()]),
+            child_bus_address: Cells(&child_bus_address),
+            parent_bus_address: Cells(&parent_bus_address),
+            length: Cells(&length),
         };
         assert_eq!(
             range.to_string(),
