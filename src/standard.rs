@@ -33,6 +33,36 @@ impl<'a> FdtNode<'a> {
             .map(|property| property.as_str_list()))
     }
 
+    /// Returns whether this node has a `compatible` properties containing the
+    /// given string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a property's name or value cannot be read.
+    pub fn is_compatible(&self, compatible_filter: &str) -> Result<bool, FdtParseError> {
+        Ok(if let Some(mut compatible) = self.compatible()? {
+            compatible.any(|c| c == compatible_filter)
+        } else {
+            false
+        })
+    }
+
+    /// Finds all child nodes with a `compatible` property containing the given
+    /// string.
+    pub fn find_compatible<'f>(
+        &self,
+        compatible_filter: &'f str,
+    ) -> impl Iterator<Item = Result<FdtNode<'a>, FdtParseError>> + use<'a, 'f> {
+        self.children().filter_map(|child| match child {
+            Ok(child) => match child.is_compatible(compatible_filter) {
+                Ok(true) => Some(Ok(child)),
+                Ok(false) => None,
+                Err(e) => Some(Err(e)),
+            },
+            Err(e) => Some(Err(e)),
+        })
+    }
+
     /// Returns the value of the standard `model` property.
     ///
     /// # Errors
