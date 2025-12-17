@@ -9,7 +9,7 @@
 use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
-use dtoolkit::standard::Status;
+use dtoolkit::standard::{InitialMappedArea, Status};
 
 #[test]
 fn read_child_nodes() {
@@ -183,6 +183,27 @@ fn find_node_by_path() {
     assert!(fdt.find_node("/a/c").unwrap().is_none());
     assert!(fdt.find_node("/x").unwrap().is_none());
     assert!(fdt.find_node("").unwrap().is_none());
+}
+
+#[test]
+fn memory() {
+    let dtb = include_bytes!("dtb/test_pretty_print.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    let memory = fdt.memory().unwrap();
+    assert!(memory.hotpluggable().unwrap());
+    assert_eq!(
+        memory
+            .initial_mapped_area()
+            .unwrap()
+            .unwrap()
+            .collect::<Vec<_>>(),
+        vec![InitialMappedArea {
+            effective_address: 0x1234,
+            physical_address: 0x4321,
+            size: 0x1000,
+        }]
+    );
 }
 
 #[macro_export]

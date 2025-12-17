@@ -23,5 +23,7 @@
     memory@80000000 {
         device_type = "memory";
         reg = <0x80000000 0x20000000>;
+        initial-mapped-area = <0x00 0x1234 0x00 0x4321 0x1000>;
+        hotpluggable;
     };
 };
