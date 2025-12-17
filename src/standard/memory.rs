@@ -51,20 +51,19 @@ impl<'a> Memory<'a> {
     ///
     /// Returns an error if a property's name or value cannot be read, or the
     /// size of the value isn't a multiple of 5 cells.
-    #[allow(clippy::missing_panics_doc)]
     pub fn initial_mapped_area(
         &self,
     ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a>>, FdtError> {
         Ok(
             if let Some(property) = self.node.property("initial-mapped-area")? {
-                // try_into can't return an error, because we passed a chunk size matching what
-                // `InitialMappedArea::from_cells` expects.
-                #[allow(clippy::unwrap_used)]
-                Some(
-                    property
-                        .as_prop_encoded_array(5)?
-                        .map(|chunk| InitialMappedArea::from_cells(chunk.try_into().unwrap())),
-                )
+                Some(property.as_prop_encoded_array(5)?.map(|chunk| {
+                    InitialMappedArea::from_cells(
+                        #[expect(clippy::missing_panics_doc)]
+                        chunk
+                            .try_into()
+                            .expect("as_prop_encoded_array should return chunks of the size that InitialMappedArea::from_cells expects"),
+                    )
+                }))
             } else {
                 None
             },
@@ -83,7 +82,7 @@ impl<'a> Memory<'a> {
 }
 
 /// The value of an `initial-mapped-area` property.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InitialMappedArea {
     /// The effective address.
     pub effective_address: u64,

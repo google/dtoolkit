@@ -138,13 +138,10 @@ impl<'a> FdtProperty<'a> {
                 chunk: chunk_cells,
             });
         }
-        // `ref_from_bytes` shouldn't panic because each chunk will always be a multiple
-        // of 4 bytes because of `chunks_exact`.
-        #[allow(clippy::unwrap_used)]
-        Ok(self
-            .value
-            .chunks_exact(chunk_bytes)
-            .map(|chunk| <[big_endian::U32]>::ref_from_bytes(chunk).unwrap()))
+        Ok(self.value.chunks_exact(chunk_bytes).map(|chunk| {
+            <[big_endian::U32]>::ref_from_bytes(chunk)
+                .expect("chunk should be a multiple of 4 bytes because of chunks_exact")
+        }))
     }
 
     pub(crate) fn fmt(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
