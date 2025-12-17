@@ -8,10 +8,8 @@
 
 use core::ops::Deref;
 
-use zerocopy::big_endian;
-
 use crate::error::FdtError;
-use crate::fdt::{Fdt, FdtNode};
+use crate::fdt::{Cells, Fdt, FdtNode};
 
 impl Fdt<'_> {
     /// Returns the /memory node.
@@ -56,14 +54,11 @@ impl<'a> Memory<'a> {
     ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a>>, FdtError> {
         Ok(
             if let Some(property) = self.node.property("initial-mapped-area")? {
-                Some(property.as_prop_encoded_array(5)?.map(|chunk| {
-                    InitialMappedArea::from_cells(
-                        #[expect(clippy::missing_panics_doc)]
-                        chunk
-                            .try_into()
-                            .expect("as_prop_encoded_array should return chunks of the size that InitialMappedArea::from_cells expects"),
-                    )
-                }))
+                Some(
+                    property
+                        .as_prop_encoded_array([2, 2, 1])?
+                        .map(|chunk| InitialMappedArea::from_cells(chunk)),
+                )
             } else {
                 None
             },
@@ -93,11 +88,15 @@ pub struct InitialMappedArea {
 }
 
 impl InitialMappedArea {
-    fn from_cells([ea_high, ea_low, pa_high, pa_low, size]: [big_endian::U32; 5]) -> Self {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "The Cells passed are always the correct size"
+    )]
+    fn from_cells([ea, pa, size]: [Cells; 3]) -> Self {
         Self {
-            effective_address: u64::from(ea_high.get()) << 32 | u64::from(ea_low.get()),
-            physical_address: u64::from(pa_high.get()) << 32 | u64::from(pa_low.get()),
-            size: size.get(),
+            effective_address: ea.to_intsize("effective address").unwrap(),
+            physical_address: pa.to_intsize("physical address").unwrap(),
+            size: size.to_intsize("size").unwrap(),
         }
     }
 }

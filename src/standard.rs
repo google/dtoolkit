@@ -16,7 +16,7 @@ pub use self::memory::{InitialMappedArea, Memory};
 pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{FdtError, FdtParseError};
-use crate::fdt::{Cells, FdtNode};
+use crate::fdt::FdtNode;
 
 pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
@@ -145,19 +145,13 @@ impl<'a> FdtNode<'a> {
     /// size of the value isn't a multiple of the expected number of address and
     /// size cells.
     pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, FdtError> {
-        let address_cells = self.parent_address_cells;
-        let size_cells = self.parent_size_cells;
+        let address_cells = self.parent_address_cells as usize;
+        let size_cells = self.parent_size_cells as usize;
         Ok(if let Some(property) = self.property("reg")? {
             Some(
                 property
-                    .as_prop_encoded_array((address_cells + size_cells) as usize)?
-                    .map(move |element| {
-                        let (address, size) = element.split_at(address_cells as usize);
-                        Reg {
-                            address: Cells(address),
-                            size: Cells(size),
-                        }
-                    }),
+                    .as_prop_encoded_array([address_cells, size_cells])?
+                    .map(Reg::from_cells),
             )
         } else {
             None

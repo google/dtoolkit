@@ -21,7 +21,11 @@ pub struct Reg<'a> {
     pub size: Cells<'a>,
 }
 
-impl Reg<'_> {
+impl<'a> Reg<'a> {
+    pub(crate) fn from_cells([address, size]: [Cells<'a>; 2]) -> Self {
+        Self { address, size }
+    }
+
     /// Attempts to return the address as the given type, if it will fit.
     ///
     /// # Errors

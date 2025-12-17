@@ -128,10 +128,11 @@ impl<'a> FdtProperty<'a> {
         FdtStringListIterator { value: self.value }
     }
 
-    pub(crate) fn as_prop_encoded_array(
+    pub(crate) fn as_prop_encoded_array<const N: usize>(
         &self,
-        chunk_cells: usize,
-    ) -> Result<impl Iterator<Item = &'a [big_endian::U32]> + use<'a>, FdtError> {
+        fields_cells: [usize; N],
+    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, FdtError> {
+        let chunk_cells = fields_cells.iter().sum();
         let chunk_bytes = chunk_cells * size_of::<u32>();
         if !self.value.len().is_multiple_of(chunk_bytes) {
             return Err(FdtError::PropEncodedArraySizeMismatch {
@@ -139,9 +140,14 @@ impl<'a> FdtProperty<'a> {
                 chunk: chunk_cells,
             });
         }
-        Ok(self.value.chunks_exact(chunk_bytes).map(|chunk| {
-            <[big_endian::U32]>::ref_from_bytes(chunk)
-                .expect("chunk should be a multiple of 4 bytes because of chunks_exact")
+        Ok(self.value.chunks_exact(chunk_bytes).map(move |chunk| {
+            let mut cells = <[big_endian::U32]>::ref_from_bytes(chunk)
+                .expect("chunk should be a multiple of 4 bytes because of chunks_exact");
+            fields_cells.map(|field_cells| {
+                let field;
+                (field, cells) = cells.split_at(field_cells);
+                Cells(field)
+            })
         }))
     }
 
