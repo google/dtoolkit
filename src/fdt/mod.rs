@@ -19,8 +19,9 @@ mod node;
 mod property;
 
 use core::ffi::CStr;
+use core::fmt::{self, Debug, Display, Formatter};
 use core::mem::offset_of;
-use core::{fmt, ptr};
+use core::ptr;
 
 use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
@@ -108,9 +109,20 @@ impl FdtHeader {
 }
 
 /// A flattened device tree.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Fdt<'a> {
     pub(crate) data: &'a [u8],
+}
+
+impl Debug for Fdt<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Fdt {{ data: {} bytes at {:?} }}",
+            self.data.len(),
+            self.data.as_ptr()
+        )
+    }
 }
 
 /// A token in the device tree structure.
@@ -549,8 +561,8 @@ impl<'a> Fdt<'a> {
     }
 }
 
-impl fmt::Display for Fdt<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Fdt<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         writeln!(f, "/dts-v1/;")?;
         for reservation in self.memory_reservations() {
             let reservation = reservation.map_err(|_| fmt::Error)?;
