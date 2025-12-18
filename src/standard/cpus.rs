@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::{FdtError, FdtParseError};
@@ -41,6 +42,12 @@ impl<'a> Deref for Cpus<'a> {
     }
 }
 
+impl Display for Cpus<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.node.fmt(f)
+    }
+}
+
 impl<'a> Cpus<'a> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
     pub fn cpus(&self) -> impl Iterator<Item = Result<Cpu<'a>, FdtParseError>> + use<'a> {
@@ -73,6 +80,12 @@ impl<'a> Deref for Cpu<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.node
+    }
+}
+
+impl Display for Cpu<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.node.fmt(f)
     }
 }
 
