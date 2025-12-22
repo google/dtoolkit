@@ -21,6 +21,12 @@ pub enum FdtError {
     /// The `status` property of a node had an invalid value.
     #[error("Invalid status value")]
     InvalidStatus,
+    /// The required `/cpus` node wasn't found.
+    #[error("/cpus node missing")]
+    CpusMissing,
+    /// A `/cpus/cpu` node didn't have the required `reg` property.
+    #[error("/cpus/cpu node missing reg property")]
+    CpuMissingReg,
     /// The required `/memory` node wasn't found.
     #[error("/memory node missing")]
     MemoryMissing,
