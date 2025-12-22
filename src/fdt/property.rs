@@ -205,6 +205,12 @@ impl<'a> FdtProperty<'a> {
     }
 }
 
+impl Display for FdtProperty<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.fmt(f, 0)
+    }
+}
+
 /// An iterator over the properties of a device tree node.
 pub(crate) enum FdtPropIter<'a> {
     Start { fdt: Fdt<'a>, offset: usize },

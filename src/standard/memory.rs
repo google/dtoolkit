@@ -6,13 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::FdtError;
 use crate::fdt::{Cells, Fdt, FdtNode};
 
-impl Fdt<'_> {
-    /// Returns the /memory node.
+impl<'a> Fdt<'a> {
+    /// Returns the `/memory` node.
     ///
     /// This should always be included in a valid device tree.
     ///
@@ -21,13 +22,13 @@ impl Fdt<'_> {
     /// Returns a parse error if there was a problem reading the FDT structure
     /// to find the node, or `FdtError::MemoryMissing` if the memory node is
     /// missing.
-    pub fn memory(&self) -> Result<Memory<'_>, FdtError> {
+    pub fn memory(self) -> Result<Memory<'a>, FdtError> {
         let node = self.find_node("/memory")?.ok_or(FdtError::MemoryMissing)?;
         Ok(Memory { node })
     }
 }
 
-/// Typed wrapper for a "/memory" node.
+/// Typed wrapper for a `/memory` node.
 #[derive(Clone, Copy, Debug)]
 pub struct Memory<'a> {
     node: FdtNode<'a>,
@@ -38,6 +39,12 @@ impl<'a> Deref for Memory<'a> {
 
     fn deref(&self) -> &Self::Target {
         &self.node
+    }
+}
+
+impl Display for Memory<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.node.fmt(f)
     }
 }
 

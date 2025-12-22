@@ -8,7 +8,7 @@
 
 //! A read-only API for inspecting a device tree node.
 
-use core::fmt;
+use core::fmt::{self, Display, Formatter};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::error::FdtParseError;
@@ -211,7 +211,7 @@ impl<'a> FdtNode<'a> {
         FdtChildIter::Start { node: *self }
     }
 
-    pub(crate) fn fmt_recursive(&self, f: &mut fmt::Formatter<'_>, indent: usize) -> fmt::Result {
+    pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         let name = self.name().map_err(|_| fmt::Error)?;
         if name.is_empty() {
             writeln!(f, "{:indent$}/ {{", "", indent = indent)?;
@@ -246,6 +246,12 @@ impl<'a> FdtNode<'a> {
         }
 
         writeln!(f, "{:indent$}}};", "", indent = indent)
+    }
+}
+
+impl Display for FdtNode<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.fmt_recursive(f, 0)
     }
 }
 

@@ -6,14 +6,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use core::fmt::{self, Display, Formatter};
+use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
 use crate::error::FdtError;
 use crate::fdt::Cells;
 
 /// The value of a `reg` property.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub struct Reg<'a> {
     /// The address of the device within the address space of the parent bus.
     pub address: Cells<'a>,
@@ -52,6 +52,16 @@ impl<'a> Reg<'a> {
 impl Display for Reg<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{} {}", self.address, self.size)
+    }
+}
+
+impl Debug for Reg<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Reg {{ address: {}, size: {} }}",
+            self.address, self.size
+        )
     }
 }
 
