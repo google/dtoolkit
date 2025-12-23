@@ -9,7 +9,7 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
-use crate::error::FdtError;
+use crate::error::StandardError;
 use crate::fdt::{Cells, Fdt, FdtNode};
 
 impl<'a> Fdt<'a> {
@@ -22,8 +22,10 @@ impl<'a> Fdt<'a> {
     /// Returns a parse error if there was a problem reading the FDT structure
     /// to find the node, or `FdtError::MemoryMissing` if the memory node is
     /// missing.
-    pub fn memory(self) -> Result<Memory<'a>, FdtError> {
-        let node = self.find_node("/memory")?.ok_or(FdtError::MemoryMissing)?;
+    pub fn memory(self) -> Result<Memory<'a>, StandardError> {
+        let node = self
+            .find_node("/memory")
+            .ok_or(StandardError::MemoryMissing)?;
         Ok(Memory { node })
     }
 }
@@ -58,28 +60,23 @@ impl<'a> Memory<'a> {
     /// size of the value isn't a multiple of 5 cells.
     pub fn initial_mapped_area(
         &self,
-    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a>>, FdtError> {
-        Ok(
-            if let Some(property) = self.node.property("initial-mapped-area")? {
-                Some(
-                    property
-                        .as_prop_encoded_array([2, 2, 1])?
-                        .map(|chunk| InitialMappedArea::from_cells(chunk)),
-                )
-            } else {
-                None
-            },
-        )
+    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a>>, StandardError> {
+        if let Some(property) = self.node.property("initial-mapped-area") {
+            Ok(Some(
+                property
+                    .as_prop_encoded_array([2, 2, 1])?
+                    .map(|chunk| InitialMappedArea::from_cells(chunk)),
+            ))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Returns the value of the standard `hotpluggable` property of the memory
     /// node.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a property's name or value cannot be read.
-    pub fn hotpluggable(&self) -> Result<bool, FdtError> {
-        Ok(self.node.property("hotpluggable")?.is_some())
+    #[must_use]
+    pub fn hotpluggable(&self) -> bool {
+        self.node.property("hotpluggable").is_some()
     }
 }
 

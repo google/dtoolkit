@@ -8,16 +8,14 @@
 
 //! Error types for the `dtoolkit` crate.
 
-use core::fmt::{self, Display, Formatter};
-
 use thiserror::Error;
 
-/// An error that can occur when parsing or accessing a device tree.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum FdtError {
-    /// There was an error parsing the device tree.
-    #[error("{0}")]
-    Parse(#[from] FdtParseError),
+/// An error that can occur when accessing a standard node or property.
+#[derive(Copy, Clone, Debug, Eq, Error, PartialEq)]
+pub enum StandardError {
+    /// There was an error when converting the property value.
+    #[error("error occurred when converting the property value: {0}")]
+    PropertyConversion(#[from] PropertyError),
     /// The `status` property of a node had an invalid value.
     #[error("Invalid status value")]
     InvalidStatus,
@@ -53,6 +51,7 @@ pub enum FdtError {
 /// An error that can occur when parsing a device tree.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
+#[error("{kind} at offset {offset}")]
 pub struct FdtParseError {
     offset: usize,
     /// The type of the error that has occurred.
@@ -65,11 +64,6 @@ impl FdtParseError {
     }
 }
 
-impl Display for FdtParseError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{} at offset {}", self.kind, self.offset)
-    }
-}
 /// The kind of an error that can occur when parsing a device tree.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
@@ -102,4 +96,16 @@ pub enum FdtErrorKind {
     /// size.
     #[error("Memory reservation block has an entry that is unaligned or has invalid size")]
     MemReserveInvalid,
+}
+
+/// An error that can occur when parsing a property.
+#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PropertyError {
+    /// The property's value has an invalid length for the requested conversion.
+    #[error("property has an invalid length")]
+    InvalidLength,
+    /// The property's value is not a valid string.
+    #[error("property is not a valid string")]
+    InvalidString,
 }

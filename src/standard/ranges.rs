@@ -9,7 +9,7 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
-use crate::error::FdtError;
+use crate::error::StandardError;
 use crate::fdt::Cells;
 
 /// One of the values of a `ranges` property.
@@ -45,7 +45,7 @@ impl<'a> Range<'a> {
         T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>,
     >(
         &self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         self.child_bus_address.to_int()
     }
 
@@ -60,7 +60,7 @@ impl<'a> Range<'a> {
         T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>,
     >(
         &self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         self.parent_bus_address.to_int()
     }
 
@@ -71,7 +71,7 @@ impl<'a> Range<'a> {
     /// Returns `FdtError::TooManyCells` if the length doesn't fit in `T`.
     pub fn length<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         &self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         self.length.to_int()
     }
 }

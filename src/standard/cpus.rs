@@ -9,7 +9,7 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
-use crate::error::{FdtError, FdtParseError};
+use crate::error::StandardError;
 use crate::fdt::{Cells, Fdt, FdtNode};
 
 impl<'a> Fdt<'a> {
@@ -22,8 +22,8 @@ impl<'a> Fdt<'a> {
     /// Returns a parse error if there was a problem reading the FDT structure
     /// to find the node, or `FdtError::CpusMissing` if the CPUs node is
     /// missing.
-    pub fn cpus(self) -> Result<Cpus<'a>, FdtError> {
-        let node = self.find_node("/cpus")?.ok_or(FdtError::CpusMissing)?;
+    pub fn cpus(self) -> Result<Cpus<'a>, StandardError> {
+        let node = self.find_node("/cpus").ok_or(StandardError::CpusMissing)?;
         Ok(Cpus { node })
     }
 }
@@ -50,18 +50,10 @@ impl Display for Cpus<'_> {
 
 impl<'a> Cpus<'a> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus(&self) -> impl Iterator<Item = Result<Cpu<'a>, FdtParseError>> + use<'a> {
+    pub fn cpus(&self) -> impl Iterator<Item = Cpu<'a>> + use<'a> {
         self.node.children().filter_map(|child| {
-            let child = match child {
-                Ok(child) => child,
-                Err(e) => return Some(Err(e)),
-            };
-            let name = match child.name_without_address() {
-                Ok(name) => name,
-                Err(e) => return Some(Err(e)),
-            };
-            if name == "cpu" {
-                Some(Ok(Cpu { node: child }))
+            if child.name_without_address() == "cpu" {
+                Some(Cpu { node: child })
             } else {
                 None
             }
@@ -98,10 +90,10 @@ impl<'a> Cpu<'a> {
     /// Returns an error if a property's name or value cannot be read, or the
     /// `reg` property is missing, or the size of the value isn't a multiple of
     /// the expected number of address and size cells.
-    pub fn ids(&self) -> Result<impl Iterator<Item = Cells<'a>> + use<'a>, FdtError> {
+    pub fn ids(&self) -> Result<impl Iterator<Item = Cells<'a>> + use<'a>, StandardError> {
         Ok(self
             .reg()?
-            .ok_or(FdtError::CpuMissingReg)?
+            .ok_or(StandardError::CpuMissingReg)?
             .map(|reg| reg.address))
     }
 }

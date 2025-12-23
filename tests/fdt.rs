@@ -15,16 +15,16 @@ use dtoolkit::standard::{InitialMappedArea, Status};
 fn read_child_nodes() {
     let dtb = include_bytes!("dtb/test_children.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
+    let root = fdt.root();
     let mut children = root.children();
 
-    let child1 = children.next().unwrap().unwrap();
-    assert_eq!(child1.name().unwrap(), "child1");
-    assert_eq!(child1.name_without_address().unwrap(), "child1");
+    let child1 = children.next().unwrap();
+    assert_eq!(child1.name(), "child1");
+    assert_eq!(child1.name_without_address(), "child1");
 
-    let child3 = children.next().unwrap().unwrap();
-    assert_eq!(child3.name().unwrap(), "child2@42");
-    assert_eq!(child3.name_without_address().unwrap(), "child2");
+    let child3 = children.next().unwrap();
+    assert_eq!(child3.name(), "child2@42");
+    assert_eq!(child3.name_without_address(), "child2");
 
     assert!(children.next().is_none());
 }
@@ -34,8 +34,8 @@ fn name_outlives_fdt_and_node() {
     let dtb = include_bytes!("dtb/test_children.dtb");
     let name = {
         let fdt = Fdt::new(dtb).unwrap();
-        let child1 = fdt.find_node("/child1").unwrap().unwrap();
-        child1.name().unwrap()
+        let child1 = fdt.find_node("/child1").unwrap();
+        child1.name()
     };
 
     assert_eq!(name, "child1");
@@ -45,26 +45,26 @@ fn name_outlives_fdt_and_node() {
 fn read_prop_values() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
+    let root = fdt.root();
     let mut children = root.children();
-    let node = children.next().unwrap().unwrap();
-    assert_eq!(node.name().unwrap(), "test-props");
+    let node = children.next().unwrap();
+    assert_eq!(node.name(), "test-props");
 
     let mut props = node.properties();
 
-    let prop = props.next().unwrap().unwrap();
+    let prop = props.next().unwrap();
     assert_eq!(prop.name(), "u32-prop");
     assert_eq!(prop.as_u32().unwrap(), 0x1234_5678);
 
-    let prop = props.next().unwrap().unwrap();
+    let prop = props.next().unwrap();
     assert_eq!(prop.name(), "u64-prop");
     assert_eq!(prop.as_u64().unwrap(), 0x1122_3344_5566_7788);
 
-    let prop = props.next().unwrap().unwrap();
+    let prop = props.next().unwrap();
     assert_eq!(prop.name(), "str-prop");
     assert_eq!(prop.as_str().unwrap(), "hello world");
 
-    let prop = props.next().unwrap().unwrap();
+    let prop = props.next().unwrap();
     assert_eq!(prop.name(), "str-list-prop");
     let mut str_list = prop.as_str_list();
     assert_eq!(str_list.next(), Some("first"));
@@ -79,52 +79,51 @@ fn read_prop_values() {
 fn get_property_by_name() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
-    let node = root.child("test-props").unwrap().unwrap();
+    let root = fdt.root();
+    let node = root.child("test-props").unwrap();
 
-    let prop = node.property("u32-prop").unwrap().unwrap();
+    let prop = node.property("u32-prop").unwrap();
     assert_eq!(prop.name(), "u32-prop");
     assert_eq!(prop.as_u32().unwrap(), 0x1234_5678);
 
-    let prop = node.property("str-prop").unwrap().unwrap();
+    let prop = node.property("str-prop").unwrap();
     assert_eq!(prop.name(), "str-prop");
     assert_eq!(prop.as_str().unwrap(), "hello world");
 
-    assert!(node.property("non-existent-prop").unwrap().is_none());
+    assert!(node.property("non-existent-prop").is_none());
 }
 
 #[test]
 fn standard_properties() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
-    let test_props_node = root.child("test-props").unwrap().unwrap();
-    let standard_props_node = root.child("standard-props").unwrap().unwrap();
+    let root = fdt.root();
+    let test_props_node = root.child("test-props").unwrap();
+    let standard_props_node = root.child("standard-props").unwrap();
 
     // Default values.
     assert_eq!(test_props_node.address_cells().unwrap(), 2);
     assert_eq!(test_props_node.size_cells().unwrap(), 1);
     assert_eq!(test_props_node.status().unwrap(), Status::Okay);
     assert_eq!(test_props_node.model().unwrap(), None);
-    assert!(!test_props_node.dma_coherent().unwrap());
+    assert!(!test_props_node.dma_coherent());
     assert_eq!(test_props_node.phandle().unwrap(), None);
     assert_eq!(test_props_node.virtual_reg().unwrap(), None);
     assert!(test_props_node.ranges().unwrap().is_none());
     assert!(test_props_node.dma_ranges().unwrap().is_none());
-    assert!(test_props_node.compatible().unwrap().is_none());
+    assert!(test_props_node.compatible().is_none());
 
     // Explicit values.
     assert_eq!(standard_props_node.address_cells().unwrap(), 1);
     assert_eq!(standard_props_node.size_cells().unwrap(), 1);
     assert_eq!(standard_props_node.status().unwrap(), Status::Fail);
     assert_eq!(standard_props_node.model().unwrap(), Some("Some Model"));
-    assert!(standard_props_node.dma_coherent().unwrap());
+    assert!(standard_props_node.dma_coherent());
     assert_eq!(standard_props_node.phandle().unwrap(), Some(0x1234));
     assert_eq!(standard_props_node.virtual_reg().unwrap(), Some(0xabcd));
     assert_eq!(
         standard_props_node
             .compatible()
-            .unwrap()
             .unwrap()
             .collect::<Vec<_>>(),
         vec!["abc,def", "some,other"]
@@ -172,41 +171,38 @@ fn standard_properties() {
 fn get_child_by_name() {
     let dtb = include_bytes!("dtb/test_children.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
+    let root = fdt.root();
 
-    let child1 = root.child("child1").unwrap().unwrap();
-    assert_eq!(child1.name().unwrap(), "child1");
+    let child1 = root.child("child1").unwrap();
+    assert_eq!(child1.name(), "child1");
 
-    let child2 = root.child("child2").unwrap().unwrap();
-    assert_eq!(child2.name().unwrap(), "child2@42");
+    let child2 = root.child("child2").unwrap();
+    assert_eq!(child2.name(), "child2@42");
 
-    let child2_with_address = root.child("child2@42").unwrap().unwrap();
-    assert_eq!(child2_with_address.name().unwrap(), "child2@42");
+    let child2_with_address = root.child("child2@42").unwrap();
+    assert_eq!(child2_with_address.name(), "child2@42");
 
-    assert!(root.child("non-existent-child").unwrap().is_none());
+    assert!(root.child("non-existent-child").is_none());
 }
 
 #[test]
 fn children_nested() {
     let dtb = include_bytes!("dtb/test_children_nested.dtb");
     let fdt = Fdt::new(dtb).unwrap();
-    let root = fdt.root().unwrap();
+    let root = fdt.root();
 
     for child in root.children() {
-        println!("{}", child.unwrap().name().unwrap());
+        println!("{}", child.name());
     }
 
-    let children_names: Vec<_> = root
-        .children()
-        .map(|child| child.unwrap().name().unwrap())
-        .collect();
+    let children_names: Vec<_> = root.children().map(|child| child.name()).collect();
     assert_eq!(children_names, vec!["child1", "child3"]);
 
-    let child1 = root.child("child1").unwrap().unwrap();
-    let child2 = child1.child("child2").unwrap().unwrap();
+    let child1 = root.child("child1").unwrap();
+    let child2 = child1.child("child2").unwrap();
     let nested_properties: Vec<_> = child2
         .properties()
-        .map(|prop| prop.unwrap().name().to_owned())
+        .map(|prop| prop.name().to_owned())
         .collect();
     assert_eq!(nested_properties, vec!["prop2"]);
 }
@@ -216,24 +212,24 @@ fn find_node_by_path() {
     let dtb = include_bytes!("dtb/test_traversal.dtb");
     let fdt = Fdt::new(dtb).unwrap();
 
-    let root = fdt.find_node("/").unwrap().unwrap();
-    assert_eq!(root.name().unwrap(), "");
+    let root = fdt.find_node("/").unwrap();
+    assert_eq!(root.name(), "");
 
-    let a = fdt.find_node("/a").unwrap().unwrap();
-    assert_eq!(a.name().unwrap(), "a");
+    let a = fdt.find_node("/a").unwrap();
+    assert_eq!(a.name(), "a");
 
-    let b = fdt.find_node("/a/b").unwrap().unwrap();
-    assert_eq!(b.name().unwrap(), "b");
+    let b = fdt.find_node("/a/b").unwrap();
+    assert_eq!(b.name(), "b");
 
-    let c = fdt.find_node("/a/b/c").unwrap().unwrap();
-    assert_eq!(c.name().unwrap(), "c");
+    let c = fdt.find_node("/a/b/c").unwrap();
+    assert_eq!(c.name(), "c");
 
-    let d = fdt.find_node("/d").unwrap().unwrap();
-    assert_eq!(d.name().unwrap(), "d");
+    let d = fdt.find_node("/d").unwrap();
+    assert_eq!(d.name(), "d");
 
-    assert!(fdt.find_node("/a/c").unwrap().is_none());
-    assert!(fdt.find_node("/x").unwrap().is_none());
-    assert!(fdt.find_node("").unwrap().is_none());
+    assert!(fdt.find_node("/a/c").is_none());
+    assert!(fdt.find_node("/x").is_none());
+    assert!(fdt.find_node("").is_none());
 }
 
 #[test]
@@ -246,7 +242,7 @@ fn memory() {
     assert_eq!(reg.len(), 1);
     assert_eq!(reg[0].address::<u32>().unwrap(), 0x8000_0000);
     assert_eq!(reg[0].size::<u32>().unwrap(), 0x2000_0000);
-    assert!(memory.hotpluggable().unwrap());
+    assert!(memory.hotpluggable());
     assert_eq!(
         memory
             .initial_mapped_area()
@@ -297,19 +293,31 @@ fn pretty_print() {
 #[test]
 #[cfg(feature = "write")]
 fn round_trip() {
-    for (dtb, _dts, name) in ALL_DT_FILES {
-        let fdt = Fdt::new(dtb).unwrap();
-        let ir = DeviceTree::from_fdt(&fdt).unwrap();
-        let new_dtb = ir.to_dtb();
-        assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
-    }
+    round_trip_impl(|dtb| Fdt::new(dtb).unwrap());
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_unchecked() {
+    round_trip_impl(|dtb| Fdt::new_unchecked(dtb));
 }
 
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_raw() {
+    round_trip_impl(|dtb| unsafe { Fdt::from_raw(dtb.as_ptr()).unwrap() });
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw_unchecked() {
+    round_trip_impl(|dtb| unsafe { Fdt::from_raw_unchecked(dtb.as_ptr()) });
+}
+
+#[cfg(feature = "write")]
+fn round_trip_impl(construct_fdt: impl Fn(&[u8]) -> Fdt) {
     for (dtb, _dts, name) in ALL_DT_FILES {
-        let fdt = unsafe { Fdt::from_raw(dtb.as_ptr()).unwrap() };
+        let fdt = construct_fdt(*dtb);
         let ir = DeviceTree::from_fdt(&fdt).unwrap();
         let new_dtb = ir.to_dtb();
         assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
