@@ -15,7 +15,7 @@ use core::ops::{BitOr, Shl};
 use zerocopy::{FromBytes, big_endian};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
-use crate::error::{FdtError, FdtErrorKind, FdtParseError};
+use crate::error::{PropertyError, StandardError};
 
 /// A property of a device tree node.
 #[derive(Debug, PartialEq)]
@@ -42,7 +42,7 @@ impl<'a> FdtProperty<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an [`FdtErrorKind::InvalidLength`] if the property's value is
+    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
     /// not 4 bytes long.
     ///
     /// # Examples
@@ -51,21 +51,21 @@ impl<'a> FdtProperty<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
-    /// let prop = node.property("u32-prop").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let prop = node.property("u32-prop").unwrap();
     /// assert_eq!(prop.as_u32().unwrap(), 0x12345678);
     /// ```
-    pub fn as_u32(&self) -> Result<u32, FdtParseError> {
+    pub fn as_u32(&self) -> Result<u32, PropertyError> {
         big_endian::U32::ref_from_bytes(self.value)
             .map(|val| val.get())
-            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, self.value_offset))
+            .map_err(|_e| PropertyError::InvalidLength)
     }
 
     /// Returns the value of this property as a `u64`.
     ///
     /// # Errors
     ///
-    /// Returns an [`FdtErrorKind::InvalidLength`] if the property's value is
+    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
     /// not 8 bytes long.
     ///
     /// # Examples
@@ -74,21 +74,21 @@ impl<'a> FdtProperty<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
-    /// let prop = node.property("u64-prop").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let prop = node.property("u64-prop").unwrap();
     /// assert_eq!(prop.as_u64().unwrap(), 0x1122334455667788);
     /// ```
-    pub fn as_u64(&self) -> Result<u64, FdtParseError> {
+    pub fn as_u64(&self) -> Result<u64, PropertyError> {
         big_endian::U64::ref_from_bytes(self.value)
             .map(|val| val.get())
-            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, self.value_offset))
+            .map_err(|_e| PropertyError::InvalidLength)
     }
 
     /// Returns the value of this property as a string.
     ///
     /// # Errors
     ///
-    /// Returns an [`FdtErrorKind::InvalidString`] if the property's value is
+    /// Returns an [`PropertyError::InvalidString`] if the property's value is
     /// not a null-terminated string or contains invalid UTF-8.
     ///
     /// # Examples
@@ -97,15 +97,14 @@ impl<'a> FdtProperty<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
-    /// let prop = node.property("str-prop").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let prop = node.property("str-prop").unwrap();
     /// assert_eq!(prop.as_str().unwrap(), "hello world");
     /// ```
-    pub fn as_str(&self) -> Result<&'a str, FdtParseError> {
-        let cstr = CStr::from_bytes_with_nul(self.value)
-            .map_err(|_| FdtParseError::new(FdtErrorKind::InvalidString, self.value_offset))?;
-        cstr.to_str()
-            .map_err(|_| FdtParseError::new(FdtErrorKind::InvalidString, self.value_offset))
+    pub fn as_str(&self) -> Result<&'a str, PropertyError> {
+        let cstr =
+            CStr::from_bytes_with_nul(self.value).map_err(|_| PropertyError::InvalidString)?;
+        cstr.to_str().map_err(|_| PropertyError::InvalidString)
     }
 
     /// Returns an iterator over the strings in this property.
@@ -116,8 +115,8 @@ impl<'a> FdtProperty<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
-    /// let prop = node.property("str-list-prop").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let prop = node.property("str-list-prop").unwrap();
     /// let mut str_list = prop.as_str_list();
     /// assert_eq!(str_list.next(), Some("first"));
     /// assert_eq!(str_list.next(), Some("second"));
@@ -131,11 +130,11 @@ impl<'a> FdtProperty<'a> {
     pub(crate) fn as_prop_encoded_array<const N: usize>(
         &self,
         fields_cells: [usize; N],
-    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, FdtError> {
+    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, StandardError> {
         let chunk_cells = fields_cells.iter().sum();
         let chunk_bytes = chunk_cells * size_of::<u32>();
         if !self.value.len().is_multiple_of(chunk_bytes) {
-            return Err(FdtError::PropEncodedArraySizeMismatch {
+            return Err(StandardError::PropEncodedArraySizeMismatch {
                 size: self.value.len(),
                 chunk: chunk_cells,
             });
@@ -215,87 +214,53 @@ impl Display for FdtProperty<'_> {
 pub(crate) enum FdtPropIter<'a> {
     Start { fdt: Fdt<'a>, offset: usize },
     Running { fdt: Fdt<'a>, offset: usize },
-    Error,
 }
 
 impl<'a> Iterator for FdtPropIter<'a> {
-    type Item = Result<FdtProperty<'a>, FdtParseError>;
+    type Item = FdtProperty<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Start { fdt, offset } => {
                 let mut offset = *offset;
                 offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
-                offset = match fdt.find_string_end(offset) {
-                    Ok(offset) => offset,
-                    Err(e) => {
-                        *self = Self::Error;
-                        return Some(Err(e));
-                    }
-                };
+                offset = fdt.find_string_end(offset).expect("Fdt should be valid");
                 offset = Fdt::align_tag_offset(offset);
                 *self = Self::Running { fdt: *fdt, offset };
                 self.next()
             }
-            Self::Running { fdt, offset } => match Self::try_next(*fdt, offset) {
-                Some(Ok(val)) => Some(Ok(val)),
-                Some(Err(e)) => {
-                    *self = Self::Error;
-                    Some(Err(e))
-                }
-                None => None,
-            },
-            Self::Error => None,
+            Self::Running { fdt, offset } => Self::next_prop(*fdt, offset),
         }
     }
 }
 
 impl<'a> FdtPropIter<'a> {
-    fn try_next(
-        fdt: Fdt<'a>,
-        offset: &mut usize,
-    ) -> Option<Result<FdtProperty<'a>, FdtParseError>> {
+    fn next_prop(fdt: Fdt<'a>, offset: &mut usize) -> Option<FdtProperty<'a>> {
         loop {
-            let token = match fdt.read_token(*offset) {
-                Ok(token) => token,
-                Err(e) => return Some(Err(e)),
-            };
+            let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
                 FdtToken::Prop => {
-                    let len = match big_endian::U32::ref_from_prefix(
-                        &fdt.data[*offset + FDT_TAGSIZE..],
-                    ) {
-                        Ok((val, _)) => val.get() as usize,
-                        Err(_) => {
-                            return Some(Err(FdtParseError::new(
-                                FdtErrorKind::InvalidLength,
-                                *offset,
-                            )));
-                        }
-                    };
-                    let nameoff = match big_endian::U32::ref_from_prefix(
-                        &fdt.data[*offset + 2 * FDT_TAGSIZE..],
-                    ) {
-                        Ok((val, _)) => val.get() as usize,
-                        Err(_) => {
-                            return Some(Err(FdtParseError::new(
-                                FdtErrorKind::InvalidLength,
-                                *offset,
-                            )));
-                        }
-                    };
+                    let len = big_endian::U32::ref_from_prefix(&fdt.data[*offset + FDT_TAGSIZE..])
+                        .expect("Fdt should be valid")
+                        .0
+                        .get() as usize;
+                    let nameoff =
+                        big_endian::U32::ref_from_prefix(&fdt.data[*offset + 2 * FDT_TAGSIZE..])
+                            .expect("Fdt should be valid")
+                            .0
+                            .get() as usize;
                     let prop_offset = *offset + 3 * FDT_TAGSIZE;
                     *offset = Fdt::align_tag_offset(prop_offset + len);
-                    let name = match fdt.string(nameoff) {
-                        Ok(name) => name,
-                        Err(e) => return Some(Err(e)),
-                    };
-                    let value = fdt.data.get(prop_offset..prop_offset + len)?;
-                    return Some(Ok(FdtProperty {
+                    let name = fdt.string(nameoff).expect("Fdt should be valid");
+                    let value = fdt
+                        .data
+                        .get(prop_offset..prop_offset + len)
+                        .expect("Fdt should be valid");
+                    return Some(FdtProperty {
                         name,
                         value,
                         value_offset: prop_offset,
-                    }));
+                    });
                 }
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
                 _ => return None,
@@ -337,9 +302,9 @@ impl Cells<'_> {
     /// in the given type.
     pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         if size_of::<T>() < self.0.len() * size_of::<u32>() {
-            Err(FdtError::TooManyCells {
+            Err(StandardError::TooManyCells {
                 cells: self.0.len(),
             })
         } else if let [size] = self.0 {

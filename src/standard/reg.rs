@@ -9,7 +9,7 @@
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
-use crate::error::FdtError;
+use crate::error::StandardError;
 use crate::fdt::Cells;
 
 /// The value of a `reg` property.
@@ -33,7 +33,7 @@ impl<'a> Reg<'a> {
     /// Returns `FdtError::TooManyCells` if the address doesn't fit in `T`.
     pub fn address<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         self.address.to_int()
     }
 
@@ -44,7 +44,7 @@ impl<'a> Reg<'a> {
     /// Returns `FdtError::TooManyCells` if the size doesn't fit in `T`.
     pub fn size<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
-    ) -> Result<T, FdtError> {
+    ) -> Result<T, StandardError> {
         self.size.to_int()
     }
 }
@@ -90,7 +90,7 @@ mod tests {
         };
         assert_eq!(
             reg.address::<u32>(),
-            Err(FdtError::TooManyCells { cells: 2 })
+            Err(StandardError::TooManyCells { cells: 2 })
         );
         assert_eq!(reg.address::<u64>(), Ok(0x1234_5678_abcd_0000));
         assert_eq!(reg.size::<u32>(), Ok(0x1122_3344));

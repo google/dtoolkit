@@ -261,10 +261,10 @@ impl<'a> TryFrom<FdtNode<'a>> for DeviceTreeNode {
     type Error = FdtParseError;
 
     fn try_from(node: FdtNode<'a>) -> Result<Self, Self::Error> {
-        let name = node.name()?.to_string();
+        let name = node.name().to_string();
         let properties = node
             .properties()
-            .map(|property| property?.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<DeviceTreeProperty>, _>>()?;
         let mut property_map =
             IndexMap::with_capacity_and_hasher(properties.len(), default_hash_state());
@@ -274,7 +274,7 @@ impl<'a> TryFrom<FdtNode<'a>> for DeviceTreeNode {
 
         let children_vec: Vec<DeviceTreeNode> = node
             .children()
-            .map(|child| child?.try_into())
+            .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
         let mut children =
             IndexMap::with_capacity_and_hasher(children_vec.len(), default_hash_state());
