@@ -27,7 +27,8 @@ use zerocopy::byteorder::big_endian;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub use self::node::FdtNode;
-pub use self::property::{Cells, FdtProperty};
+pub use self::property::FdtProperty;
+use crate::Node;
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
 
@@ -487,7 +488,9 @@ impl<'a> Fdt<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let root = fdt.root();
@@ -528,7 +531,9 @@ impl<'a> Fdt<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/a/b/c").unwrap();
@@ -536,7 +541,9 @@ impl<'a> Fdt<'a> {
     /// ```
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/child2").unwrap();

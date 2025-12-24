@@ -9,8 +9,8 @@
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
+use crate::Cells;
 use crate::error::StandardError;
-use crate::fdt::Cells;
 
 /// The value of a `reg` property.
 #[derive(Clone, Copy, Default, Eq, PartialEq)]

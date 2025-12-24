@@ -13,17 +13,19 @@
 //! device tree in memory. The [`DeviceTree`] can then be serialized to a
 //! flattened device tree blob.
 
+mod node;
+mod property;
+mod writer;
+
 use alloc::vec::Vec;
 use core::fmt::Display;
+
+pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
+pub use property::DeviceTreeProperty;
 
 use crate::error::FdtParseError;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
-mod node;
-mod property;
-mod writer;
-pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
-pub use property::DeviceTreeProperty;
 
 /// A mutable, in-memory representation of a device tree.
 ///
@@ -98,11 +100,13 @@ impl DeviceTree {
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::model::{DeviceTree, DeviceTreeNode};
+    /// use dtoolkit::Node;
+    /// use dtoolkit::model::{DeviceTree, DeviceTreeNode};
+    ///
     /// let mut tree = DeviceTree::new();
     /// tree.root.add_child(DeviceTreeNode::new("child"));
     /// let child = tree.find_node_mut("/child").unwrap();
-    /// assert_eq!(child.name(), "child");
+    /// assert_eq!((&*child).name(), "child");
     /// ```
     pub fn find_node_mut(&mut self, path: &str) -> Option<&mut DeviceTreeNode> {
         if !path.starts_with('/') {

@@ -8,14 +8,12 @@
 
 //! A read-only API for inspecting a device tree property.
 
-use core::ffi::CStr;
 use core::fmt::{self, Display, Formatter};
-use core::ops::{BitOr, Shl};
 
 use zerocopy::{FromBytes, big_endian};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
-use crate::error::{PropertyError, StandardError};
+use crate::Property;
 
 /// A property of a device tree node.
 #[derive(Debug, PartialEq)]
@@ -25,131 +23,17 @@ pub struct FdtProperty<'a> {
     value_offset: usize,
 }
 
-impl<'a> FdtProperty<'a> {
-    /// Returns the name of this property.
-    #[must_use]
-    pub fn name(&self) -> &'a str {
+impl<'a> Property<'a> for FdtProperty<'a> {
+    fn name(&self) -> &'a str {
         self.name
     }
 
-    /// Returns the value of this property.
-    #[must_use]
-    pub fn value(&self) -> &'a [u8] {
+    fn value(&self) -> &'a [u8] {
         self.value
     }
+}
 
-    /// Returns the value of this property as a `u32`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
-    /// not 4 bytes long.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("u32-prop").unwrap();
-    /// assert_eq!(prop.as_u32().unwrap(), 0x12345678);
-    /// ```
-    pub fn as_u32(&self) -> Result<u32, PropertyError> {
-        big_endian::U32::ref_from_bytes(self.value)
-            .map(|val| val.get())
-            .map_err(|_e| PropertyError::InvalidLength)
-    }
-
-    /// Returns the value of this property as a `u64`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
-    /// not 8 bytes long.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("u64-prop").unwrap();
-    /// assert_eq!(prop.as_u64().unwrap(), 0x1122334455667788);
-    /// ```
-    pub fn as_u64(&self) -> Result<u64, PropertyError> {
-        big_endian::U64::ref_from_bytes(self.value)
-            .map(|val| val.get())
-            .map_err(|_e| PropertyError::InvalidLength)
-    }
-
-    /// Returns the value of this property as a string.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`PropertyError::InvalidString`] if the property's value is
-    /// not a null-terminated string or contains invalid UTF-8.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("str-prop").unwrap();
-    /// assert_eq!(prop.as_str().unwrap(), "hello world");
-    /// ```
-    pub fn as_str(&self) -> Result<&'a str, PropertyError> {
-        let cstr =
-            CStr::from_bytes_with_nul(self.value).map_err(|_| PropertyError::InvalidString)?;
-        cstr.to_str().map_err(|_| PropertyError::InvalidString)
-    }
-
-    /// Returns an iterator over the strings in this property.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("str-list-prop").unwrap();
-    /// let mut str_list = prop.as_str_list();
-    /// assert_eq!(str_list.next(), Some("first"));
-    /// assert_eq!(str_list.next(), Some("second"));
-    /// assert_eq!(str_list.next(), Some("third"));
-    /// assert_eq!(str_list.next(), None);
-    /// ```
-    pub fn as_str_list(&self) -> impl Iterator<Item = &'a str> + use<'a> {
-        FdtStringListIterator { value: self.value }
-    }
-
-    pub(crate) fn as_prop_encoded_array<const N: usize>(
-        &self,
-        fields_cells: [usize; N],
-    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, StandardError> {
-        let chunk_cells = fields_cells.iter().sum();
-        let chunk_bytes = chunk_cells * size_of::<u32>();
-        if !self.value.len().is_multiple_of(chunk_bytes) {
-            return Err(StandardError::PropEncodedArraySizeMismatch {
-                size: self.value.len(),
-                chunk: chunk_cells,
-            });
-        }
-        Ok(self.value.chunks_exact(chunk_bytes).map(move |chunk| {
-            let mut cells = <[big_endian::U32]>::ref_from_bytes(chunk)
-                .expect("chunk should be a multiple of 4 bytes because of chunks_exact");
-            fields_cells.map(|field_cells| {
-                let field;
-                (field, cells) = cells.split_at(field_cells);
-                Cells(field)
-            })
-        }))
-    }
-
+impl FdtProperty<'_> {
     pub(crate) fn fmt(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
 
@@ -266,65 +150,5 @@ impl<'a> FdtPropIter<'a> {
                 _ => return None,
             }
         }
-    }
-}
-
-struct FdtStringListIterator<'a> {
-    value: &'a [u8],
-}
-
-impl<'a> Iterator for FdtStringListIterator<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.value.is_empty() {
-            return None;
-        }
-        let cstr = CStr::from_bytes_until_nul(self.value).ok()?;
-        let s = cstr.to_str().ok()?;
-        self.value = &self.value[s.len() + 1..];
-        Some(s)
-    }
-}
-
-/// An integer value split into several big-endian u32 parts.
-///
-/// This is generally used in prop-encoded-array properties.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
-
-impl Cells<'_> {
-    /// Converts the value to the given integer type.
-    ///
-    /// # Errors
-    ///
-    /// Returns `FdtError::TooManyCells` if the value has too many cells to fit
-    /// in the given type.
-    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
-        self,
-    ) -> Result<T, StandardError> {
-        if size_of::<T>() < self.0.len() * size_of::<u32>() {
-            Err(StandardError::TooManyCells {
-                cells: self.0.len(),
-            })
-        } else if let [size] = self.0 {
-            Ok(size.get().into())
-        } else {
-            let mut value = Default::default();
-            for cell in self.0 {
-                value = value << 32 | cell.get().into();
-            }
-            Ok(value)
-        }
-    }
-}
-
-impl Display for Cells<'_> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("0x")?;
-        for part in self.0 {
-            write!(f, "{part:08x}")?;
-        }
-        Ok(())
     }
 }

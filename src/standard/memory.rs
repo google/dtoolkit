@@ -10,7 +10,8 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::StandardError;
-use crate::fdt::{Cells, Fdt, FdtNode};
+use crate::fdt::{Fdt, FdtNode};
+use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
     /// Returns the `/memory` node.
@@ -22,7 +23,7 @@ impl<'a> Fdt<'a> {
     /// Returns a parse error if there was a problem reading the FDT structure
     /// to find the node, or `FdtError::MemoryMissing` if the memory node is
     /// missing.
-    pub fn memory(self) -> Result<Memory<'a>, StandardError> {
+    pub fn memory(self) -> Result<Memory<FdtNode<'a>>, StandardError> {
         let node = self
             .find_node("/memory")
             .ok_or(StandardError::MemoryMissing)?;
@@ -32,25 +33,25 @@ impl<'a> Fdt<'a> {
 
 /// Typed wrapper for a `/memory` node.
 #[derive(Clone, Copy, Debug)]
-pub struct Memory<'a> {
-    node: FdtNode<'a>,
+pub struct Memory<N> {
+    node: N,
 }
 
-impl<'a> Deref for Memory<'a> {
-    type Target = FdtNode<'a>;
+impl<N> Deref for Memory<N> {
+    type Target = N;
 
     fn deref(&self) -> &Self::Target {
         &self.node
     }
 }
 
-impl Display for Memory<'_> {
+impl<N: Display> Display for Memory<N> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.node.fmt(f)
     }
 }
 
-impl<'a> Memory<'a> {
+impl<'a, N: Node<'a>> Memory<N> {
     /// Returns the value of the standard `initial-mapped-area` property of the
     /// memory node.
     ///
@@ -60,7 +61,7 @@ impl<'a> Memory<'a> {
     /// size of the value isn't a multiple of 5 cells.
     pub fn initial_mapped_area(
         &self,
-    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a>>, StandardError> {
+    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a, N>>, StandardError> {
         if let Some(property) = self.node.property("initial-mapped-area") {
             Ok(Some(
                 property
