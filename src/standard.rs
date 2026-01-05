@@ -15,7 +15,7 @@ mod reg;
 mod status;
 
 pub use self::cpus::{Cpu, Cpus};
-pub use self::memory::{InitialMappedArea, Memory};
+pub use self::memory::{InitialMappedArea, Memory, ReservedMemory};
 pub use self::ranges::Range;
 pub use self::reg::Reg;
 pub use self::status::Status;
