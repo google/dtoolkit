@@ -8,12 +8,14 @@
 
 //! Standard nodes and properties.
 
+mod chosen;
 mod cpus;
 mod memory;
 mod ranges;
 mod reg;
 mod status;
 
+pub use self::chosen::Chosen;
 pub use self::cpus::{Cpu, Cpus};
 pub use self::memory::{InitialMappedArea, Memory, ReservedMemory};
 pub use self::ranges::Range;
