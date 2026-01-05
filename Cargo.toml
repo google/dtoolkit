@@ -25,7 +25,6 @@ zerocopy = { version = "0.8.28", features = ["derive"] }
 [lints.rust]
 deprecated-safe = "warn"
 keyword-idents = "warn"
-missing_copy_implementations = "warn"
 missing_debug_implementations = "warn"
 trivial_casts = "warn"
 trivial_numeric_casts = "warn"

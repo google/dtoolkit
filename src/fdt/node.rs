@@ -16,7 +16,7 @@ use crate::fdt::property::{FdtPropIter, FdtProperty};
 use crate::standard::AddressSpaceProperties;
 
 /// A node in a flattened device tree.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct FdtNode<'a> {
     pub(crate) fdt: Fdt<'a>,
     pub(crate) offset: usize,
@@ -95,7 +95,7 @@ impl<'a> Node<'a> for FdtNode<'a> {
     /// assert!(children.next().is_none());
     /// ```
     fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
-        FdtChildIter::Start { node: *self }
+        FdtChildIter::Start { node: self.clone() }
     }
 }
 

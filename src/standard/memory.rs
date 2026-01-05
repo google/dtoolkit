@@ -79,7 +79,7 @@ impl<'a, N: Node<'a>> Memory<N> {
 }
 
 /// The value of an `initial-mapped-area` property.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InitialMappedArea {
     /// The effective address.
     pub effective_address: u64,
