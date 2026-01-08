@@ -11,7 +11,6 @@
 use core::fmt::{self, Display, Formatter};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
-use crate::error::FdtParseError;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
 use crate::standard::AddressSpaceProperties;
 
@@ -36,13 +35,11 @@ impl<'a> FdtNode<'a> {
 
     /// Returns the name of this node.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an
-    /// [`FdtErrorKind::InvalidOffset`](crate::error::FdtErrorKind::InvalidOffset)
-    /// if the name offset is invalid or an
-    /// [`FdtErrorKind::InvalidString`](crate::error::FdtErrorKind::InvalidString) if the string at the offset is not null-terminated
-    /// or contains invalid UTF-8.
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
     ///
     /// # Examples
     ///
@@ -50,30 +47,32 @@ impl<'a> FdtNode<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root().unwrap();
-    /// let child = root.child("child1").unwrap().unwrap();
-    /// assert_eq!(child.name().unwrap(), "child1");
+    /// let root = fdt.root();
+    /// let child = root.child("child1").unwrap();
+    /// assert_eq!(child.name(), "child1");
     /// ```
-    pub fn name(&self) -> Result<&'a str, FdtParseError> {
+    #[must_use]
+    pub fn name(&self) -> &'a str {
         let name_offset = self.offset + FDT_TAGSIZE;
-        self.fdt.string_at_offset(name_offset, None)
+        self.fdt
+            .string_at_offset(name_offset, None)
+            .expect("Fdt should be valid")
     }
 
     /// Returns the name of this node without the unit address, if any.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an
-    /// [`FdtErrorKind::InvalidOffset`](crate::error::FdtErrorKind::InvalidOffset)
-    /// if the name offset is invalid or an
-    /// [`FdtErrorKind::InvalidString`](crate::error::FdtErrorKind::InvalidString) if the string at the offset is not null-terminated
-    /// or contains invalid UTF-8.
-    pub fn name_without_address(&self) -> Result<&'a str, FdtParseError> {
-        let name = self.name()?;
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    #[must_use]
+    pub fn name_without_address(&self) -> &'a str {
+        let name = self.name();
         if let Some((name, _)) = name.split_once('@') {
-            Ok(name)
+            name
         } else {
-            Ok(name)
+            name
         }
     }
 
@@ -89,22 +88,19 @@ impl<'a> FdtNode<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
-    /// let prop = node.property("u32-prop").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let prop = node.property("u32-prop").unwrap();
     /// assert_eq!(prop.name(), "u32-prop");
     /// ```
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if a property's name or value cannot be read.
-    pub fn property(&self, name: &str) -> Result<Option<FdtProperty<'a>>, FdtParseError> {
-        for property in self.properties() {
-            let property = property?;
-            if property.name() == name {
-                return Ok(Some(property));
-            }
-        }
-        Ok(None)
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    #[must_use]
+    pub fn property(&self, name: &str) -> Option<FdtProperty<'a>> {
+        self.properties().find(|property| property.name() == name)
     }
 
     /// Returns an iterator over the properties of this node.
@@ -115,15 +111,13 @@ impl<'a> FdtNode<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap().unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
     /// let mut props = node.properties();
-    /// assert_eq!(props.next().unwrap().unwrap().name(), "u32-prop");
-    /// assert_eq!(props.next().unwrap().unwrap().name(), "u64-prop");
-    /// assert_eq!(props.next().unwrap().unwrap().name(), "str-prop");
+    /// assert_eq!(props.next().unwrap().name(), "u32-prop");
+    /// assert_eq!(props.next().unwrap().name(), "u64-prop");
+    /// assert_eq!(props.next().unwrap().name(), "str-prop");
     /// ```
-    pub fn properties(
-        &self,
-    ) -> impl Iterator<Item = Result<FdtProperty<'a>, FdtParseError>> + use<'a> {
+    pub fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
             offset: self.offset,
@@ -150,9 +144,11 @@ impl<'a> FdtNode<'a> {
     /// on a [`DeviceTreeNode`](crate::model::DeviceTreeNode) is a
     /// constant-time operation.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns an error if a child node's name cannot be read.
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
     ///
     /// # Examples
     ///
@@ -160,34 +156,31 @@ impl<'a> FdtNode<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root().unwrap();
-    /// let child = root.child("child1").unwrap().unwrap();
-    /// assert_eq!(child.name().unwrap(), "child1");
+    /// let root = fdt.root();
+    /// let child = root.child("child1").unwrap();
+    /// assert_eq!(child.name(), "child1");
     /// ```
     ///
     /// ```
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root().unwrap();
-    /// let child = root.child("child2").unwrap().unwrap();
-    /// assert_eq!(child.name().unwrap(), "child2@42");
-    /// let child = root.child("child2@42").unwrap().unwrap();
-    /// assert_eq!(child.name().unwrap(), "child2@42");
+    /// let root = fdt.root();
+    /// let child = root.child("child2").unwrap();
+    /// assert_eq!(child.name(), "child2@42");
+    /// let child = root.child("child2@42").unwrap();
+    /// assert_eq!(child.name(), "child2@42");
     /// ```
-    pub fn child(&self, name: &str) -> Result<Option<FdtNode<'a>>, FdtParseError> {
+    #[must_use]
+    pub fn child(&self, name: &str) -> Option<FdtNode<'a>> {
         let include_address = name.contains('@');
-        for child in self.children() {
-            let child = child?;
-            if if include_address {
-                child.name()? == name
+        self.children().find(|&child| {
+            if include_address {
+                child.name() == name
             } else {
-                child.name_without_address()? == name
-            } {
-                return Ok(Some(child));
+                child.name_without_address() == name
             }
-        }
-        Ok(None)
+        })
     }
 
     /// Returns an iterator over the children of this node.
@@ -198,21 +191,18 @@ impl<'a> FdtNode<'a> {
     /// # use dtoolkit::fdt::Fdt;
     /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root().unwrap();
+    /// let root = fdt.root();
     /// let mut children = root.children();
-    /// assert_eq!(children.next().unwrap().unwrap().name().unwrap(), "child1");
-    /// assert_eq!(
-    ///     children.next().unwrap().unwrap().name().unwrap(),
-    ///     "child2@42"
-    /// );
+    /// assert_eq!(children.next().unwrap().name(), "child1");
+    /// assert_eq!(children.next().unwrap().name(), "child2@42");
     /// assert!(children.next().is_none());
     /// ```
-    pub fn children(&self) -> impl Iterator<Item = Result<FdtNode<'a>, FdtParseError>> + use<'a> {
+    pub fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
         FdtChildIter::Start { node: *self }
     }
 
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
-        let name = self.name().map_err(|_| fmt::Error)?;
+        let name = self.name();
         if name.is_empty() {
             writeln!(f, "{:indent$}/ {{", "", indent = indent)?;
         } else {
@@ -222,12 +212,7 @@ impl<'a> FdtNode<'a> {
         let mut has_properties = false;
         for prop in self.properties() {
             has_properties = true;
-            match prop {
-                Ok(prop) => prop.fmt(f, indent + 4)?,
-                Err(_e) => {
-                    writeln!(f, "<Error reading property>")?;
-                }
-            }
+            prop.fmt(f, indent + 4)?;
         }
 
         let mut first_child = true;
@@ -237,12 +222,7 @@ impl<'a> FdtNode<'a> {
             }
 
             first_child = false;
-            match child {
-                Ok(child) => child.fmt_recursive(f, indent + 4)?,
-                Err(_e) => {
-                    writeln!(f, "<Error reading child node>")?;
-                }
-            }
+            child.fmt_recursive(f, indent + 4)?;
         }
 
         writeln!(f, "{:indent$}}};", "", indent = indent)
@@ -265,28 +245,21 @@ enum FdtChildIter<'a> {
         offset: usize,
         address_space: AddressSpaceProperties,
     },
-    Error,
 }
 
 impl<'a> Iterator for FdtChildIter<'a> {
-    type Item = Result<FdtNode<'a>, FdtParseError>;
+    type Item = FdtNode<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Start { node } => {
-                let address_space = match node.address_space() {
-                    Ok(value) => value,
-                    Err(e) => return Some(Err(e)),
-                };
+                let address_space = node.address_space();
                 let mut offset = node.offset;
                 offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
-                offset = match node.fdt.find_string_end(offset) {
-                    Ok(offset) => offset,
-                    Err(e) => {
-                        *self = Self::Error;
-                        return Some(Err(e));
-                    }
-                };
+                offset = node
+                    .fdt
+                    .find_string_end(offset)
+                    .expect("Fdt should be valid");
                 offset = Fdt::align_tag_offset(offset);
                 *self = Self::Running {
                     fdt: node.fdt,
@@ -299,15 +272,7 @@ impl<'a> Iterator for FdtChildIter<'a> {
                 fdt,
                 offset,
                 address_space,
-            } => match Self::try_next(*fdt, offset, *address_space) {
-                Some(Ok(val)) => Some(Ok(val)),
-                Some(Err(e)) => {
-                    *self = Self::Error;
-                    Some(Err(e))
-                }
-                None => None,
-            },
-            Self::Error => None,
+            } => Self::try_next(*fdt, offset, *address_space),
         }
     }
 }
@@ -317,30 +282,25 @@ impl<'a> FdtChildIter<'a> {
         fdt: Fdt<'a>,
         offset: &mut usize,
         parent_address_space: AddressSpaceProperties,
-    ) -> Option<Result<FdtNode<'a>, FdtParseError>> {
+    ) -> Option<FdtNode<'a>> {
         loop {
-            let token = match fdt.read_token(*offset) {
-                Ok(token) => token,
-                Err(e) => return Some(Err(e)),
-            };
+            let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
                 FdtToken::BeginNode => {
                     let node_offset = *offset;
-                    *offset = match fdt.next_sibling_offset(*offset) {
-                        Ok(offset) => offset,
-                        Err(e) => return Some(Err(e)),
-                    };
-                    return Some(Ok(FdtNode {
+                    *offset = fdt
+                        .next_sibling_offset(*offset)
+                        .expect("Fdt should be valid");
+                    return Some(FdtNode {
                         fdt,
                         offset: node_offset,
                         parent_address_space,
-                    }));
+                    });
                 }
                 FdtToken::Prop => {
-                    *offset = match fdt.next_property_offset(*offset + FDT_TAGSIZE) {
-                        Ok(offset) => offset,
-                        Err(e) => return Some(Err(e)),
-                    };
+                    *offset = fdt
+                        .next_property_offset(*offset + FDT_TAGSIZE, false)
+                        .expect("Fdt should be valid");
                 }
                 FdtToken::EndNode | FdtToken::End => return None,
                 FdtToken::Nop => *offset += FDT_TAGSIZE,

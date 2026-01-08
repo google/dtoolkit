@@ -64,8 +64,8 @@
 //! let fdt = Fdt::new(&dtb).unwrap();
 //!
 //! // Find the child node and read its property.
-//! let child_node = fdt.find_node("/child").unwrap().unwrap();
-//! let prop = child_node.property("my-property").unwrap().unwrap();
+//! let child_node = fdt.find_node("/child").unwrap();
+//! let prop = child_node.property("my-property").unwrap();
 //! assert_eq!(prop.as_str().unwrap(), "hello");
 //!
 //! // Display the DTS

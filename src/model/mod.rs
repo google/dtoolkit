@@ -79,11 +79,11 @@ impl DeviceTree {
     ///
     /// Returns an error if the root node of the `Fdt` cannot be parsed.
     pub fn from_fdt(fdt: &Fdt<'_>) -> Result<Self, FdtParseError> {
-        let root = DeviceTreeNode::try_from(fdt.root()?)?;
-        let memory_reservations: Result<Vec<_>, _> = fdt.memory_reservations().collect();
+        let root = DeviceTreeNode::try_from(fdt.root())?;
+        let memory_reservations: Vec<_> = fdt.memory_reservations().collect();
         Ok(DeviceTree {
             root,
-            memory_reservations: memory_reservations?,
+            memory_reservations,
         })
     }
 

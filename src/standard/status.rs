@@ -9,7 +9,7 @@
 use core::fmt::{self, Display, Formatter};
 use core::str::FromStr;
 
-use crate::error::FdtError;
+use crate::error::StandardError;
 
 /// The value of a `status` property.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -47,7 +47,7 @@ impl Display for Status {
 }
 
 impl FromStr for Status {
-    type Err = FdtError;
+    type Err = StandardError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -56,7 +56,7 @@ impl FromStr for Status {
             "reserved" => Ok(Self::Reserved),
             "fail" => Ok(Self::Fail),
             "fail-sss" => Ok(Self::FailSss),
-            _ => Err(FdtError::InvalidStatus),
+            _ => Err(StandardError::InvalidStatus),
         }
     }
 }
