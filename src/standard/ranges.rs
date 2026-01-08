@@ -39,8 +39,8 @@ impl<'a> Range<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::TooManyCells`] if the child-bus-address doesn't fit in
-    /// `T`.
+    /// Returns [`StandardError::TooManyCells`] if the child-bus-address doesn't
+    /// fit in `T`.
     pub fn child_bus_address<
         T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>,
     >(
@@ -54,8 +54,8 @@ impl<'a> Range<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::TooManyCells`] if the parent-bus-address doesn't fit
-    /// in `T`.
+    /// Returns [`StandardError::TooManyCells`] if the parent-bus-address
+    /// doesn't fit in `T`.
     pub fn parent_bus_address<
         T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>,
     >(
@@ -68,7 +68,8 @@ impl<'a> Range<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::TooManyCells`] if the length doesn't fit in `T`.
+    /// Returns [`StandardError::TooManyCells`] if the length doesn't fit in
+    /// `T`.
     pub fn length<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         &self,
     ) -> Result<T, StandardError> {

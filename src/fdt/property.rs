@@ -298,8 +298,8 @@ impl Cells<'_> {
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::TooManyCells`] if the value has too many cells to fit
-    /// in the given type.
+    /// Returns [`StandardError::TooManyCells`] if the value has too many cells
+    /// to fit in the given type.
     pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {

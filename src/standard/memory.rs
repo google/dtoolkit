@@ -20,8 +20,8 @@ impl<'a> Fdt<'a> {
     /// # Errors
     ///
     /// Returns a parse error if there was a problem reading the FDT structure
-    /// to find the node, or [`StandardError::MemoryMissing`] if the memory node is
-    /// missing.
+    /// to find the node, or [`StandardError::MemoryMissing`] if the memory node
+    /// is missing.
     pub fn memory(self) -> Result<Memory<'a>, StandardError> {
         let node = self
             .find_node("/memory")

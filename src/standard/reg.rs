@@ -30,7 +30,8 @@ impl<'a> Reg<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::TooManyCells`] if the address doesn't fit in `T`.
+    /// Returns [`StandardError::TooManyCells`] if the address doesn't fit in
+    /// `T`.
     pub fn address<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {
