@@ -130,11 +130,11 @@ impl<'a> FdtProperty<'a> {
     pub(crate) fn as_prop_encoded_array<const N: usize>(
         &self,
         fields_cells: [usize; N],
-    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, StandardError> {
+    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N>, PropertyError> {
         let chunk_cells = fields_cells.iter().sum();
         let chunk_bytes = chunk_cells * size_of::<u32>();
         if !self.value.len().is_multiple_of(chunk_bytes) {
-            return Err(StandardError::PropEncodedArraySizeMismatch {
+            return Err(PropertyError::PropEncodedArraySizeMismatch {
                 size: self.value.len(),
                 chunk: chunk_cells,
             });
@@ -298,7 +298,7 @@ impl Cells<'_> {
     ///
     /// # Errors
     ///
-    /// Returns `FdtError::TooManyCells` if the value has too many cells to fit
+    /// Returns [`StandardError::TooManyCells`] if the value has too many cells to fit
     /// in the given type.
     pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,

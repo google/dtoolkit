@@ -20,7 +20,7 @@ impl<'a> Fdt<'a> {
     /// # Errors
     ///
     /// Returns a parse error if there was a problem reading the FDT structure
-    /// to find the node, or `FdtError::CpusMissing` if the CPUs node is
+    /// to find the node, or [`StandardError::CpusMissing`] if the CPUs node is
     /// missing.
     pub fn cpus(self) -> Result<Cpus<'a>, StandardError> {
         let node = self.find_node("/cpus").ok_or(StandardError::CpusMissing)?;

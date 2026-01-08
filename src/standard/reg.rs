@@ -30,7 +30,7 @@ impl<'a> Reg<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `FdtError::TooManyCells` if the address doesn't fit in `T`.
+    /// Returns [`StandardError::TooManyCells`] if the address doesn't fit in `T`.
     pub fn address<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {
@@ -41,7 +41,7 @@ impl<'a> Reg<'a> {
     ///
     /// # Errors
     ///
-    /// Returns `FdtError::TooManyCells` if the size doesn't fit in `T`.
+    /// Returns [`StandardError::TooManyCells`] if the size doesn't fit in `T`.
     pub fn size<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {

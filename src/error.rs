@@ -28,17 +28,6 @@ pub enum StandardError {
     /// The required `/memory` node wasn't found.
     #[error("/memory node missing")]
     MemoryMissing,
-    /// The size of a prop-encoded-array property wasn't a multiple of the
-    /// expected element size.
-    #[error(
-        "prop-encoded-array property was {size} bytes, but should have been a multiple of {chunk} cells"
-    )]
-    PropEncodedArraySizeMismatch {
-        /// The size in bytes of the prop-encoded-array property.
-        size: usize,
-        /// The number of 4 byte cells expected in each element of the array.
-        chunk: usize,
-    },
     /// Tried to convert part of a prop-encoded-array property to a type which
     /// was too small.
     #[error("prop-encoded-array field too big for chosen type ({cells} cells)")]
@@ -108,4 +97,15 @@ pub enum PropertyError {
     /// The property's value is not a valid string.
     #[error("property is not a valid string")]
     InvalidString,
+    /// The size of a prop-encoded-array property wasn't a multiple of the
+    /// expected element size.
+    #[error(
+        "prop-encoded-array property was {size} bytes, but should have been a multiple of {chunk} cells"
+    )]
+    PropEncodedArraySizeMismatch {
+        /// The size in bytes of the prop-encoded-array property.
+        size: usize,
+        /// The number of 4 byte cells expected in each element of the array.
+        chunk: usize,
+    },
 }
