@@ -95,7 +95,6 @@ use core::ops::{BitOr, Shl};
 use zerocopy::{FromBytes, big_endian};
 
 use crate::error::{PropertyError, StandardError};
-use crate::standard::{AddressSpaceProperties, DEFAULT_ADDRESS_CELLS, DEFAULT_SIZE_CELLS, Status};
 
 /// A device tree node.
 pub trait Node<'a>: Sized {
@@ -195,130 +194,6 @@ pub trait Node<'a>: Sized {
     /// assert!(children.next().is_none());
     /// ```
     fn children(&self) -> impl Iterator<Item = Self> + use<'a, Self>;
-
-    /// Returns the value of the standard `compatible` property.
-    #[must_use]
-    fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + use<'a, Self>> {
-        self.property("compatible")
-            .map(|property| property.as_str_list())
-    }
-
-    /// Returns whether this node has a `compatible` property containing the
-    /// given string.
-    #[must_use]
-    fn is_compatible(&self, compatible_filter: &str) -> bool {
-        if let Some(mut compatible) = self.compatible() {
-            compatible.any(|c| c == compatible_filter)
-        } else {
-            false
-        }
-    }
-
-    /// Finds all child nodes with a `compatible` property containing the given
-    /// string.
-    fn find_compatible<'f>(
-        &self,
-        compatible_filter: &'f str,
-    ) -> impl Iterator<Item = Self> + use<'a, 'f, Self> {
-        self.children()
-            .filter(move |child| child.is_compatible(compatible_filter))
-    }
-
-    /// Returns the value of the standard `model` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid UTF-8 string.
-    fn model(&self) -> Result<Option<&'a str>, PropertyError> {
-        if let Some(model) = self.property("model") {
-            Ok(Some(model.as_str()?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Returns the value of the standard `phandle` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid u32.
-    fn phandle(&self) -> Result<Option<u32>, PropertyError> {
-        if let Some(property) = self.property("phandle") {
-            Ok(Some(property.as_u32()?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Returns the value of the standard `status` property.
-    ///
-    /// If there is no `status` property then `okay` is assumed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid status.
-    fn status(&self) -> Result<Status, StandardError> {
-        if let Some(status) = self.property("status") {
-            Ok(status.as_str()?.parse()?)
-        } else {
-            Ok(Status::Okay)
-        }
-    }
-
-    /// Returns the value of the standard `#address-cells` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid u32.
-    fn address_cells(&self) -> Result<u32, PropertyError> {
-        if let Some(property) = self.property("#address-cells") {
-            Ok(property.as_u32()?)
-        } else {
-            Ok(DEFAULT_ADDRESS_CELLS)
-        }
-    }
-
-    /// Returns the value of the standard `#size-cells` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid u32.
-    fn size_cells(&self) -> Result<u32, PropertyError> {
-        if let Some(model) = self.property("#size-cells") {
-            Ok(model.as_u32()?)
-        } else {
-            Ok(DEFAULT_SIZE_CELLS)
-        }
-    }
-
-    /// Returns the values of the standard `#address-cells` and `#size_cells`
-    /// properties.
-    #[must_use]
-    fn address_space(&self) -> AddressSpaceProperties {
-        AddressSpaceProperties {
-            address_cells: self.address_cells().unwrap_or(DEFAULT_ADDRESS_CELLS),
-            size_cells: self.size_cells().unwrap_or(DEFAULT_SIZE_CELLS),
-        }
-    }
-
-    /// Returns the value of the standard `virtual-reg` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid u32.
-    fn virtual_reg(&self) -> Result<Option<u32>, PropertyError> {
-        if let Some(property) = self.property("virtual-reg") {
-            Ok(Some(property.as_u32()?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Returns whether the standard `dma-coherent` property is present.
-    #[must_use]
-    fn dma_coherent(&self) -> bool {
-        self.property("dma-coherent").is_some()
-    }
 }
 
 /// A property of a device tree node.
