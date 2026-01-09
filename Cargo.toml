@@ -12,6 +12,10 @@ categories = ["embedded", "encoding", "no-std::no-alloc", "parsing"]
 keywords = ["device-tree", "fdt", "dtb", "dts", "parser"]
 readme = "README.md"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 write = ["dep:indexmap", "dep:twox-hash"]
