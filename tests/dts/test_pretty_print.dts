@@ -26,4 +26,20 @@
         initial-mapped-area = <0x00 0x1234 0x00 0x4321 0x1000>;
         hotpluggable;
     };
+
+    reserved-memory {
+        #address-cells = <0x01>;
+        #size-cells = <0x01>;
+        ranges;
+
+        shared {
+            reusable;
+            size = <0x4000000>;
+            alignment = <0x2000>;
+        };
+
+        foo@78000000 {
+            reg = <0x78000000 0x800000>;
+        };
+    };
 };

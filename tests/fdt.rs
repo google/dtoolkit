@@ -258,6 +258,43 @@ fn memory() {
     );
 }
 
+#[test]
+fn reserved_memory() {
+    let dtb = include_bytes!("dtb/test_pretty_print.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    let reserved = fdt.reserved_memory().unwrap().collect::<Vec<_>>();
+
+    assert!(reserved[0].reg().unwrap().is_none());
+    assert_eq!(
+        reserved[0]
+            .size()
+            .unwrap()
+            .unwrap()
+            .to_int::<u32>()
+            .unwrap(),
+        0x400_0000
+    );
+    assert_eq!(
+        reserved[0]
+            .alignment()
+            .unwrap()
+            .unwrap()
+            .to_int::<u32>()
+            .unwrap(),
+        0x2000
+    );
+    assert!(reserved[0].reusable());
+
+    assert!(reserved[1].size().unwrap().is_none());
+    assert!(reserved[1].alignment().unwrap().is_none());
+    assert!(!reserved[1].reusable());
+    let reg = reserved[1].reg().unwrap().unwrap().collect::<Vec<_>>();
+    assert_eq!(reg.len(), 1);
+    assert_eq!(reg[0].address::<u32>().unwrap(), 0x7800_0000);
+    assert_eq!(reg[0].size::<u32>().unwrap(), 0x80_0000);
+}
+
 #[macro_export]
 macro_rules! load_dtb_dts_pair {
     ($name:expr) => {

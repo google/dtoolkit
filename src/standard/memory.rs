@@ -11,6 +11,7 @@ use core::ops::Deref;
 
 use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
+use crate::standard::Reg;
 use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
@@ -26,6 +27,16 @@ impl<'a> Fdt<'a> {
             .find_node("/memory")
             .ok_or(StandardError::MemoryMissing)?;
         Ok(Memory { node })
+    }
+
+    /// Returns the `/reserved-memory/*` nodes, if any.
+    #[must_use]
+    pub fn reserved_memory(self) -> Option<impl Iterator<Item = ReservedMemory<FdtNode<'a>>>> {
+        Some(
+            self.find_node("/reserved-memory")?
+                .children()
+                .map(|node| ReservedMemory { node }),
+        )
     }
 }
 
@@ -104,6 +115,95 @@ impl InitialMappedArea {
             effective_address: ea.to_int().unwrap(),
             physical_address: pa.to_int().unwrap(),
             size: size.to_int().unwrap(),
+        }
+    }
+}
+
+/// Typed wrapper for a `/reserved-memory/*` node.
+#[derive(Clone, Copy, Debug)]
+pub struct ReservedMemory<N> {
+    node: N,
+}
+
+impl<N> Deref for ReservedMemory<N> {
+    type Target = N;
+
+    fn deref(&self) -> &Self::Target {
+        &self.node
+    }
+}
+
+impl<N: Display> Display for ReservedMemory<N> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.node.fmt(f)
+    }
+}
+
+impl<'a, N: Node<'a>> ReservedMemory<N> {
+    /// Returns the value of the standard `size` property of the reserved memory
+    /// node, if it is present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value of the property isn't a multiple of 4
+    /// bytes long.
+    pub fn size(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+        self.node
+            .property("size")
+            .map(|value| value.as_cells())
+            .transpose()
+    }
+
+    /// Returns the value of the standard `alignment` property of the reserved
+    /// memory node, if it is present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value of the property isn't a multiple of 4
+    /// bytes long.
+    pub fn alignment(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+        self.node
+            .property("alignment")
+            .map(|value| value.as_cells())
+            .transpose()
+    }
+
+    /// Returns whether the standard `no-map` property is present.
+    pub fn no_map(&self) -> bool {
+        self.node.property("no-map").is_some()
+    }
+
+    /// Returns whether the standard `no-map-fixup` property is present.
+    pub fn no_map_fixup(&self) -> bool {
+        self.node.property("no-map-fixup").is_some()
+    }
+
+    /// Returns whether the standard `reusable` property is present.
+    pub fn reusable(&self) -> bool {
+        self.node.property("reusable").is_some()
+    }
+}
+
+impl<'a> ReservedMemory<FdtNode<'a>> {
+    /// Returns the value of the standard `alloc-ranges` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the size of the value isn't a multiple of the
+    /// expected number of address and size cells.
+    pub fn alloc_ranges(
+        &self,
+    ) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, StandardError> {
+        let address_cells = self.node.parent_address_space.address_cells as usize;
+        let size_cells = self.node.parent_address_space.size_cells as usize;
+        if let Some(property) = self.property("alloc_ranges") {
+            Ok(Some(
+                property
+                    .as_prop_encoded_array([address_cells, size_cells])?
+                    .map(Reg::from_cells),
+            ))
+        } else {
+            Ok(None)
         }
     }
 }

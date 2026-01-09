@@ -258,6 +258,19 @@ pub trait Property<'a>: Sized {
             .map_err(|_| PropertyError::InvalidLength)
     }
 
+    /// Returns the value of this property as a slide of 32-bit cells.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value of the property isn't a multiple of 4
+    /// bytes long.
+    fn as_cells(&self) -> Result<Cells<'a>, PropertyError> {
+        Ok(Cells(
+            <[big_endian::U32]>::ref_from_bytes(self.value())
+                .map_err(|_| PropertyError::InvalidLength)?,
+        ))
+    }
+
     /// Returns the value of this property as a string.
     ///
     /// # Errors

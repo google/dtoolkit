@@ -9,9 +9,9 @@
 use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
-use crate::error::StandardError;
+use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
-use crate::{Cells, Node};
+use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
     /// Returns the `/cpus` node.
@@ -79,6 +79,27 @@ impl<N> Deref for Cpu<N> {
 impl<N: Display> Display for Cpu<N> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.node.fmt(f)
+    }
+}
+
+impl<'a, N: Node<'a>> Cpu<N> {
+    /// Returns the value of the standard `enable-method` property if it is
+    /// present.
+    pub fn enable_method(&self) -> Option<impl Iterator<Item = &'a str>> {
+        Some(self.node.property("enable-method")?.as_str_list())
+    }
+
+    /// Returns the value of the standard `cpu-release-addr` property if it is
+    /// present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value of the property isn't 8 bytes long.
+    pub fn cpu_release_addr(&self) -> Result<Option<u64>, PropertyError> {
+        self.node
+            .property("cpu-release-addr")
+            .map(|value| value.as_u64())
+            .transpose()
     }
 }
 
