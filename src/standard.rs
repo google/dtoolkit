@@ -19,24 +19,26 @@ pub use self::memory::{InitialMappedArea, Memory};
 pub use self::ranges::Range;
 pub use self::reg::Reg;
 pub use self::status::Status;
-use crate::error::StandardError;
+use crate::error::{PropertyError, StandardError};
 use crate::fdt::FdtNode;
+use crate::{Node, Property};
 
 pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 
-impl<'a> FdtNode<'a> {
+/// Methods to access standard properties on FDT nodes.
+pub trait NodeStandard<'a>: Node<'a> {
     /// Returns the value of the standard `compatible` property.
     #[must_use]
-    pub fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + use<'a>> {
+    fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + use<'a, Self>> {
         self.property("compatible")
             .map(|property| property.as_str_list())
     }
 
-    /// Returns whether this node has a `compatible` properties containing the
+    /// Returns whether this node has a `compatible` property containing the
     /// given string.
     #[must_use]
-    pub fn is_compatible(&self, compatible_filter: &str) -> bool {
+    fn is_compatible(&self, compatible_filter: &str) -> bool {
         if let Some(mut compatible) = self.compatible() {
             compatible.any(|c| c == compatible_filter)
         } else {
@@ -46,10 +48,10 @@ impl<'a> FdtNode<'a> {
 
     /// Finds all child nodes with a `compatible` property containing the given
     /// string.
-    pub fn find_compatible<'f>(
+    fn find_compatible<'f>(
         &self,
         compatible_filter: &'f str,
-    ) -> impl Iterator<Item = FdtNode<'a>> + use<'a, 'f> {
+    ) -> impl Iterator<Item = Self> + use<'a, 'f, Self> {
         self.children()
             .filter(move |child| child.is_compatible(compatible_filter))
     }
@@ -59,7 +61,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid UTF-8 string.
-    pub fn model(&self) -> Result<Option<&'a str>, StandardError> {
+    fn model(&self) -> Result<Option<&'a str>, PropertyError> {
         if let Some(model) = self.property("model") {
             Ok(Some(model.as_str()?))
         } else {
@@ -72,7 +74,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    pub fn phandle(&self) -> Result<Option<u32>, StandardError> {
+    fn phandle(&self) -> Result<Option<u32>, PropertyError> {
         if let Some(property) = self.property("phandle") {
             Ok(Some(property.as_u32()?))
         } else {
@@ -87,7 +89,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid status.
-    pub fn status(&self) -> Result<Status, StandardError> {
+    fn status(&self) -> Result<Status, StandardError> {
         if let Some(status) = self.property("status") {
             Ok(status.as_str()?.parse()?)
         } else {
@@ -100,7 +102,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    pub fn address_cells(&self) -> Result<u32, StandardError> {
+    fn address_cells(&self) -> Result<u32, PropertyError> {
         if let Some(property) = self.property("#address-cells") {
             Ok(property.as_u32()?)
         } else {
@@ -113,7 +115,7 @@ impl<'a> FdtNode<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    pub fn size_cells(&self) -> Result<u32, StandardError> {
+    fn size_cells(&self) -> Result<u32, PropertyError> {
         if let Some(model) = self.property("#size-cells") {
             Ok(model.as_u32()?)
         } else {
@@ -124,20 +126,43 @@ impl<'a> FdtNode<'a> {
     /// Returns the values of the standard `#address-cells` and `#size_cells`
     /// properties.
     #[must_use]
-    pub fn address_space(&self) -> AddressSpaceProperties {
+    fn address_space(&self) -> AddressSpaceProperties {
         AddressSpaceProperties {
             address_cells: self.address_cells().unwrap_or(DEFAULT_ADDRESS_CELLS),
             size_cells: self.size_cells().unwrap_or(DEFAULT_SIZE_CELLS),
         }
     }
 
+    /// Returns the value of the standard `virtual-reg` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value isn't a valid u32.
+    fn virtual_reg(&self) -> Result<Option<u32>, PropertyError> {
+        if let Some(property) = self.property("virtual-reg") {
+            Ok(Some(property.as_u32()?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Returns whether the standard `dma-coherent` property is present.
+    #[must_use]
+    fn dma_coherent(&self) -> bool {
+        self.property("dma-coherent").is_some()
+    }
+}
+
+impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
+
+impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `reg` property.
     ///
     /// # Errors
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of address and size cells.
-    pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, StandardError> {
+    pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, PropertyError> {
         let address_cells = self.parent_address_space.address_cells as usize;
         let size_cells = self.parent_address_space.size_cells as usize;
         if let Some(property) = self.property("reg") {
@@ -151,19 +176,6 @@ impl<'a> FdtNode<'a> {
         }
     }
 
-    /// Returns the value of the standard `virtual-reg` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid u32.
-    pub fn virtual_reg(&self) -> Result<Option<u32>, StandardError> {
-        if let Some(property) = self.property("virtual-reg") {
-            Ok(Some(property.as_u32()?))
-        } else {
-            Ok(None)
-        }
-    }
-
     /// Returns the value of the standard `ranges` property.
     ///
     /// # Errors
@@ -172,7 +184,7 @@ impl<'a> FdtNode<'a> {
     /// expected number of cells.
     pub fn ranges(
         &self,
-    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, StandardError> {
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, PropertyError> {
         if let Some(property) = self.property("ranges") {
             Ok(Some(
                 property
@@ -196,7 +208,7 @@ impl<'a> FdtNode<'a> {
     /// expected number of cells.
     pub fn dma_ranges(
         &self,
-    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, StandardError> {
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, PropertyError> {
         if let Some(property) = self.property("dma-ranges") {
             Ok(Some(
                 property
@@ -210,12 +222,6 @@ impl<'a> FdtNode<'a> {
         } else {
             Ok(None)
         }
-    }
-
-    /// Returns whether the standard `dma-coherent` property is present.
-    #[must_use]
-    pub fn dma_coherent(&self) -> bool {
-        self.property("dma-coherent").is_some()
     }
 }
 
