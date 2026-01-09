@@ -103,9 +103,24 @@ pub trait Node<'a>: Sized {
     type Property: Property<'a>;
 
     /// Returns the name of this node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let root = fdt.root();
+    /// let child = root.child("child1").unwrap();
+    /// assert_eq!(child.name(), "child1");
+    /// ```
+    #[must_use]
     fn name(&self) -> &'a str;
 
     /// Returns the name of this node without the unit address, if any.
+    #[must_use]
     fn name_without_address(&self) -> &'a str {
         let name = self.name();
         if let Some((name, _)) = name.split_once('@') {
@@ -119,18 +134,27 @@ pub trait Node<'a>: Sized {
     ///
     /// # Performance
     ///
-    /// This method iterates through all properties of the node.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
+    /// This default implementation iterates through all properties of the node.
     fn property(&self, name: &str) -> Option<Self::Property> {
         self.properties().find(|property| property.name() == name)
     }
 
     /// Returns an iterator over the properties of this node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Property};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/test-props").unwrap();
+    /// let mut props = node.properties();
+    /// assert_eq!(props.next().unwrap().name(), "u32-prop");
+    /// assert_eq!(props.next().unwrap().name(), "u64-prop");
+    /// assert_eq!(props.next().unwrap().name(), "str-prop");
+    /// ```
     fn properties(&self) -> impl Iterator<Item = Self::Property> + use<'a, Self>;
 
     /// Returns a child node by its name.
@@ -155,6 +179,21 @@ pub trait Node<'a>: Sized {
     }
 
     /// Returns an iterator over the children of this node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let root = fdt.root();
+    /// let mut children = root.children();
+    /// assert_eq!(children.next().unwrap().name(), "child1");
+    /// assert_eq!(children.next().unwrap().name(), "child2@42");
+    /// assert!(children.next().is_none());
+    /// ```
     fn children(&self) -> impl Iterator<Item = Self> + use<'a, Self>;
 
     /// Returns the value of the standard `compatible` property.

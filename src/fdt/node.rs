@@ -35,19 +35,6 @@ impl<'a> Node<'a> for FdtNode<'a> {
     /// Panics if the [`Fdt`] structure was constructed using
     /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
     /// valid.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::Node;
-    /// use dtoolkit::fdt::Fdt;
-    ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root();
-    /// let child = root.child("child1").unwrap();
-    /// assert_eq!(child.name(), "child1");
-    /// ```
     fn name(&self) -> &'a str {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt
@@ -55,22 +42,6 @@ impl<'a> Node<'a> for FdtNode<'a> {
             .expect("Fdt should be valid")
     }
 
-    /// Returns an iterator over the properties of this node.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let mut props = node.properties();
-    /// assert_eq!(props.next().unwrap().name(), "u32-prop");
-    /// assert_eq!(props.next().unwrap().name(), "u64-prop");
-    /// assert_eq!(props.next().unwrap().name(), "str-prop");
-    /// ```
     fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
@@ -78,22 +49,6 @@ impl<'a> Node<'a> for FdtNode<'a> {
         }
     }
 
-    /// Returns an iterator over the children of this node.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::Node;
-    /// use dtoolkit::fdt::Fdt;
-    ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root();
-    /// let mut children = root.children();
-    /// assert_eq!(children.next().unwrap().name(), "child1");
-    /// assert_eq!(children.next().unwrap().name(), "child2@42");
-    /// assert!(children.next().is_none());
-    /// ```
     fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
         FdtChildIter::Start { node: *self }
     }
