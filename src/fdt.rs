@@ -173,7 +173,7 @@ impl<'a> Fdt<'a> {
     ///
     /// ```
     /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// ```
     pub fn new(data: &'a [u8]) -> Result<Self, FdtParseError> {
@@ -243,7 +243,7 @@ impl<'a> Fdt<'a> {
     ///
     /// ```
     /// # use dtoolkit::fdt::Fdt;
-    /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let ptr = dtb.as_ptr();
     /// let fdt = unsafe { Fdt::from_raw(ptr).unwrap() };
     /// ```
@@ -491,7 +491,7 @@ impl<'a> Fdt<'a> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
     ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let root = fdt.root();
     /// assert_eq!(root.name(), "");
@@ -534,7 +534,7 @@ impl<'a> Fdt<'a> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
     ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/a/b/c").unwrap();
     /// assert_eq!(node.name(), "c");
@@ -544,7 +544,7 @@ impl<'a> Fdt<'a> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
     ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_children.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/child2").unwrap();
     /// assert_eq!(node.name(), "child2@42");
