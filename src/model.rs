@@ -72,7 +72,7 @@ impl DeviceTree {
     ///
     /// ```
     /// # use dtoolkit::{fdt::Fdt, model::DeviceTree};
-    /// # let dtb = include_bytes!("../../tests/dtb/test.dtb");
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let tree = DeviceTree::from_fdt(&fdt).unwrap();
     /// ```
