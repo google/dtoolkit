@@ -23,7 +23,6 @@ use core::fmt::Display;
 pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
 pub use property::DeviceTreeProperty;
 
-use crate::error::FdtParseError;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 
@@ -74,19 +73,20 @@ impl DeviceTree {
     /// # use dtoolkit::{fdt::Fdt, model::DeviceTree};
     /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
-    /// let tree = DeviceTree::from_fdt(&fdt).unwrap();
+    /// let tree = DeviceTree::from_fdt(&fdt);
     /// ```
     ///
     /// # Errors
     ///
     /// Returns an error if the root node of the `Fdt` cannot be parsed.
-    pub fn from_fdt(fdt: &Fdt<'_>) -> Result<Self, FdtParseError> {
-        let root = DeviceTreeNode::try_from(fdt.root())?;
+    #[must_use]
+    pub fn from_fdt(fdt: &Fdt<'_>) -> Self {
+        let root = DeviceTreeNode::from(fdt.root());
         let memory_reservations: Vec<_> = fdt.memory_reservations().collect();
-        Ok(DeviceTree {
+        DeviceTree {
             root,
             memory_reservations,
-        })
+        }
     }
 
     /// Finds a node by its path and returns a mutable reference to it.
