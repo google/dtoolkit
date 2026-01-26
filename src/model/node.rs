@@ -8,14 +8,11 @@
 
 use alloc::borrow::ToOwned;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use indexmap::IndexMap;
 use twox_hash::xxhash64;
 
 use super::property::DeviceTreeProperty;
-use crate::error::FdtParseError;
-use crate::fdt::FdtNode;
 use crate::{Node, Property};
 
 /// A mutable, in-memory representation of a device tree node.
@@ -278,36 +275,26 @@ impl DeviceTreeNode {
     }
 }
 
-impl<'a> TryFrom<FdtNode<'a>> for DeviceTreeNode {
-    type Error = FdtParseError;
-
-    fn try_from(node: FdtNode<'a>) -> Result<Self, Self::Error> {
+impl<'a, T: Node<'a>> From<T> for DeviceTreeNode {
+    fn from(node: T) -> Self {
         let name = node.name().to_string();
-        let properties = node
-            .properties()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<DeviceTreeProperty>, _>>()?;
-        let mut property_map =
-            IndexMap::with_capacity_and_hasher(properties.len(), default_hash_state());
-        for property in properties {
-            property_map.insert((&property).name().to_owned(), property);
-        }
+        let mut properties = IndexMap::with_hasher(default_hash_state());
+        properties.extend(
+            node.properties()
+                .map(|prop| (prop.name().to_owned(), prop.into())),
+        );
 
-        let children_vec: Vec<DeviceTreeNode> = node
-            .children()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut children =
-            IndexMap::with_capacity_and_hasher(children_vec.len(), default_hash_state());
-        for child in children_vec {
-            children.insert(child.name.clone(), child);
-        }
+        let mut children = IndexMap::with_hasher(default_hash_state());
+        children.extend(
+            node.children()
+                .map(|child| (child.name().to_owned(), child.into())),
+        );
 
-        Ok(DeviceTreeNode {
+        Self {
             name,
-            properties: property_map,
+            properties,
             children,
-        })
+        }
     }
 }
 

@@ -11,8 +11,6 @@ use alloc::vec::Vec;
 use core::str;
 
 use crate::Property;
-use crate::error::FdtParseError;
-use crate::fdt::FdtProperty;
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,12 +67,10 @@ impl DeviceTreeProperty {
     }
 }
 
-impl<'a> TryFrom<FdtProperty<'a>> for DeviceTreeProperty {
-    type Error = FdtParseError;
-
-    fn try_from(prop: FdtProperty<'a>) -> Result<Self, Self::Error> {
+impl<'a, T: Property<'a>> From<T> for DeviceTreeProperty {
+    fn from(prop: T) -> Self {
         let name = prop.name().to_string();
         let value = prop.value().to_vec();
-        Ok(DeviceTreeProperty { name, value })
+        DeviceTreeProperty { name, value }
     }
 }

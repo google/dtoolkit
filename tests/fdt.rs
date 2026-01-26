@@ -356,7 +356,7 @@ fn round_trip_raw_unchecked() {
 fn round_trip_impl(construct_fdt: impl Fn(&[u8]) -> Fdt) {
     for (dtb, _dts, name) in ALL_DT_FILES {
         let fdt = construct_fdt(*dtb);
-        let ir = DeviceTree::from_fdt(&fdt).unwrap();
+        let ir = DeviceTree::from_fdt(&fdt);
         let new_dtb = ir.to_dtb();
         assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
     }
