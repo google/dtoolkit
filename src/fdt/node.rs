@@ -25,8 +25,27 @@ pub struct FdtNode<'a> {
     pub(crate) parent_address_space: AddressSpaceProperties,
 }
 
-impl<'a> Node<'a> for FdtNode<'a> {
-    type Property = FdtProperty<'a>;
+impl<'a> Node for FdtNode<'a> {
+    type Property<'b>
+        = FdtProperty<'a>
+    where
+        Self: 'b;
+    type Name<'b>
+        = &'a str
+    where
+        Self: 'b;
+    type Child<'b>
+        = FdtNode<'a>
+    where
+        Self: 'b;
+    type Properties<'b>
+        = FdtPropIter<'a>
+    where
+        Self: 'b;
+    type Children<'b>
+        = FdtChildIter<'a>
+    where
+        Self: 'b;
 
     /// Returns the name of this node.
     ///
@@ -42,15 +61,24 @@ impl<'a> Node<'a> for FdtNode<'a> {
             .expect("Fdt should be valid")
     }
 
-    fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
+    fn name_without_address(&self) -> &'a str {
+        let name = self.name();
+        if let Some((name, _)) = name.split_once('@') {
+            name
+        } else {
+            name
+        }
+    }
+
+    fn properties(&self) -> FdtPropIter<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
             offset: self.offset,
         }
     }
 
-    fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
-        FdtChildIter::Start { node: *self }
+    fn children(&self) -> FdtChildIter<'a> {
+        FdtChildIter(FdtChildIterInner::Start { node: *self })
     }
 }
 
@@ -98,7 +126,19 @@ impl Display for FdtNode<'_> {
 }
 
 /// An iterator over the children of a device tree node.
-enum FdtChildIter<'a> {
+#[derive(Debug, Clone)]
+pub struct FdtChildIter<'a>(FdtChildIterInner<'a>);
+
+impl<'a> Iterator for FdtChildIter<'a> {
+    type Item = FdtNode<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum FdtChildIterInner<'a> {
     Start {
         node: FdtNode<'a>,
     },
@@ -109,7 +149,7 @@ enum FdtChildIter<'a> {
     },
 }
 
-impl<'a> Iterator for FdtChildIter<'a> {
+impl<'a> Iterator for FdtChildIterInner<'a> {
     type Item = FdtNode<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -139,7 +179,7 @@ impl<'a> Iterator for FdtChildIter<'a> {
     }
 }
 
-impl<'a> FdtChildIter<'a> {
+impl<'a> FdtChildIterInner<'a> {
     fn try_next(
         fdt: Fdt<'a>,
         offset: &mut usize,

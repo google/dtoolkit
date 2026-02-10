@@ -81,7 +81,7 @@ impl DeviceTree {
     /// Returns an error if the root node of the `Fdt` cannot be parsed.
     #[must_use]
     pub fn from_fdt(fdt: &Fdt<'_>) -> Self {
-        let root = DeviceTreeNode::from(fdt.root());
+        let root = DeviceTreeNode::from_node(&fdt.root());
         let memory_reservations: Vec<_> = fdt.memory_reservations().collect();
         DeviceTree {
             root,

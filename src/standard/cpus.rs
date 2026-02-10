@@ -49,11 +49,11 @@ impl<N: Display> Display for Cpus<N> {
     }
 }
 
-impl<'a, N: Node<'a>> Cpus<N> {
+impl<N: Node> Cpus<N> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
+    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N::Child<'_>>> + '_ {
         self.node.children().filter_map(|child| {
-            if child.name_without_address() == "cpu" {
+            if child.name_without_address().as_ref() == "cpu" {
                 Some(Cpu { node: child })
             } else {
                 None
@@ -82,10 +82,10 @@ impl<N: Display> Display for Cpu<N> {
     }
 }
 
-impl<'a, N: Node<'a>> Cpu<N> {
+impl<N: Node> Cpu<N> {
     /// Returns the value of the standard `enable-method` property if it is
     /// present.
-    pub fn enable_method(&self) -> Option<impl Iterator<Item = &'a str>> {
+    pub fn enable_method(&self) -> Option<<<N as Node>::Property<'_> as Property>::StrList> {
         Some(self.node.property("enable-method")?.as_str_list())
     }
 
@@ -112,7 +112,7 @@ impl<'a> Cpu<FdtNode<'a>> {
     /// Returns an error if a property's name or value cannot be read, or the
     /// `reg` property is missing, or the size of the value isn't a multiple of
     /// the expected number of address and size cells.
-    pub fn ids(&self) -> Result<impl Iterator<Item = Cells<'a>> + use<'a>, StandardError> {
+    pub fn ids(self) -> Result<impl Iterator<Item = Cells<'a>> + 'a, StandardError> {
         Ok(self
             .node
             .reg()?

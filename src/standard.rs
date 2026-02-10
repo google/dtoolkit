@@ -29,10 +29,12 @@ pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 
 /// Methods to access standard properties on FDT nodes.
-pub trait NodeStandard<'a>: Node<'a> {
+pub trait NodeStandard: Node {
     /// Returns the value of the standard `compatible` property.
     #[must_use]
-    fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + use<'a, Self>> {
+    fn compatible(
+        &self,
+    ) -> Option<impl Iterator<Item = <Self::Property<'_> as Property>::Str> + '_> {
         self.property("compatible")
             .map(|property| property.as_str_list())
     }
@@ -41,19 +43,18 @@ pub trait NodeStandard<'a>: Node<'a> {
     /// given string.
     #[must_use]
     fn is_compatible(&self, compatible_filter: &str) -> bool {
-        if let Some(mut compatible) = self.compatible() {
-            compatible.any(|c| c == compatible_filter)
-        } else {
-            false
+        if let Some(prop) = self.property("compatible") {
+            return prop.as_str_list().any(|c| c.as_ref() == compatible_filter);
         }
+        false
     }
 
     /// Finds all child nodes with a `compatible` property containing the given
     /// string.
     fn find_compatible<'f>(
-        &self,
+        &'f self,
         compatible_filter: &'f str,
-    ) -> impl Iterator<Item = Self> + use<'a, 'f, Self> {
+    ) -> impl Iterator<Item = Self::Child<'f>> + 'f {
         self.children()
             .filter(move |child| child.is_compatible(compatible_filter))
     }
@@ -63,7 +64,7 @@ pub trait NodeStandard<'a>: Node<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid UTF-8 string.
-    fn model(&self) -> Result<Option<&'a str>, PropertyError> {
+    fn model(&self) -> Result<Option<<Self::Property<'_> as Property>::Str>, PropertyError> {
         if let Some(model) = self.property("model") {
             Ok(Some(model.as_str()?))
         } else {
@@ -93,7 +94,7 @@ pub trait NodeStandard<'a>: Node<'a> {
     /// Returns an error if the value isn't a valid status.
     fn status(&self) -> Result<Status, StandardError> {
         if let Some(status) = self.property("status") {
-            Ok(status.as_str()?.parse()?)
+            Ok(status.as_str()?.as_ref().parse()?)
         } else {
             Ok(Status::Okay)
         }
@@ -155,7 +156,7 @@ pub trait NodeStandard<'a>: Node<'a> {
     }
 }
 
-impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
+impl<T: Node> NodeStandard for T {}
 
 impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `reg` property.
@@ -164,7 +165,7 @@ impl<'a> FdtNode<'a> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of address and size cells.
-    pub fn reg(&self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, PropertyError> {
+    pub fn reg(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + 'a>, PropertyError> {
         let address_cells = self.parent_address_space.address_cells as usize;
         let size_cells = self.parent_address_space.size_cells as usize;
         if let Some(property) = self.property("reg") {
@@ -184,9 +185,7 @@ impl<'a> FdtNode<'a> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of cells.
-    pub fn ranges(
-        &self,
-    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, PropertyError> {
+    pub fn ranges(self) -> Result<Option<impl Iterator<Item = Range<'a>> + 'a>, PropertyError> {
         if let Some(property) = self.property("ranges") {
             Ok(Some(
                 property
@@ -208,9 +207,7 @@ impl<'a> FdtNode<'a> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of cells.
-    pub fn dma_ranges(
-        &self,
-    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a>>, PropertyError> {
+    pub fn dma_ranges(self) -> Result<Option<impl Iterator<Item = Range<'a>> + 'a>, PropertyError> {
         if let Some(property) = self.property("dma-ranges") {
             Ok(Some(
                 property

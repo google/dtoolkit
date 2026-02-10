@@ -8,28 +8,59 @@
 
 //! A read-only API for inspecting a device tree property.
 
+use core::ffi::CStr;
 use core::fmt::{self, Display, Formatter};
 
 use zerocopy::{FromBytes, big_endian};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::Property;
+use crate::error::PropertyError;
 
 /// A property of a device tree node.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FdtProperty<'a> {
     name: &'a str,
     value: &'a [u8],
     value_offset: usize,
 }
 
-impl<'a> Property<'a> for FdtProperty<'a> {
+impl<'a> Property for FdtProperty<'a> {
+    type Str = &'a str;
+    type StrList = crate::values::FdtStringListIterator<'a>;
+    type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
+    type CellsItem = crate::Cells<'a>;
+
     fn name(&self) -> &'a str {
         self.name
     }
 
     fn value(&self) -> &'a [u8] {
         self.value
+    }
+
+    fn as_cells(&self) -> Result<crate::Cells<'a>, PropertyError> {
+        Ok(crate::Cells(
+            <[big_endian::U32]>::ref_from_bytes(self.value)
+                .map_err(|_| PropertyError::InvalidLength)?,
+        ))
+    }
+
+    fn as_str(&self) -> Result<&'a str, PropertyError> {
+        let cstr =
+            CStr::from_bytes_with_nul(self.value).map_err(|_| PropertyError::InvalidString)?;
+        cstr.to_str().map_err(|_| PropertyError::InvalidString)
+    }
+
+    fn as_str_list(&self) -> crate::values::FdtStringListIterator<'a> {
+        crate::values::FdtStringListIterator { value: self.value }
+    }
+
+    fn as_prop_encoded_array<const N: usize>(
+        &self,
+        fields_cells: [usize; N],
+    ) -> Result<crate::values::PropEncodedArrayIterator<'a, N>, PropertyError> {
+        crate::values::PropEncodedArrayIterator::new(self.value, fields_cells)
     }
 }
 
@@ -48,7 +79,7 @@ impl FdtProperty<'_> {
             .all(|&ch| ch.is_ascii_graphic() || ch == b' ' || ch == 0);
         let has_empty = self.value.windows(2).any(|window| window == [0, 0]);
         if is_printable && self.value.ends_with(&[0]) && !has_empty {
-            let mut strings = self.as_str_list();
+            let mut strings = (*self).as_str_list();
             if let Some(first) = strings.next() {
                 write!(f, " = \"{first}\"")?;
                 for s in strings {
@@ -95,7 +126,8 @@ impl Display for FdtProperty<'_> {
 }
 
 /// An iterator over the properties of a device tree node.
-pub(crate) enum FdtPropIter<'a> {
+#[derive(Debug, Clone)]
+pub enum FdtPropIter<'a> {
     Start { fdt: Fdt<'a>, offset: usize },
     Running { fdt: Fdt<'a>, offset: usize },
 }
