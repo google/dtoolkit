@@ -139,10 +139,7 @@ impl<'a> FdtPropIter<'a> {
                         .data
                         .get(prop_offset..prop_offset + len)
                         .expect("Fdt should be valid");
-                    return Some(FdtProperty {
-                        name,
-                        value,
-                    });
+                    return Some(FdtProperty { name, value });
                 }
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
                 _ => return None,
