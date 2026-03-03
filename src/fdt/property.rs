@@ -20,7 +20,6 @@ use crate::Property;
 pub struct FdtProperty<'a> {
     name: &'a str,
     value: &'a [u8],
-    value_offset: usize,
 }
 
 impl<'a> Property<'a> for FdtProperty<'a> {
@@ -143,7 +142,6 @@ impl<'a> FdtPropIter<'a> {
                     return Some(FdtProperty {
                         name,
                         value,
-                        value_offset: prop_offset,
                     });
                 }
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
