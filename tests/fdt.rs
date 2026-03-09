@@ -8,6 +8,8 @@
 
 use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
+use dtoolkit::fdt_mut::FdtMut;
+#[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status};
 use dtoolkit::{Node, Property, ToCellInt};
@@ -352,10 +354,35 @@ fn round_trip_raw_unchecked() {
     round_trip_impl(|dtb| unsafe { Fdt::from_raw_unchecked(dtb.as_ptr()) });
 }
 
+#[test]
 #[cfg(feature = "write")]
-fn round_trip_impl(construct_fdt: impl Fn(&[u8]) -> Fdt) {
+fn round_trip_mut() {
+    round_trip_impl(|dtb| FdtMut::new(dtb).unwrap().into());
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_unchecked_mut() {
+    round_trip_impl(|dtb| FdtMut::new_unchecked(dtb).into());
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw_mut() {
+    round_trip_impl(|dtb| unsafe { FdtMut::from_raw(dtb.as_mut_ptr()).unwrap().into() });
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw_unchecked_mut() {
+    round_trip_impl(|dtb| unsafe { FdtMut::from_raw_unchecked(dtb.as_mut_ptr()).into() });
+}
+
+#[cfg(feature = "write")]
+fn round_trip_impl(construct_fdt: impl Fn(&mut [u8]) -> Fdt) {
     for (dtb, _dts, name) in ALL_DT_FILES {
-        let fdt = construct_fdt(*dtb);
+        let mut dtb = dtb.to_vec();
+        let fdt = construct_fdt(&mut *dtb);
         let ir = DeviceTree::from_fdt(&fdt);
         let new_dtb = ir.to_dtb();
         assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
