@@ -135,4 +135,8 @@ pub enum ModelError {
 /// An error that can occur when mutating a device tree.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
-pub enum FdtMutError {}
+pub enum FdtMutError {
+    /// Shifting data is required, but not supported.
+    #[error("shifting data is required, but not supported")]
+    ShiftingRequired,
+}

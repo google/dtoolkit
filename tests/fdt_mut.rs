@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use dtoolkit::error::FdtMutError;
 use dtoolkit::fdt::Fdt;
 use dtoolkit::fdt_mut::FdtMut;
 use dtoolkit::{Node, Property};
@@ -30,4 +31,51 @@ fn modify_property_in_place() {
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
     assert_eq!(prop.as_str().unwrap(), "hello there");
+}
+
+#[test]
+fn modify_property_shrink_and_grow() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::new(&mut data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+    let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
+
+    let orig_val = b"hello world\0";
+    assert_eq!((&prop_mut).value(), orig_val);
+
+    // Shrink the value
+    let short_val = b"hi\0";
+    prop_mut.set_value(short_val).unwrap();
+    assert_eq!((&prop_mut).value(), short_val);
+
+    // Check it correctly parses back
+    let fdt = Fdt::new(&data).unwrap();
+    let node = fdt.find_node("/test-props").unwrap();
+    let prop = node.property("str-prop").unwrap();
+    assert_eq!(prop.as_str().unwrap(), "hi");
+
+    // Now grow it back, since the space is now NOPs
+    let mut fdt_mut = FdtMut::new(&mut data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+    let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
+
+    let medium_val = b"hello\0";
+    prop_mut.set_value(medium_val).unwrap();
+    assert_eq!((&prop_mut).value(), medium_val);
+
+    let fdt = Fdt::new(&data).unwrap();
+    let node = fdt.find_node("/test-props").unwrap();
+    let prop = node.property("str-prop").unwrap();
+    assert_eq!(prop.as_str().unwrap(), "hello");
+
+    // Growing beyond the original space should fail because there are no NOPs
+    let mut fdt_mut = FdtMut::new(&mut data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+    let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
+
+    let long_val = b"this is too long\0";
+    let err = prop_mut.set_value(long_val).unwrap_err();
+    assert_eq!(err, FdtMutError::ShiftingRequired);
 }
