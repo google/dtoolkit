@@ -43,7 +43,7 @@ impl<'a> Node for FdtNode<'a> {
     where
         Self: 'b;
     type Children<'b>
-        = FdtChildIter<'a>
+        = private::FdtChildIter<'a>
     where
         Self: 'b;
 
@@ -62,12 +62,7 @@ impl<'a> Node for FdtNode<'a> {
     }
 
     fn name_without_address(&self) -> &'a str {
-        let name = self.name();
-        if let Some((name, _)) = name.split_once('@') {
-            name
-        } else {
-            name
-        }
+        crate::util::name_without_address(self.name())
     }
 
     fn properties(&self) -> FdtPropIter<'a> {
@@ -77,8 +72,8 @@ impl<'a> Node for FdtNode<'a> {
         }
     }
 
-    fn children(&self) -> FdtChildIter<'a> {
-        FdtChildIter(FdtChildIterInner::Start { node: *self })
+    fn children(&self) -> private::FdtChildIter<'a> {
+        private::FdtChildIter::Start { node: *self }
     }
 }
 
@@ -125,87 +120,80 @@ impl Display for FdtNode<'_> {
     }
 }
 
-/// An iterator over the children of a device tree node.
-#[derive(Debug, Clone)]
-pub struct FdtChildIter<'a>(FdtChildIterInner<'a>);
+mod private {
+    use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtToken};
+    use crate::standard::{AddressSpaceProperties, NodeStandard};
 
-impl<'a> Iterator for FdtChildIter<'a> {
-    type Item = FdtNode<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+    #[derive(Debug, Clone)]
+    pub enum FdtChildIter<'a> {
+        Start {
+            node: FdtNode<'a>,
+        },
+        Running {
+            fdt: Fdt<'a>,
+            offset: usize,
+            address_space: AddressSpaceProperties,
+        },
     }
-}
 
-#[derive(Debug, Clone)]
-enum FdtChildIterInner<'a> {
-    Start {
-        node: FdtNode<'a>,
-    },
-    Running {
-        fdt: Fdt<'a>,
-        offset: usize,
-        address_space: AddressSpaceProperties,
-    },
-}
+    impl<'a> Iterator for FdtChildIter<'a> {
+        type Item = FdtNode<'a>;
 
-impl<'a> Iterator for FdtChildIterInner<'a> {
-    type Item = FdtNode<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Start { node } => {
-                let address_space = node.address_space();
-                let mut offset = node.offset;
-                offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
-                offset = node
-                    .fdt
-                    .find_string_end(offset)
-                    .expect("Fdt should be valid");
-                offset = Fdt::align_tag_offset(offset);
-                *self = Self::Running {
-                    fdt: node.fdt,
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Start { node } => {
+                    let address_space = node.address_space();
+                    let mut offset = node.offset;
+                    offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
+                    offset = node
+                        .fdt
+                        .find_string_end(offset)
+                        .expect("Fdt should be valid");
+                    offset = Fdt::align_tag_offset(offset);
+                    *self = Self::Running {
+                        fdt: node.fdt,
+                        offset,
+                        address_space,
+                    };
+                    self.next()
+                }
+                Self::Running {
+                    fdt,
                     offset,
                     address_space,
-                };
-                self.next()
+                } => Self::try_next(*fdt, offset, *address_space),
             }
-            Self::Running {
-                fdt,
-                offset,
-                address_space,
-            } => Self::try_next(*fdt, offset, *address_space),
         }
     }
-}
 
-impl<'a> FdtChildIterInner<'a> {
-    fn try_next(
-        fdt: Fdt<'a>,
-        offset: &mut usize,
-        parent_address_space: AddressSpaceProperties,
-    ) -> Option<FdtNode<'a>> {
-        loop {
-            let token = fdt.read_token(*offset).expect("Fdt should be valid");
-            match token {
-                FdtToken::BeginNode => {
-                    let node_offset = *offset;
-                    *offset = fdt
-                        .next_sibling_offset(*offset)
-                        .expect("Fdt should be valid");
-                    return Some(FdtNode {
-                        fdt,
-                        offset: node_offset,
-                        parent_address_space,
-                    });
+    impl<'a> FdtChildIter<'a> {
+        fn try_next(
+            fdt: Fdt<'a>,
+            offset: &mut usize,
+            parent_address_space: AddressSpaceProperties,
+        ) -> Option<FdtNode<'a>> {
+            loop {
+                let token = fdt.read_token(*offset).expect("Fdt should be valid");
+                match token {
+                    FdtToken::BeginNode => {
+                        let node_offset = *offset;
+                        *offset = fdt
+                            .next_sibling_offset(*offset)
+                            .expect("Fdt should be valid");
+                        return Some(FdtNode {
+                            fdt,
+                            offset: node_offset,
+                            parent_address_space,
+                        });
+                    }
+                    FdtToken::Prop => {
+                        *offset = fdt
+                            .next_property_offset(*offset + FDT_TAGSIZE, false)
+                            .expect("Fdt should be valid");
+                    }
+                    FdtToken::EndNode | FdtToken::End => return None,
+                    FdtToken::Nop => *offset += FDT_TAGSIZE,
                 }
-                FdtToken::Prop => {
-                    *offset = fdt
-                        .next_property_offset(*offset + FDT_TAGSIZE, false)
-                        .expect("Fdt should be valid");
-                }
-                FdtToken::EndNode | FdtToken::End => return None,
-                FdtToken::Nop => *offset += FDT_TAGSIZE,
             }
         }
     }

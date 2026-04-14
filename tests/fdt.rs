@@ -10,7 +10,7 @@ use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status};
-use dtoolkit::{Node, Property};
+use dtoolkit::{Node, Property, ToCellInt};
 
 #[test]
 fn read_child_nodes() {
@@ -263,11 +263,7 @@ fn reserved_memory() {
     let dtb = include_bytes!("dtb/test_pretty_print.dtb");
     let fdt = Fdt::new(dtb).unwrap();
 
-    let reserved = fdt
-        .reserved_memory()
-        .unwrap()
-        .reserved_memory()
-        .collect::<Vec<_>>();
+    let reserved = fdt.reserved_memory().collect::<Vec<_>>();
 
     assert!(reserved[0].reg().unwrap().is_none());
     assert_eq!(

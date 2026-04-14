@@ -29,11 +29,11 @@ impl<'a> Fdt<'a> {
         Ok(Memory { node })
     }
 
-    /// Returns the `/reserved-memory/*` nodes, if any.
-    #[must_use]
-    pub fn reserved_memory(&self) -> Option<ReservedMemoryNode<FdtNode<'a>>> {
+    /// Returns an iterator over the `/reserved-memory/*` nodes.
+    pub fn reserved_memory(&self) -> impl Iterator<Item = ReservedMemory<FdtNode<'a>>> + '_ {
         self.find_node("/reserved-memory")
-            .map(ReservedMemoryNode::new)
+            .into_iter()
+            .flat_map(|node| node.children().map(ReservedMemory::new))
     }
 }
 
@@ -113,38 +113,6 @@ impl InitialMappedArea {
             physical_address: pa.to_int().unwrap(),
             size: size.to_int().unwrap(),
         }
-    }
-}
-
-/// Typed wrapper for a `/reserved-memory` node.
-#[derive(Clone, Copy, Debug)]
-pub struct ReservedMemoryNode<N> {
-    node: N,
-}
-
-impl<N> Deref for ReservedMemoryNode<N> {
-    type Target = N;
-
-    fn deref(&self) -> &Self::Target {
-        &self.node
-    }
-}
-
-impl<N: Display> Display for ReservedMemoryNode<N> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        self.node.fmt(f)
-    }
-}
-
-impl<N: Node> ReservedMemoryNode<N> {
-    #[must_use]
-    fn new(node: N) -> Self {
-        Self { node }
-    }
-
-    /// Returns an iterator over the `/reserved-memory/*` nodes.
-    pub fn reserved_memory(&self) -> impl Iterator<Item = ReservedMemory<N::Child<'_>>> + '_ {
-        self.node.children().map(ReservedMemory::new)
     }
 }
 

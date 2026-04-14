@@ -88,6 +88,7 @@ pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;
 pub mod standard;
+mod util;
 mod values;
 
 use core::fmt::{self, Display, Formatter};
@@ -96,6 +97,36 @@ use core::ops::{BitOr, Shl};
 use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! impl_property_methods {
+    (get_value = |$self:ident| $get_value:expr) => {
+        fn as_cells(&$self) -> Result<$crate::Cells<'a>, $crate::error::PropertyError> {
+            Ok($crate::Cells(
+                <[zerocopy::big_endian::U32]>::ref_from_bytes($get_value)
+                    .map_err(|_| $crate::error::PropertyError::InvalidLength)?,
+            ))
+        }
+
+        fn as_str(&$self) -> Result<&'a str, $crate::error::PropertyError> {
+            let cstr =
+                core::ffi::CStr::from_bytes_with_nul($get_value).map_err(|_| $crate::error::PropertyError::InvalidString)?;
+            cstr.to_str().map_err(|_| $crate::error::PropertyError::InvalidString)
+        }
+
+        fn as_str_list(&$self) -> $crate::values::FdtStringListIterator<'a> {
+            $crate::values::FdtStringListIterator { value: $get_value }
+        }
+
+        fn as_prop_encoded_array<const N: usize>(
+            &$self,
+            fields_cells: [usize; N],
+        ) -> Result<$crate::values::PropEncodedArrayIterator<'a, N>, $crate::error::PropertyError> {
+            $crate::values::PropEncodedArrayIterator::new($get_value, fields_cells)
+        }
+    };
+}
 
 /// A device tree node.
 pub trait Node: Sized {
@@ -388,20 +419,6 @@ impl ToCellInt for Cells<'_> {
             }
             Ok(value)
         }
-    }
-}
-
-impl Cells<'_> {
-    /// Converts the value to the given integer type.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StandardError::TooManyCells`] if the value has too many cells
-    /// to fit in the given type.
-    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
-        self,
-    ) -> Result<T, StandardError> {
-        ToCellInt::to_int(self)
     }
 }
 

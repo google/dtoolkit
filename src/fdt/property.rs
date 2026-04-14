@@ -8,14 +8,12 @@
 
 //! A read-only API for inspecting a device tree property.
 
-use core::ffi::CStr;
 use core::fmt::{self, Display, Formatter};
 
 use zerocopy::{FromBytes, big_endian};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken};
 use crate::Property;
-use crate::error::PropertyError;
 
 /// A property of a device tree node.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -39,29 +37,7 @@ impl<'a> Property for FdtProperty<'a> {
         self.value
     }
 
-    fn as_cells(&self) -> Result<crate::Cells<'a>, PropertyError> {
-        Ok(crate::Cells(
-            <[big_endian::U32]>::ref_from_bytes(self.value)
-                .map_err(|_| PropertyError::InvalidLength)?,
-        ))
-    }
-
-    fn as_str(&self) -> Result<&'a str, PropertyError> {
-        let cstr =
-            CStr::from_bytes_with_nul(self.value).map_err(|_| PropertyError::InvalidString)?;
-        cstr.to_str().map_err(|_| PropertyError::InvalidString)
-    }
-
-    fn as_str_list(&self) -> crate::values::FdtStringListIterator<'a> {
-        crate::values::FdtStringListIterator { value: self.value }
-    }
-
-    fn as_prop_encoded_array<const N: usize>(
-        &self,
-        fields_cells: [usize; N],
-    ) -> Result<crate::values::PropEncodedArrayIterator<'a, N>, PropertyError> {
-        crate::values::PropEncodedArrayIterator::new(self.value, fields_cells)
-    }
+    crate::impl_property_methods!(get_value = |self| self.value);
 }
 
 impl FdtProperty<'_> {

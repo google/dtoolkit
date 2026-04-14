@@ -8,13 +8,12 @@
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::ffi::CStr;
 use core::str;
 
-use zerocopy::{FromBytes, big_endian};
+use zerocopy::FromBytes;
 
-use crate::Property;
-use crate::error::PropertyError;
+use crate::values::{FdtStringListIterator, PropEncodedArrayIterator};
+use crate::{Cells, Property};
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,9 +24,9 @@ pub struct DeviceTreeProperty {
 
 impl<'a> Property for &'a DeviceTreeProperty {
     type Str = &'a str;
-    type StrList = crate::values::FdtStringListIterator<'a>;
-    type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
-    type CellsItem = crate::Cells<'a>;
+    type StrList = FdtStringListIterator<'a>;
+    type PropEncodedArray<const N: usize> = PropEncodedArrayIterator<'a, N>;
+    type CellsItem = Cells<'a>;
 
     fn name(&self) -> &'a str {
         &self.name
@@ -37,29 +36,7 @@ impl<'a> Property for &'a DeviceTreeProperty {
         &self.value
     }
 
-    fn as_cells(&self) -> Result<crate::Cells<'a>, PropertyError> {
-        Ok(crate::Cells(
-            <[big_endian::U32]>::ref_from_bytes(&self.value)
-                .map_err(|_| PropertyError::InvalidLength)?,
-        ))
-    }
-
-    fn as_str(&self) -> Result<&'a str, PropertyError> {
-        let cstr =
-            CStr::from_bytes_with_nul(&self.value).map_err(|_| PropertyError::InvalidString)?;
-        cstr.to_str().map_err(|_| PropertyError::InvalidString)
-    }
-
-    fn as_str_list(&self) -> crate::values::FdtStringListIterator<'a> {
-        crate::values::FdtStringListIterator { value: &self.value }
-    }
-
-    fn as_prop_encoded_array<const N: usize>(
-        &self,
-        fields_cells: [usize; N],
-    ) -> Result<crate::values::PropEncodedArrayIterator<'a, N>, PropertyError> {
-        crate::values::PropEncodedArrayIterator::new(&self.value, fields_cells)
-    }
+    crate::impl_property_methods!(get_value = |self| self.value.as_slice());
 }
 
 impl DeviceTreeProperty {

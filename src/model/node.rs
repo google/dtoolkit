@@ -133,11 +133,7 @@ impl<'a> Node for &'a DeviceTreeNode {
     }
 
     fn name_without_address(&self) -> &'a str {
-        if let Some((name, _)) = self.name.split_once('@') {
-            name
-        } else {
-            &self.name
-        }
+        crate::util::name_without_address(self.name())
     }
 
     /// Finds a property by its name and returns a reference to it.
