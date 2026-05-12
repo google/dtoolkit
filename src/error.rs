@@ -8,6 +8,9 @@
 
 //! Error types for the `dtoolkit` crate.
 
+#[cfg(feature = "write")]
+use alloc::string::String;
+
 use thiserror::Error;
 
 /// An error that can occur when accessing a standard node or property.
@@ -78,6 +81,12 @@ pub enum FdtErrorKind {
     /// An invalid string was encountered.
     #[error("Invalid string in FDT")]
     InvalidString,
+    /// A node name is invalid.
+    #[error("Invalid node name")]
+    InvalidNodeName,
+    /// A property name is invalid.
+    #[error("Invalid property name")]
+    InvalidPropertyName,
     /// Memory reservation block has not been terminated with a null entry.
     #[error("Memory reservation block was not terminated with a null entry")]
     MemReserveNotTerminated,
@@ -108,4 +117,17 @@ pub enum PropertyError {
         /// The number of 4 byte cells expected in each element of the array.
         chunk: usize,
     },
+}
+
+#[cfg(feature = "write")]
+/// An error that can occur when building or modifying a device tree model.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum ModelError {
+    /// The node name is invalid.
+    #[error("Invalid node name: '{0}'")]
+    InvalidNodeName(String),
+    /// The property name is invalid.
+    #[error("Invalid property name: '{0}'")]
+    InvalidPropertyName(String),
 }

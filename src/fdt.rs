@@ -345,9 +345,22 @@ impl<'a> Fdt<'a> {
                 FdtToken::BeginNode => {
                     depth += 1;
                     offset += FDT_TAGSIZE;
+                    let end_offset = self.find_string_end(offset)?;
                     // Validate name
-                    offset = self.find_string_end(offset)?;
-                    offset = Self::align_tag_offset(offset);
+                    if check_strings {
+                        let name = self.string_at_offset(offset, Some(end_offset))?;
+                        if depth == 1 {
+                            if !name.is_empty() {
+                                return Err(FdtParseError::new(
+                                    FdtErrorKind::InvalidNodeName,
+                                    offset,
+                                ));
+                            }
+                        } else if name.is_empty() || !crate::validate::is_valid_node_name(name) {
+                            return Err(FdtParseError::new(FdtErrorKind::InvalidNodeName, offset));
+                        }
+                    }
+                    offset = Self::align_tag_offset(end_offset);
                 }
                 FdtToken::EndNode => {
                     if depth == 0 {
@@ -640,7 +653,13 @@ impl<'a> Fdt<'a> {
             as usize;
 
         if check_name {
-            self.string(nameoff)?;
+            let name = self.string(nameoff)?;
+            if !crate::validate::is_valid_property_name(name) {
+                return Err(FdtParseError::new(
+                    FdtErrorKind::InvalidPropertyName,
+                    offset + FDT_TAGSIZE,
+                ));
+            }
         }
 
         let prop_offset = offset + 2 * FDT_TAGSIZE;

@@ -32,18 +32,39 @@ impl<'a> Property<'a> for &'a DeviceTreeProperty {
 impl DeviceTreeProperty {
     /// Creates a new `DeviceTreeProperty` with the given name and value.
     ///
+    /// # Errors
+    ///
+    /// Returns a [`ModelError`](crate::error::ModelError) if the property name
+    /// is invalid.
+    ///
     /// # Examples
     ///
     /// ```
     /// use dtoolkit::Property;
     /// use dtoolkit::model::DeviceTreeProperty;
     ///
-    /// let prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]);
+    /// let prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap();
     /// assert_eq!((&prop).name(), "my-prop");
     /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
     /// ```
+    pub fn new(
+        name: impl Into<String>,
+        value: impl Into<Vec<u8>>,
+    ) -> Result<Self, crate::error::ModelError> {
+        let name = name.into();
+        if !crate::validate::is_valid_property_name(&name) {
+            return Err(crate::error::ModelError::InvalidPropertyName(name));
+        }
+        Ok(Self {
+            name,
+            value: value.into(),
+        })
+    }
+
+    /// Creates a new `DeviceTreeProperty` with the given name and value without
+    /// validation.
     #[must_use]
-    pub fn new(name: impl Into<String>, value: impl Into<Vec<u8>>) -> Self {
+    pub fn new_unchecked(name: impl Into<String>, value: impl Into<Vec<u8>>) -> Self {
         Self {
             name: name.into(),
             value: value.into(),
@@ -58,7 +79,7 @@ impl DeviceTreeProperty {
     /// use dtoolkit::Property;
     /// use dtoolkit::model::DeviceTreeProperty;
     ///
-    /// let mut prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]);
+    /// let mut prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap();
     /// prop.set_value(vec![5, 6, 7, 8]);
     /// assert_eq!((&prop).value(), &[5, 6, 7, 8]);
     /// ```
