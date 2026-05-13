@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use core::str;
 
 use crate::Property;
+use crate::error::ModelError;
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,8 +35,8 @@ impl DeviceTreeProperty {
     ///
     /// # Errors
     ///
-    /// Returns a [`ModelError`](crate::error::ModelError) if the property name
-    /// is invalid.
+    /// Returns a [`ModelError::InvalidPropertyName`] if the property name is
+    /// invalid.
     ///
     /// # Examples
     ///
@@ -47,13 +48,10 @@ impl DeviceTreeProperty {
     /// assert_eq!((&prop).name(), "my-prop");
     /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
     /// ```
-    pub fn new(
-        name: impl Into<String>,
-        value: impl Into<Vec<u8>>,
-    ) -> Result<Self, crate::error::ModelError> {
+    pub fn new(name: impl Into<String>, value: impl Into<Vec<u8>>) -> Result<Self, ModelError> {
         let name = name.into();
         if !crate::validate::is_valid_property_name(&name) {
-            return Err(crate::error::ModelError::InvalidPropertyName(name));
+            return Err(ModelError::InvalidPropertyName(name));
         }
         Ok(Self {
             name,

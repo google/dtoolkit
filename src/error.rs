@@ -119,10 +119,10 @@ pub enum PropertyError {
     },
 }
 
-#[cfg(feature = "write")]
 /// An error that can occur when building or modifying a device tree model.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
+#[cfg(feature = "write")]
 pub enum ModelError {
     /// The node name is invalid.
     #[error("Invalid node name: '{0}'")]

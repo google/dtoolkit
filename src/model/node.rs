@@ -13,6 +13,7 @@ use indexmap::IndexMap;
 use twox_hash::xxhash64;
 
 use super::property::DeviceTreeProperty;
+use crate::error::ModelError;
 use crate::{Node, Property};
 
 /// A mutable, in-memory representation of a device tree node.
@@ -107,8 +108,7 @@ impl DeviceTreeNode {
     ///
     /// # Errors
     ///
-    /// Returns a [`ModelError`](crate::error::ModelError) if the node name is
-    /// invalid.
+    /// Returns a [`ModelError::InvalidNodeName`] if the node name is invalid.
     ///
     /// # Examples
     ///
@@ -119,10 +119,10 @@ impl DeviceTreeNode {
     /// let node = DeviceTreeNode::new("my-node").unwrap();
     /// assert_eq!((&node).name(), "my-node");
     /// ```
-    pub fn new(name: impl Into<String>) -> Result<Self, crate::error::ModelError> {
+    pub fn new(name: impl Into<String>) -> Result<Self, ModelError> {
         let name = name.into();
         if !crate::validate::is_valid_node_name(&name) {
-            return Err(crate::error::ModelError::InvalidNodeName(name));
+            return Err(ModelError::InvalidNodeName(name));
         }
         Ok(Self::new_unchecked(name))
     }
@@ -140,11 +140,8 @@ impl DeviceTreeNode {
     ///
     /// # Errors
     ///
-    /// Returns a [`ModelError`](crate::error::ModelError) if the node name is
-    /// invalid.
-    pub fn builder(
-        name: impl Into<String>,
-    ) -> Result<DeviceTreeNodeBuilder, crate::error::ModelError> {
+    /// Returns a [`ModelError::InvalidNodeName`] if the node name is invalid.
+    pub fn builder(name: impl Into<String>) -> Result<DeviceTreeNodeBuilder, ModelError> {
         DeviceTreeNodeBuilder::new(name)
     }
 
@@ -325,7 +322,7 @@ pub struct DeviceTreeNodeBuilder {
 }
 
 impl DeviceTreeNodeBuilder {
-    fn new(name: impl Into<String>) -> Result<Self, crate::error::ModelError> {
+    fn new(name: impl Into<String>) -> Result<Self, ModelError> {
         Ok(Self {
             node: DeviceTreeNode::new(name)?,
         })

@@ -8,12 +8,12 @@
 
 //! Validation functions for Device Tree node and property names.
 
-fn is_valid_node_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == ',' || c == '.' || c == '_' || c == '+' || c == '-'
+const fn is_valid_node_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '+' | '-')
 }
 
-fn is_valid_property_char(c: char) -> bool {
-    is_valid_node_char(c) || c == '?' || c == '#'
+const fn is_valid_property_char(c: char) -> bool {
+    is_valid_node_char(c) || matches!(c, '?' | '#')
 }
 
 /// Validates a node name according to the Devicetree Specification.

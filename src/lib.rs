@@ -88,7 +88,7 @@ pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;
 pub mod standard;
-pub(crate) mod validate;
+mod validate;
 
 use core::ffi::CStr;
 use core::fmt::{self, Display, Formatter};
