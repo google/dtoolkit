@@ -10,10 +10,10 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use super::{FDT_TAGSIZE, Fdt, FdtToken};
+use super::{FDT_TAGSIZE, Fdt};
 use crate::Node;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
-use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::standard::AddressSpaceProperties;
 
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
