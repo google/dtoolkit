@@ -90,8 +90,8 @@ pub mod memreserve;
 pub mod model;
 pub mod standard;
 mod util;
-mod values;
 mod validate;
+mod values;
 
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};
