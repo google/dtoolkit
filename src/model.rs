@@ -36,7 +36,7 @@ use crate::memreserve::MemoryReservation;
 /// ```
 /// # use dtoolkit::model::{DeviceTree, DeviceTreeNode};
 /// let mut tree = DeviceTree::new();
-/// tree.root.add_child(DeviceTreeNode::new("child"));
+/// tree.root.add_child(DeviceTreeNode::new("child").unwrap());
 /// let child = tree.find_node_mut("/child").unwrap();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl DeviceTree {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            root: DeviceTreeNode::new("/"),
+            root: DeviceTreeNode::new_unchecked(""),
             memory_reservations: Vec::new(),
         }
     }
@@ -104,7 +104,7 @@ impl DeviceTree {
     /// use dtoolkit::model::{DeviceTree, DeviceTreeNode};
     ///
     /// let mut tree = DeviceTree::new();
-    /// tree.root.add_child(DeviceTreeNode::new("child"));
+    /// tree.root.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = tree.find_node_mut("/child").unwrap();
     /// assert_eq!((&*child).name(), "child");
     /// ```
