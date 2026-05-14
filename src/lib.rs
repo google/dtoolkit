@@ -54,7 +54,8 @@
 //!
 //! // Add a child node to the root.
 //! let child = DeviceTreeNode::builder("child")
-//!     .property(DeviceTreeProperty::new("my-property", "hello\0"))
+//!     .unwrap()
+//!     .property(DeviceTreeProperty::new("my-property", "hello\0").unwrap())
 //!     .build();
 //! tree.root.add_child(child);
 //!
@@ -90,6 +91,7 @@ pub mod model;
 pub mod standard;
 mod util;
 mod values;
+mod validate;
 
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};

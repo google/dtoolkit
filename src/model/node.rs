@@ -13,6 +13,7 @@ use indexmap::IndexMap;
 use twox_hash::xxhash64;
 
 use super::property::DeviceTreeProperty;
+use crate::error::ModelError;
 use crate::{Node, Property};
 
 /// A mutable, in-memory representation of a device tree node.
@@ -85,9 +86,9 @@ impl Node for DeviceTreeNode {
     /// use dtoolkit::Node;
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_child(DeviceTreeNode::new("child"));
-    /// let child = (&node).child("child");
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
+    /// let child = node.child("child");
     /// assert!(child.is_some());
     /// ```
     fn child(&self, name: &str) -> Option<&Self> {
@@ -148,8 +149,8 @@ impl<'a> Node for &'a DeviceTreeNode {
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     /// use dtoolkit::{Node, Property};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
     /// let prop = (&node).property("my-prop").unwrap();
     /// assert_eq!(prop.value(), &[1, 2, 3, 4]);
     /// ```
@@ -176,8 +177,8 @@ impl<'a> Node for &'a DeviceTreeNode {
     /// use dtoolkit::Node;
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_child(DeviceTreeNode::new("child"));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = (&node).child("child");
     /// assert!(child.is_some());
     /// ```
@@ -229,17 +230,30 @@ mod private {
 impl DeviceTreeNode {
     /// Creates a new [`DeviceTreeNode`] with the given name.
     ///
+    /// # Errors
+    ///
+    /// Returns a [`ModelError::InvalidNodeName`] if the node name is invalid.
+    ///
     /// # Examples
     ///
     /// ```
     /// use dtoolkit::Node;
     /// use dtoolkit::model::DeviceTreeNode;
     ///
-    /// let node = DeviceTreeNode::new("my-node");
+    /// let node = DeviceTreeNode::new("my-node").unwrap();
     /// assert_eq!(node.name(), "my-node");
     /// ```
+    pub fn new(name: impl Into<String>) -> Result<Self, ModelError> {
+        let name = name.into();
+        if !crate::validate::is_valid_node_name(&name) {
+            return Err(ModelError::InvalidNodeName(name));
+        }
+        Ok(Self::new_unchecked(name))
+    }
+
+    /// Creates a new [`DeviceTreeNode`] with the given name without validation.
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new_unchecked(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             ..Default::default()
@@ -247,8 +261,11 @@ impl DeviceTreeNode {
     }
 
     /// Creates a new [`DeviceTreeNodeBuilder`] with the given name.
-    #[must_use]
-    pub fn builder(name: impl Into<String>) -> DeviceTreeNodeBuilder {
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ModelError::InvalidNodeName`] if the node name is invalid.
+    pub fn builder(name: impl Into<String>) -> Result<DeviceTreeNodeBuilder, ModelError> {
         DeviceTreeNodeBuilder::new(name)
     }
 
@@ -269,8 +286,8 @@ impl DeviceTreeNode {
     /// use dtoolkit::Property;
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
     /// let prop = node.property_mut("my-prop").unwrap();
     /// prop.set_value(vec![5, 6, 7, 8]);
     /// assert_eq!((&*prop).value(), &[5, 6, 7, 8]);
@@ -292,9 +309,9 @@ impl DeviceTreeNode {
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     /// use dtoolkit::{Node, Property};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]));
-    /// assert_eq!(node.property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
+    /// assert_eq!((&node).property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
     /// ```
     pub fn add_property(&mut self, property: DeviceTreeProperty) {
         self.properties
@@ -314,8 +331,8 @@ impl DeviceTreeNode {
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     /// use dtoolkit::{Node, Property};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
     /// let prop = node.remove_property("my-prop").unwrap();
     /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
     /// assert!(node.property("my-prop").is_none());
@@ -341,11 +358,14 @@ impl DeviceTreeNode {
     /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
     /// use dtoolkit::{Node, Property};
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_child(DeviceTreeNode::new("child"));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = node.child_mut("child").unwrap();
-    /// child.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]));
-    /// assert_eq!(child.property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
+    /// child.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
+    /// assert_eq!(
+    ///     (&*child).property("my-prop").unwrap().value(),
+    ///     &[1, 2, 3, 4]
+    /// );
     /// ```
     #[must_use]
     pub fn child_mut(&mut self, name: &str) -> Option<&mut DeviceTreeNode> {
@@ -364,9 +384,9 @@ impl DeviceTreeNode {
     /// use dtoolkit::Node;
     /// use dtoolkit::model::DeviceTreeNode;
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_child(DeviceTreeNode::new("child"));
-    /// assert_eq!(node.child("child").unwrap().name(), "child");
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
+    /// assert_eq!((&node).child("child").unwrap().name(), "child");
     /// ```
     pub fn add_child(&mut self, child: DeviceTreeNode) {
         self.children.insert(child.name.clone(), child);
@@ -385,8 +405,8 @@ impl DeviceTreeNode {
     /// use dtoolkit::Node;
     /// use dtoolkit::model::DeviceTreeNode;
     ///
-    /// let mut node = DeviceTreeNode::new("my-node");
-    /// node.add_child(DeviceTreeNode::new("child"));
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = node.remove_child("child").unwrap();
     /// assert_eq!(child.name(), "child");
     /// assert!(node.child("child").is_none());
@@ -427,10 +447,10 @@ pub struct DeviceTreeNodeBuilder {
 }
 
 impl DeviceTreeNodeBuilder {
-    fn new(name: impl Into<String>) -> Self {
-        Self {
-            node: DeviceTreeNode::new(name),
-        }
+    fn new(name: impl Into<String>) -> Result<Self, ModelError> {
+        Ok(Self {
+            node: DeviceTreeNode::new(name)?,
+        })
     }
 
     /// Adds a property to the node.

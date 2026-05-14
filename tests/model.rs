@@ -15,22 +15,24 @@ use dtoolkit::{Node, Property};
 fn tree_creation() {
     let mut tree = DeviceTree::new();
     tree.root
-        .add_property(DeviceTreeProperty::new("compatible", "test"));
+        .add_property(DeviceTreeProperty::new("compatible", "test").unwrap());
     tree.root
-        .add_property(DeviceTreeProperty::new("prop-u32", 1u32.to_be_bytes()));
+        .add_property(DeviceTreeProperty::new("prop-u32", 1u32.to_be_bytes()).unwrap());
     tree.root.add_child(
         DeviceTreeNode::builder("child-a")
-            .property(DeviceTreeProperty::new("child-prop", "a\0"))
+            .unwrap()
+            .property(DeviceTreeProperty::new("child-prop", "a\0").unwrap())
             .build(),
     );
     tree.root.add_child(
         DeviceTreeNode::builder("child-b")
-            .property(DeviceTreeProperty::new("child-prop", "b\0"))
+            .unwrap()
+            .property(DeviceTreeProperty::new("child-prop", "b\0").unwrap())
             .build(),
     );
 
     let root = &tree.root;
-    assert_eq!(root.name(), "/");
+    assert_eq!(root.name(), "");
     assert_eq!(root.properties().count(), 2);
     assert_eq!(root.children().count(), 2);
 
@@ -46,13 +48,13 @@ fn tree_modification() {
     let mut tree = DeviceTree::new();
 
     // Add a child
-    let child = DeviceTreeNode::new("child");
+    let child = DeviceTreeNode::new("child").unwrap();
     tree.root.add_child(child);
     assert_eq!((&tree.root).children().count(), 1);
 
     // Add a property to the child
     let child = tree.root.child_mut("child").unwrap();
-    child.add_property(DeviceTreeProperty::new("prop", "value\0"));
+    child.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
     assert_eq!((&*child).properties().count(), 1);
 
     // Find and modify the property
@@ -88,15 +90,16 @@ fn find_node_mut() {
     let mut tree = DeviceTree::new();
     tree.root.add_child(
         DeviceTreeNode::builder("child-a")
-            .child(DeviceTreeNode::builder("child-a-a").build())
+            .unwrap()
+            .child(DeviceTreeNode::builder("child-a-a").unwrap().build())
             .build(),
     );
     tree.root
-        .add_child(DeviceTreeNode::builder("child-b").build());
+        .add_child(DeviceTreeNode::builder("child-b").unwrap().build());
 
     // Find a nested child and modify it
     let child_a_a = tree.find_node_mut("/child-a/child-a-a").unwrap();
-    child_a_a.add_property(DeviceTreeProperty::new("prop", "value\0"));
+    child_a_a.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
 
     // Verify the modification
     let child_a = (&tree.root)
@@ -118,11 +121,12 @@ fn device_tree_format() {
     let mut tree = DeviceTree::new();
     tree.root.add_child(
         DeviceTreeNode::builder("child-a")
-            .child(DeviceTreeNode::builder("child-a-a").build())
+            .unwrap()
+            .child(DeviceTreeNode::builder("child-a-a").unwrap().build())
             .build(),
     );
     tree.root
-        .add_child(DeviceTreeNode::builder("child-b").build());
+        .add_child(DeviceTreeNode::builder("child-b").unwrap().build());
 
     let fds = tree.to_string();
 
