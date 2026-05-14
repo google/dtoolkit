@@ -100,8 +100,6 @@ use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
 
-#[doc(hidden)]
-#[macro_export]
 macro_rules! impl_property_methods {
     (get_value = |$self:ident| $get_value:expr) => {
         fn as_cells(&$self) -> Result<$crate::Cells<'a>, $crate::error::PropertyError> {
@@ -129,6 +127,7 @@ macro_rules! impl_property_methods {
         }
     };
 }
+use impl_property_methods;
 
 /// A device tree node.
 pub trait Node: Sized {
