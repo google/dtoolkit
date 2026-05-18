@@ -29,11 +29,14 @@ impl<'a> Fdt<'a> {
         Ok(Memory { node })
     }
 
-    /// Returns an iterator over the `/reserved-memory/*` nodes.
-    pub fn reserved_memory(&self) -> impl Iterator<Item = ReservedMemory<FdtNode<'a>>> + '_ {
-        self.find_node("/reserved-memory")
-            .into_iter()
-            .flat_map(|node| node.children().map(ReservedMemory::new))
+    /// Returns the `/reserved-memory/*` nodes, if any.
+    #[must_use]
+    pub fn reserved_memory(self) -> Option<impl Iterator<Item = ReservedMemory<FdtNode<'a>>>> {
+        Some(
+            self.find_node("/reserved-memory")?
+                .children()
+                .map(|node| ReservedMemory { node }),
+        )
     }
 }
 
@@ -137,11 +140,6 @@ impl<N: Display> Display for ReservedMemory<N> {
 }
 
 impl<N: Node> ReservedMemory<N> {
-    #[must_use]
-    pub(super) fn new(node: N) -> Self {
-        Self { node }
-    }
-
     /// Returns the value of the standard `size` property of the reserved memory
     /// node, if it is present.
     ///
