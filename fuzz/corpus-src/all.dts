@@ -1,0 +1,149 @@
+/*
+ * Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ *
+ * Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+ * https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+ * <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your
+ * option. This file may not be copied, modified, or distributed
+ * except according to those terms.
+ */
+
+/dts-v1/;
+
+/memreserve/ 0x0000000080000000 0x0000000000010000;
+/memreserve/ 0x00000000c0000000 0x0000000000010000;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	model = "dtoolkit fuzzer corpus";
+	compatible = "dtoolkit,test";
+	serial-nnumber = "1234";
+	chassis-type = "desktop";
+	phandle = <1>;
+	status = "okay";
+
+	virtual-reg = <0x80000000>;
+	dma-coherent;
+
+	aliases {
+		serial1 = "/soc@1/serial@1000";
+		ethernet0 = "/soc@1/dma@2000";
+
+		serial0 = &uart0;
+		cpu0 = &cpu0;
+	};
+
+	memory@100000002 {
+		device_type = "memory";
+		reg = <0x00000001 0x00000002 0x00000003 0x00000004>,
+			<0x00000005 0x00000006 0x00000007 0x00000008>;
+		initial-mapped-area = <0x00000001 0x00000002 0x00000003 0x00000004>,
+			<0x00000005 0x00000006 0x00000007 0x00000008>;
+		hotpluggable;
+		status = "okay";
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		mem1@80000000 {
+			reg = <0x00000001 0x00000002 0x00000003 0x00000004>;
+			size = <0x00000005 0x00000006>;
+			alignment = <0x00000007 0x00000008>;
+			alloc-ranges = <0x00000009 0x0000000a 0x0000000b 0x0000000c>;
+			compatible = "shared-dma-pool";
+			no-map;
+			status = "fail";
+		};
+
+		mem2@a0000000 {
+			reg = <0x00000001 0x00000002 0x00000003 0x00000004>;
+			size = <0x00000005 0x00000006>;
+			alignment = <0x00000007 0x00000008>;
+			reusable;
+			status = "okay";
+		};
+	};
+
+	chosen {
+		bootargs = "console=ttyS0 root=/dev/ram0";
+		stdout-path = "/soc@1/serial@1000:115200n8";
+		stdin-path = "/soc@1/serial@1000";
+	};
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x00000000 0x00000000>;
+			clock-frequency = <1000000000>;
+			timebase-frequency = <1000000>;
+			status = "okay";
+			enable-method = "spin-table";
+			cpu-release-addr = <0x00000000 0x80000000>;
+			phandle = <2>;
+
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x00000000 0x00000001>;
+			status = "disabled";
+			enable-method = "spin-table";
+			cpu-release-addr = <0xffffffff 0xffffffff>;
+
+			tlb-split;
+			tlb-size = <2>;
+			tlb-sets = <3>;
+			d-tlb-size = <4>;
+			d-tlb-sets = <5>;
+			i-tlb-size = <6>;
+			i-tlb-sets = <7>;
+			cache-unified;
+			cache-size = <8>;
+			cache-sets = <9>;
+			cache-block-size = <10>;
+			cache-line-size = <11>;
+			i-cache-size = <12>;
+			i-cache-sets = <13>;
+			i-cache-block-size = <14>;
+			i-cache-line-size = <15>;
+			d-cache-size = <16>;
+			d-cache-sets = <17>;
+			d-cache-block-size = <18>;
+			d-cache-line-size = <19>;
+		};
+	};
+
+	soc@1 {
+		compatible = "dummy-soc";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges = <0x00000001 0x00000002 0x00000003 0x00000004>;
+		dma-ranges = <0x00000005 0x00000006 0x00000007 0x00000008>;
+		dma-coherent;
+		status = "okay";
+
+		uart0: serial@1000 {
+			compatible = "pl011";
+			reg = <0x00000001 0x00000002>;
+			virtual-reg = <0x00000003>;
+			phandle = <3>;
+			status = "okay";
+		};
+
+		dma@2000 {
+			compatible = "dma";
+			reg = <0x00000001 0x00000002>;
+			dma-coherent;
+			status = "reserved";
+		};
+	};
+};
