@@ -42,3 +42,19 @@ information on using pull requests.
   an `#[expect(unsafe_code)]` attribute, stating the rationale.
 * All `unsafe` code must be tested. The CI suite includes Miri to detect any
   undefined behavior.
+
+## Releasing a new version
+
+This project uses [git-cliff](https://git-cliff.org/) to generate changelogs.
+When releasing a new version, run:
+
+```
+git-cliff --unreleased --tag <version>
+```
+
+(where `<version>` is the version number to be released)
+
+Append the output to the `CHANGELOG.md` file and make changes if necessary.
+
+Note that in order for this to work properly, the commit messages must follow
+[Conventional Commits](https://git-cliff.org/docs/#how-should-i-write-my-commits).
