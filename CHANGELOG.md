@@ -1,4 +1,4 @@
-## [0.2.0] - 2026-05-14
+## [0.2.0] - 2026-06-02
 
 ### Features
 
@@ -6,12 +6,7 @@
 
 ### Refactor
 
-- Use newer file naming convention instead of `mod.rs` ([#27](https://github.com/google/dtoolkit/pull/27))
 - [**breaking**] Implement generic `From<T>` for `DeviceTreeNode` ([#28](https://github.com/google/dtoolkit/pull/28))
-
-### Miscellaneous
-
-- Remove unused `FdtProperty::value_offset` field ([#30](https://github.com/google/dtoolkit/pull/30))
 
 ## [0.1.1] - 2026-01-12
 
