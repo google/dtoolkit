@@ -1,4 +1,5 @@
 // Copyright 2025 Google LLC
+// Copyright 2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // https://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -395,18 +396,42 @@ impl<'a> Fdt<'a> {
         let off_mem_rsvmap = header.off_mem_rsvmap() as usize;
         let off_dt_struct = header.off_dt_struct() as usize;
         let off_dt_strings = header.off_dt_strings() as usize;
+
+        if off_mem_rsvmap < size_of::<FdtHeader>() {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidHeader("memrsvmap not after header"),
+                offset_of!(FdtHeader, off_mem_rsvmap),
+            ));
+        }
+
         if off_mem_rsvmap > off_dt_struct {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("dt_struct not after memrsvmap"),
                 offset_of!(FdtHeader, off_mem_rsvmap),
             ));
         }
+
+        if !off_mem_rsvmap.is_multiple_of(8) {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidHeader("memrsvmap is not 8-byte aligned"),
+                offset_of!(FdtHeader, off_mem_rsvmap),
+            ));
+        }
+
         if off_dt_struct > data.len() {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("struct offset out of bounds"),
                 offset_of!(FdtHeader, off_dt_struct),
             ));
         }
+
+        if !off_dt_struct.is_multiple_of(4) {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidHeader("struct offset is not 4-byte aligned"),
+                offset_of!(FdtHeader, off_dt_struct),
+            ));
+        }
+
         if off_dt_strings > data.len() {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings offset out of bounds"),
