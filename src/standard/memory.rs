@@ -12,7 +12,7 @@ use core::ops::Deref;
 use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
 use crate::standard::Reg;
-use crate::{Cells, Node, Property};
+use crate::{Node, Property, ToCellInt};
 
 impl<'a> Fdt<'a> {
     /// Returns the `/memory` node.
@@ -60,7 +60,7 @@ impl<N: Display> Display for Memory<N> {
     }
 }
 
-impl<'a, N: Node<'a>> Memory<N> {
+impl<N: Node> Memory<N> {
     /// Returns the value of the standard `initial-mapped-area` property of the
     /// memory node.
     ///
@@ -69,12 +69,12 @@ impl<'a, N: Node<'a>> Memory<N> {
     /// Returns an error if the size of the value isn't a multiple of 5 cells.
     pub fn initial_mapped_area(
         &self,
-    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a, N>>, PropertyError> {
+    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + '_>, PropertyError> {
         if let Some(property) = self.node.property("initial-mapped-area") {
             Ok(Some(
                 property
                     .as_prop_encoded_array([2, 2, 1])?
-                    .map(|chunk| InitialMappedArea::from_cells(chunk)),
+                    .map(InitialMappedArea::from_cells),
             ))
         } else {
             Ok(None)
@@ -110,7 +110,7 @@ impl InitialMappedArea {
         clippy::unwrap_used,
         reason = "The Cells passed are always the correct size"
     )]
-    fn from_cells([ea, pa, size]: [Cells; 3]) -> Self {
+    fn from_cells<C: ToCellInt>([ea, pa, size]: [C; 3]) -> Self {
         Self {
             effective_address: ea.to_int().unwrap(),
             physical_address: pa.to_int().unwrap(),
@@ -139,7 +139,7 @@ impl<N: Display> Display for ReservedMemory<N> {
     }
 }
 
-impl<'a, N: Node<'a>> ReservedMemory<N> {
+impl<N: Node> ReservedMemory<N> {
     /// Returns the value of the standard `size` property of the reserved memory
     /// node, if it is present.
     ///
@@ -147,7 +147,7 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn size(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+    pub fn size(&self) -> Result<Option<<N::Property<'_> as Property>::CellsItem>, PropertyError> {
         self.node
             .property("size")
             .map(|value| value.as_cells())
@@ -161,7 +161,9 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn alignment(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+    pub fn alignment(
+        &self,
+    ) -> Result<Option<<N::Property<'_> as Property>::CellsItem>, PropertyError> {
         self.node
             .property("alignment")
             .map(|value| value.as_cells())
@@ -191,12 +193,10 @@ impl<'a> ReservedMemory<FdtNode<'a>> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of address and size cells.
-    pub fn alloc_ranges(
-        &self,
-    ) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a>>, StandardError> {
+    pub fn alloc_ranges(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + 'a>, StandardError> {
         let address_cells = self.node.parent_address_space.address_cells as usize;
         let size_cells = self.node.parent_address_space.size_cells as usize;
-        if let Some(property) = self.property("alloc_ranges") {
+        if let Some(property) = self.node.property("alloc_ranges") {
             Ok(Some(
                 property
                     .as_prop_encoded_array([address_cells, size_cells])?

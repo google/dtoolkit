@@ -68,7 +68,8 @@
 //! // Find the child node and read its property.
 //! let child_node = fdt.find_node("/child").unwrap();
 //! let prop = child_node.property("my-property").unwrap();
-//! assert_eq!(prop.as_str().unwrap(), "hello");
+//! let val: &str = prop.as_str().unwrap().as_ref();
+//! assert_eq!(val, "hello");
 //!
 //! // Display the DTS
 //! println!("{}", fdt);
@@ -88,20 +89,72 @@ pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;
 pub mod standard;
+mod util;
 mod validate;
+mod values;
 
-use core::ffi::CStr;
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
-use zerocopy::{FromBytes, big_endian};
+use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
 
+macro_rules! impl_property_methods {
+    (get_value = |$self:ident| $get_value:expr) => {
+        fn as_cells(&$self) -> Result<$crate::Cells<'a>, $crate::error::PropertyError> {
+            Ok($crate::Cells(
+                <[zerocopy::big_endian::U32]>::ref_from_bytes($get_value)
+                    .map_err(|_| $crate::error::PropertyError::InvalidLength)?,
+            ))
+        }
+
+        fn as_str(&$self) -> Result<&'a str, $crate::error::PropertyError> {
+            let cstr =
+                core::ffi::CStr::from_bytes_with_nul($get_value).map_err(|_| $crate::error::PropertyError::InvalidString)?;
+            cstr.to_str().map_err(|_| $crate::error::PropertyError::InvalidString)
+        }
+
+        fn as_str_list(&$self) -> $crate::values::FdtStringListIterator<'a> {
+            $crate::values::FdtStringListIterator { value: $get_value }
+        }
+
+        fn as_prop_encoded_array<const N: usize>(
+            &$self,
+            fields_cells: [usize; N],
+        ) -> Result<$crate::values::PropEncodedArrayIterator<'a, N>, $crate::error::PropertyError> {
+            $crate::values::PropEncodedArrayIterator::new($get_value, fields_cells)
+        }
+    };
+}
+use impl_property_methods;
+
 /// A device tree node.
-pub trait Node<'a>: Sized {
+pub trait Node: Sized {
     /// The type used for properties of the node.
-    type Property: Property<'a>;
+    type Property<'a>: Property + 'a
+    where
+        Self: 'a;
+
+    /// The type used for child nodes.
+    type Child<'a>: Node + 'a
+    where
+        Self: 'a;
+
+    /// The type used for the properties iterator.
+    type Properties<'a>: Iterator<Item = Self::Property<'a>> + 'a
+    where
+        Self: 'a;
+
+    /// The type used for the children iterator.
+    type Children<'a>: Iterator<Item = Self::Child<'a>> + 'a
+    where
+        Self: 'a;
+
+    /// The type used for the name of the node.
+    type Name<'a>: AsRef<str> + Copy + 'a
+    where
+        Self: 'a;
 
     /// Returns the name of this node.
     ///
@@ -118,25 +171,18 @@ pub trait Node<'a>: Sized {
     /// assert_eq!(child.name(), "child1");
     /// ```
     #[must_use]
-    fn name(&self) -> &'a str;
+    fn name(&self) -> Self::Name<'_>;
 
     /// Returns the name of this node without the unit address, if any.
     #[must_use]
-    fn name_without_address(&self) -> &'a str {
-        let name = self.name();
-        if let Some((name, _)) = name.split_once('@') {
-            name
-        } else {
-            name
-        }
-    }
+    fn name_without_address(&self) -> Self::Name<'_>;
 
     /// Returns the property with the given name, if any.
     ///
     /// # Performance
     ///
     /// This default implementation iterates through all properties of the node.
-    fn property(&self, name: &str) -> Option<Self::Property> {
+    fn property(&self, name: &str) -> Option<Self::Property<'_>> {
         self.properties().find(|property| property.name() == name)
     }
 
@@ -156,7 +202,7 @@ pub trait Node<'a>: Sized {
     /// assert_eq!(props.next().unwrap().name(), "u64-prop");
     /// assert_eq!(props.next().unwrap().name(), "str-prop");
     /// ```
-    fn properties(&self) -> impl Iterator<Item = Self::Property> + use<'a, Self>;
+    fn properties(&self) -> Self::Properties<'_>;
 
     /// Returns a child node by its name.
     ///
@@ -168,13 +214,13 @@ pub trait Node<'a>: Sized {
     /// For example, searching for `memory` as a child of `/` would match either
     /// `/memory` or `/memory@4000`, while `memory@4000` would match only the
     /// latter.
-    fn child(&self, name: &str) -> Option<Self> {
+    fn child(&self, name: &str) -> Option<Self::Child<'_>> {
         let include_address = name.contains('@');
         self.children().find(|child| {
             if include_address {
-                child.name() == name
+                child.name().as_ref() == name
             } else {
-                child.name_without_address() == name
+                child.name_without_address().as_ref() == name
             }
         })
     }
@@ -195,18 +241,30 @@ pub trait Node<'a>: Sized {
     /// assert_eq!(children.next().unwrap().name(), "child2@42");
     /// assert!(children.next().is_none());
     /// ```
-    fn children(&self) -> impl Iterator<Item = Self> + use<'a, Self>;
+    fn children(&self) -> Self::Children<'_>;
 }
 
 /// A property of a device tree node.
-pub trait Property<'a>: Sized {
+pub trait Property: Sized {
+    /// The type used for strings in the property.
+    type Str: AsRef<str>;
+
+    /// The type used for the strings iterator.
+    type StrList: Iterator<Item = Self::Str>;
+
+    /// The type used for the prop-encoded-array iterator.
+    type PropEncodedArray<const N: usize>: Iterator<Item = [Self::CellsItem; N]>;
+
+    /// The type used for the cells.
+    type CellsItem: Copy + ToCellInt;
+
     /// Returns the name of this property.
     #[must_use]
-    fn name(&self) -> &'a str;
+    fn name(&self) -> &str;
 
     /// Returns the value of this property.
     #[must_use]
-    fn value(&self) -> &'a [u8];
+    fn value(&self) -> &[u8];
 
     /// Returns the value of this property as a `u32`.
     ///
@@ -266,12 +324,7 @@ pub trait Property<'a>: Sized {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    fn as_cells(&self) -> Result<Cells<'a>, PropertyError> {
-        Ok(Cells(
-            <[big_endian::U32]>::ref_from_bytes(self.value())
-                .map_err(|_| PropertyError::InvalidLength)?,
-        ))
-    }
+    fn as_cells(&self) -> Result<Self::CellsItem, PropertyError>;
 
     /// Returns the value of this property as a string.
     ///
@@ -292,11 +345,7 @@ pub trait Property<'a>: Sized {
     /// let prop = node.property("str-prop").unwrap();
     /// assert_eq!(prop.as_str().unwrap(), "hello world");
     /// ```
-    fn as_str(&self) -> Result<&'a str, PropertyError> {
-        let cstr =
-            CStr::from_bytes_with_nul(self.value()).map_err(|_| PropertyError::InvalidString)?;
-        cstr.to_str().map_err(|_| PropertyError::InvalidString)
-    }
+    fn as_str(&self) -> Result<Self::Str, PropertyError>;
 
     /// Returns an iterator over the strings in this property.
     ///
@@ -316,11 +365,7 @@ pub trait Property<'a>: Sized {
     /// assert_eq!(str_list.next(), Some("third"));
     /// assert_eq!(str_list.next(), None);
     /// ```
-    fn as_str_list(&self) -> impl Iterator<Item = &'a str> + use<'a, Self> {
-        FdtStringListIterator {
-            value: self.value(),
-        }
-    }
+    fn as_str_list(&self) -> Self::StrList;
 
     /// Returns an iterator over the elements of the property interpreted as a
     /// `prop-encoded-array`.
@@ -336,43 +381,7 @@ pub trait Property<'a>: Sized {
     fn as_prop_encoded_array<const N: usize>(
         &self,
         fields_cells: [usize; N],
-    ) -> Result<impl Iterator<Item = [Cells<'a>; N]> + use<'a, N, Self>, PropertyError> {
-        let chunk_cells = fields_cells.iter().sum();
-        let chunk_bytes = chunk_cells * size_of::<u32>();
-        if !self.value().len().is_multiple_of(chunk_bytes) {
-            return Err(PropertyError::PropEncodedArraySizeMismatch {
-                size: self.value().len(),
-                chunk: chunk_cells,
-            });
-        }
-        Ok(self.value().chunks_exact(chunk_bytes).map(move |chunk| {
-            let mut cells = <[big_endian::U32]>::ref_from_bytes(chunk)
-                .expect("chunk should be a multiple of 4 bytes because of chunks_exact");
-            fields_cells.map(|field_cells| {
-                let field;
-                (field, cells) = cells.split_at(field_cells);
-                Cells(field)
-            })
-        }))
-    }
-}
-
-struct FdtStringListIterator<'a> {
-    value: &'a [u8],
-}
-
-impl<'a> Iterator for FdtStringListIterator<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.value.is_empty() {
-            return None;
-        }
-        let cstr = CStr::from_bytes_until_nul(self.value).ok()?;
-        let s = cstr.to_str().ok()?;
-        self.value = &self.value[s.len() + 1..];
-        Some(s)
-    }
+    ) -> Result<Self::PropEncodedArray<N>, PropertyError>;
 }
 
 /// An integer value split into several big-endian u32 parts.
@@ -381,14 +390,21 @@ impl<'a> Iterator for FdtStringListIterator<'a> {
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
 
-impl Cells<'_> {
+/// Trait for converting cells to integers.
+pub trait ToCellInt {
     /// Converts the value to the given integer type.
     ///
     /// # Errors
     ///
     /// Returns [`StandardError::TooManyCells`] if the value has too many cells
     /// to fit in the given type.
-    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+    fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+        self,
+    ) -> Result<T, StandardError>;
+}
+
+impl ToCellInt for Cells<'_> {
+    fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {
         if size_of::<T>() < self.0.len() * size_of::<u32>() {
@@ -404,6 +420,12 @@ impl Cells<'_> {
             }
             Ok(value)
         }
+    }
+}
+
+impl AsRef<[big_endian::U32]> for Cells<'_> {
+    fn as_ref(&self) -> &[big_endian::U32] {
+        self.0
     }
 }
 

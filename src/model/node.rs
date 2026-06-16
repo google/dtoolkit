@@ -37,11 +37,104 @@ impl Default for DeviceTreeNode {
     }
 }
 
-impl<'a> Node<'a> for &'a DeviceTreeNode {
-    type Property = &'a DeviceTreeProperty;
+impl Node for DeviceTreeNode {
+    type Property<'a>
+        = &'a DeviceTreeProperty
+    where
+        Self: 'a;
+    type Name<'a>
+        = &'a str
+    where
+        Self: 'a;
+    type Child<'a>
+        = &'a DeviceTreeNode
+    where
+        Self: 'a;
+    type Properties<'a>
+        = private::DeviceTreePropertyRefIter<'a>
+    where
+        Self: 'a;
+    type Children<'a>
+        = private::DeviceTreeChildIter<'a>
+    where
+        Self: 'a;
+
+    fn name(&self) -> &str {
+        (&self).name()
+    }
+
+    fn name_without_address(&self) -> &str {
+        (&self).name_without_address()
+    }
+
+    fn properties(&self) -> private::DeviceTreePropertyRefIter<'_> {
+        private::DeviceTreePropertyRefIter {
+            inner: self.properties.values(),
+        }
+    }
+
+    /// Finds a child by its name and returns a reference to it.
+    ///
+    /// # Performance
+    ///
+    /// This is a constant-time operation if the `name` includes a unit-address,
+    /// or a linear-time operation if not.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
+    ///
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// node.add_child(DeviceTreeNode::new("child").unwrap());
+    /// let child = node.child("child");
+    /// assert!(child.is_some());
+    /// ```
+    fn child(&self, name: &str) -> Option<&Self> {
+        if name.contains('@') {
+            self.children.get(name)
+        } else {
+            self.children()
+                .find(|child| child.name_without_address() == name)
+        }
+    }
+
+    fn children(&self) -> private::DeviceTreeChildIter<'_> {
+        private::DeviceTreeChildIter {
+            inner: self.children.values(),
+        }
+    }
+}
+
+impl<'a> Node for &'a DeviceTreeNode {
+    type Property<'b>
+        = &'b DeviceTreeProperty
+    where
+        Self: 'b;
+    type Name<'b>
+        = &'a str
+    where
+        Self: 'b;
+    type Child<'b>
+        = &'a DeviceTreeNode
+    where
+        Self: 'b;
+    type Properties<'b>
+        = private::DeviceTreePropertyRefIter<'b>
+    where
+        Self: 'b;
+    type Children<'b>
+        = private::DeviceTreeChildIter<'a>
+    where
+        Self: 'b;
 
     fn name(&self) -> &'a str {
         &self.name
+    }
+
+    fn name_without_address(&self) -> &'a str {
+        crate::util::name_without_address(self.name())
     }
 
     /// Finds a property by its name and returns a reference to it.
@@ -65,9 +158,10 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
         self.properties.get(name)
     }
 
-    /// Returns an iterator over the properties of this node.
-    fn properties(&self) -> impl Iterator<Item = &'a DeviceTreeProperty> + use<'a> {
-        self.properties.values()
+    fn properties(&self) -> private::DeviceTreePropertyRefIter<'a> {
+        private::DeviceTreePropertyRefIter {
+            inner: self.properties.values(),
+        }
     }
 
     /// Finds a child by its name and returns a reference to it.
@@ -88,18 +182,48 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
     /// let child = (&node).child("child");
     /// assert!(child.is_some());
     /// ```
-    fn child(&self, name: &str) -> Option<Self> {
-        if name.contains('@') {
-            self.children.get(name)
-        } else {
-            self.children()
-                .find(|child| child.name_without_address() == name)
+    fn child(&self, name: &str) -> Option<&'a DeviceTreeNode> {
+        (*self).child(name)
+    }
+
+    fn children(&self) -> private::DeviceTreeChildIter<'a> {
+        private::DeviceTreeChildIter {
+            inner: self.children.values(),
+        }
+    }
+}
+
+mod private {
+    use alloc::string::String;
+
+    use crate::model::{DeviceTreeNode, DeviceTreeProperty};
+
+    /// An iterator over the properties of a device tree node (by reference).
+    #[derive(Debug, Clone)]
+    pub struct DeviceTreePropertyRefIter<'a> {
+        pub inner: indexmap::map::Values<'a, String, DeviceTreeProperty>,
+    }
+
+    impl<'a> Iterator for DeviceTreePropertyRefIter<'a> {
+        type Item = &'a DeviceTreeProperty;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
         }
     }
 
-    /// Returns an iterator over the children of this node.
-    fn children(&self) -> impl Iterator<Item = Self> + use<'a> {
-        self.children.values()
+    /// An iterator over the children of a device tree node.
+    #[derive(Debug, Clone)]
+    pub struct DeviceTreeChildIter<'a> {
+        pub inner: indexmap::map::Values<'a, String, DeviceTreeNode>,
+    }
+
+    impl<'a> Iterator for DeviceTreeChildIter<'a> {
+        type Item = &'a DeviceTreeNode;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
     }
 }
 
@@ -117,7 +241,7 @@ impl DeviceTreeNode {
     /// use dtoolkit::model::DeviceTreeNode;
     ///
     /// let node = DeviceTreeNode::new("my-node").unwrap();
-    /// assert_eq!((&node).name(), "my-node");
+    /// assert_eq!(node.name(), "my-node");
     /// ```
     pub fn new(name: impl Into<String>) -> Result<Self, ModelError> {
         let name = name.into();
@@ -211,7 +335,7 @@ impl DeviceTreeNode {
     /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap());
     /// let prop = node.remove_property("my-prop").unwrap();
     /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
-    /// assert!((&node).property("my-prop").is_none());
+    /// assert!(node.property("my-prop").is_none());
     /// ```
     pub fn remove_property(&mut self, name: &str) -> Option<DeviceTreeProperty> {
         self.properties.shift_remove(name)
@@ -284,28 +408,29 @@ impl DeviceTreeNode {
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = node.remove_child("child").unwrap();
-    /// assert_eq!((&child).name(), "child");
-    /// assert!((&node).child("child").is_none());
+    /// assert_eq!(child.name(), "child");
+    /// assert!(node.child("child").is_none());
     /// ```
     pub fn remove_child(&mut self, name: &str) -> Option<DeviceTreeNode> {
         self.children.shift_remove(name)
     }
 }
 
-impl<'a, T: Node<'a>> From<T> for DeviceTreeNode {
-    fn from(node: T) -> Self {
-        let name = node.name().to_string();
+impl DeviceTreeNode {
+    /// Creates a new [`DeviceTreeNode`] from any type that implements [`Node`].
+    pub fn from_node<T: Node>(node: &T) -> Self {
+        let name = node.name().as_ref().to_string();
         let mut properties = IndexMap::with_hasher(default_hash_state());
-        properties.extend(
-            node.properties()
-                .map(|prop| (prop.name().to_owned(), prop.into())),
-        );
+        properties.extend(node.properties().map(|prop| {
+            let name = prop.name().to_owned();
+            (name, DeviceTreeProperty::from_property(&prop))
+        }));
 
         let mut children = IndexMap::with_hasher(default_hash_state());
-        children.extend(
-            node.children()
-                .map(|child| (child.name().to_owned(), child.into())),
-        );
+        children.extend(node.children().map(|child| {
+            let name = child.name().as_ref().to_owned();
+            (name, DeviceTreeNode::from_node(&child))
+        }));
 
         Self {
             name,

@@ -10,10 +10,10 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use super::{FDT_TAGSIZE, Fdt, FdtToken};
+use super::{FDT_TAGSIZE, Fdt};
 use crate::Node;
 use crate::fdt::property::{FdtPropIter, FdtProperty};
-use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::standard::AddressSpaceProperties;
 
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
@@ -25,8 +25,27 @@ pub struct FdtNode<'a> {
     pub(crate) parent_address_space: AddressSpaceProperties,
 }
 
-impl<'a> Node<'a> for FdtNode<'a> {
-    type Property = FdtProperty<'a>;
+impl<'a> Node for FdtNode<'a> {
+    type Property<'b>
+        = FdtProperty<'a>
+    where
+        Self: 'b;
+    type Name<'b>
+        = &'a str
+    where
+        Self: 'b;
+    type Child<'b>
+        = FdtNode<'a>
+    where
+        Self: 'b;
+    type Properties<'b>
+        = FdtPropIter<'a>
+    where
+        Self: 'b;
+    type Children<'b>
+        = private::FdtChildIter<'a>
+    where
+        Self: 'b;
 
     /// Returns the name of this node.
     ///
@@ -42,15 +61,19 @@ impl<'a> Node<'a> for FdtNode<'a> {
             .expect("Fdt should be valid")
     }
 
-    fn properties(&self) -> impl Iterator<Item = FdtProperty<'a>> + use<'a> {
+    fn name_without_address(&self) -> &'a str {
+        crate::util::name_without_address(self.name())
+    }
+
+    fn properties(&self) -> FdtPropIter<'a> {
         FdtPropIter::Start {
             fdt: self.fdt,
             offset: self.offset,
         }
     }
 
-    fn children(&self) -> impl Iterator<Item = FdtNode<'a>> + use<'a> {
-        FdtChildIter::Start { node: *self }
+    fn children(&self) -> private::FdtChildIter<'a> {
+        private::FdtChildIter::Start { node: *self }
     }
 }
 
@@ -97,75 +120,80 @@ impl Display for FdtNode<'_> {
     }
 }
 
-/// An iterator over the children of a device tree node.
-enum FdtChildIter<'a> {
-    Start {
-        node: FdtNode<'a>,
-    },
-    Running {
-        fdt: Fdt<'a>,
-        offset: usize,
-        address_space: AddressSpaceProperties,
-    },
-}
+mod private {
+    use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtToken};
+    use crate::standard::{AddressSpaceProperties, NodeStandard};
 
-impl<'a> Iterator for FdtChildIter<'a> {
-    type Item = FdtNode<'a>;
+    #[derive(Debug, Clone)]
+    pub enum FdtChildIter<'a> {
+        Start {
+            node: FdtNode<'a>,
+        },
+        Running {
+            fdt: Fdt<'a>,
+            offset: usize,
+            address_space: AddressSpaceProperties,
+        },
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Start { node } => {
-                let address_space = node.address_space();
-                let mut offset = node.offset;
-                offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
-                offset = node
-                    .fdt
-                    .find_string_end(offset)
-                    .expect("Fdt should be valid");
-                offset = Fdt::align_tag_offset(offset);
-                *self = Self::Running {
-                    fdt: node.fdt,
+    impl<'a> Iterator for FdtChildIter<'a> {
+        type Item = FdtNode<'a>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            match self {
+                Self::Start { node } => {
+                    let address_space = node.address_space();
+                    let mut offset = node.offset;
+                    offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
+                    offset = node
+                        .fdt
+                        .find_string_end(offset)
+                        .expect("Fdt should be valid");
+                    offset = Fdt::align_tag_offset(offset);
+                    *self = Self::Running {
+                        fdt: node.fdt,
+                        offset,
+                        address_space,
+                    };
+                    self.next()
+                }
+                Self::Running {
+                    fdt,
                     offset,
                     address_space,
-                };
-                self.next()
+                } => Self::try_next(*fdt, offset, *address_space),
             }
-            Self::Running {
-                fdt,
-                offset,
-                address_space,
-            } => Self::try_next(*fdt, offset, *address_space),
         }
     }
-}
 
-impl<'a> FdtChildIter<'a> {
-    fn try_next(
-        fdt: Fdt<'a>,
-        offset: &mut usize,
-        parent_address_space: AddressSpaceProperties,
-    ) -> Option<FdtNode<'a>> {
-        loop {
-            let token = fdt.read_token(*offset).expect("Fdt should be valid");
-            match token {
-                FdtToken::BeginNode => {
-                    let node_offset = *offset;
-                    *offset = fdt
-                        .next_sibling_offset(*offset)
-                        .expect("Fdt should be valid");
-                    return Some(FdtNode {
-                        fdt,
-                        offset: node_offset,
-                        parent_address_space,
-                    });
+    impl<'a> FdtChildIter<'a> {
+        fn try_next(
+            fdt: Fdt<'a>,
+            offset: &mut usize,
+            parent_address_space: AddressSpaceProperties,
+        ) -> Option<FdtNode<'a>> {
+            loop {
+                let token = fdt.read_token(*offset).expect("Fdt should be valid");
+                match token {
+                    FdtToken::BeginNode => {
+                        let node_offset = *offset;
+                        *offset = fdt
+                            .next_sibling_offset(*offset)
+                            .expect("Fdt should be valid");
+                        return Some(FdtNode {
+                            fdt,
+                            offset: node_offset,
+                            parent_address_space,
+                        });
+                    }
+                    FdtToken::Prop => {
+                        *offset = fdt
+                            .next_property_offset(*offset + FDT_TAGSIZE, false)
+                            .expect("Fdt should be valid");
+                    }
+                    FdtToken::EndNode | FdtToken::End => return None,
+                    FdtToken::Nop => *offset += FDT_TAGSIZE,
                 }
-                FdtToken::Prop => {
-                    *offset = fdt
-                        .next_property_offset(*offset + FDT_TAGSIZE, false)
-                        .expect("Fdt should be valid");
-                }
-                FdtToken::EndNode | FdtToken::End => return None,
-                FdtToken::Nop => *offset += FDT_TAGSIZE,
             }
         }
     }

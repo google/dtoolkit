@@ -10,7 +10,7 @@ use dtoolkit::fdt::Fdt;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status};
-use dtoolkit::{Node, Property};
+use dtoolkit::{Node, Property, ToCellInt};
 
 #[test]
 fn read_child_nodes() {
