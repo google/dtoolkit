@@ -85,6 +85,7 @@ extern crate alloc;
 
 pub mod error;
 pub mod fdt;
+pub mod fdt_mut;
 pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;

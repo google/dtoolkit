@@ -18,8 +18,18 @@ use crate::Property;
 /// A property of a device tree node.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FdtProperty<'a> {
-    name: &'a str,
-    value: &'a [u8],
+    pub(crate) name: &'a str,
+    pub(crate) value: &'a [u8],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct ParsedProperty<'a> {
+    pub name: &'a str,
+    pub value: &'a [u8],
+    pub nameoff: usize,
+    pub prop_offset: usize,
+    pub value_offset: usize,
+    pub len: usize,
 }
 
 impl<'a> Property for FdtProperty<'a> {
@@ -100,37 +110,40 @@ impl Display for FdtProperty<'_> {
     }
 }
 
-/// An iterator over the properties of a device tree node.
 #[derive(Debug, Clone)]
-pub enum FdtPropIter<'a> {
-    Start { fdt: Fdt<'a>, offset: usize },
-    Running { fdt: Fdt<'a>, offset: usize },
+pub(crate) enum InnerPropIter {
+    Start { offset: usize },
+    Running { offset: usize },
 }
 
-impl<'a> Iterator for FdtPropIter<'a> {
-    type Item = FdtProperty<'a>;
+impl InnerPropIter {
+    pub(crate) fn new(offset: usize) -> Self {
+        Self::Start { offset }
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    pub(crate) fn next<'a>(&mut self, fdt: Fdt<'a>) -> Option<ParsedProperty<'a>> {
         match self {
-            Self::Start { fdt, offset } => {
-                let mut offset = *offset;
-                offset += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
-                offset = fdt.find_string_end(offset).expect("Fdt should be valid");
-                offset = Fdt::align_tag_offset(offset);
-                *self = Self::Running { fdt: *fdt, offset };
-                self.next()
+            Self::Start { offset } => {
+                let mut off = *offset;
+                off += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
+                off = fdt.find_string_end(off).expect("Fdt should be valid");
+                off = Fdt::align_tag_offset(off);
+                *self = Self::Running { offset: off };
+                self.next(fdt)
             }
-            Self::Running { fdt, offset } => Self::next_prop(*fdt, offset),
+            Self::Running { offset } => Self::next_property_impl(fdt, offset),
         }
     }
-}
 
-impl<'a> FdtPropIter<'a> {
-    fn next_prop(fdt: Fdt<'a>, offset: &mut usize) -> Option<FdtProperty<'a>> {
+    pub(crate) fn next_property_impl<'a>(
+        fdt: Fdt<'a>,
+        offset: &mut usize,
+    ) -> Option<ParsedProperty<'a>> {
         loop {
             let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
                 FdtToken::Prop => {
+                    let prop_offset = *offset;
                     let len = big_endian::U32::ref_from_prefix(&fdt.data[*offset + FDT_TAGSIZE..])
                         .expect("Fdt should be valid")
                         .0
@@ -140,18 +153,44 @@ impl<'a> FdtPropIter<'a> {
                             .expect("Fdt should be valid")
                             .0
                             .get() as usize;
-                    let prop_offset = *offset + 3 * FDT_TAGSIZE;
-                    *offset = Fdt::align_tag_offset(prop_offset + len);
+                    let value_offset = *offset + 3 * FDT_TAGSIZE;
+                    *offset = Fdt::align_tag_offset(value_offset + len);
                     let name = fdt.string(nameoff).expect("Fdt should be valid");
                     let value = fdt
                         .data
-                        .get(prop_offset..prop_offset + len)
+                        .get(value_offset..value_offset + len)
                         .expect("Fdt should be valid");
-                    return Some(FdtProperty { name, value });
+                    return Some(ParsedProperty {
+                        name,
+                        value,
+                        nameoff,
+                        prop_offset,
+                        value_offset,
+                        len,
+                    });
                 }
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
                 _ => return None,
             }
         }
+    }
+}
+
+/// An iterator over the properties of a device tree node.
+#[derive(Debug, Clone)]
+pub struct FdtPropIter<'a> {
+    pub(crate) fdt: Fdt<'a>,
+    pub(crate) inner: InnerPropIter,
+}
+
+impl<'a> Iterator for FdtPropIter<'a> {
+    type Item = FdtProperty<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let parsed = self.inner.next(self.fdt)?;
+        Some(FdtProperty {
+            name: parsed.name,
+            value: parsed.value,
+        })
     }
 }

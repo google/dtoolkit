@@ -131,3 +131,8 @@ pub enum ModelError {
     #[error("Invalid property name: '{0}'")]
     InvalidPropertyName(String),
 }
+
+/// An error that can occur when mutating a device tree.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum FdtMutError {}

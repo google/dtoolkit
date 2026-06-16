@@ -16,8 +16,8 @@
 //!
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
-mod node;
-mod property;
+pub(crate) mod node;
+pub(crate) mod property;
 
 use core::ffi::CStr;
 use core::fmt::{self, Debug, Display, Formatter};
