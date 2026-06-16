@@ -79,3 +79,37 @@ fn modify_property_shrink_and_grow() {
     let err = prop_mut.set_value(long_val).unwrap_err();
     assert_eq!(err, FdtMutError::ShiftingRequired);
 }
+
+#[test]
+fn remove_property_via_handle() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::new(&mut data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+    let prop_mut = node_mut.property_mut("str-prop").unwrap();
+    prop_mut.remove();
+
+    let fdt = Fdt::new(&data).unwrap();
+    let node = fdt.find_node("/test-props").unwrap();
+    assert!(node.property("str-prop").is_none());
+    // Verify other properties remain
+    assert!(node.property("u32-prop").is_some());
+}
+
+#[test]
+fn remove_property_via_node() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::new(&mut data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+
+    assert!(node_mut.remove_property("str-prop"));
+    assert!(!node_mut.remove_property("str-prop")); // Idempotent check
+
+    let fdt = Fdt::new(&data).unwrap();
+    let node = fdt.find_node("/test-props").unwrap();
+    assert!(node.property("str-prop").is_none());
+    assert!(node.property("u32-prop").is_some());
+}

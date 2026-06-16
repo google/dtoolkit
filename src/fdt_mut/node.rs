@@ -44,6 +44,37 @@ impl FdtNodeMut<'_> {
         None
     }
 
+    /// Removes a property from this node by its name.
+    ///
+    /// This is a convenience method that finds a property by name and calls
+    /// [`FdtPropertyMut::remove`] on it.
+    ///
+    /// Returns `true` if the property was present and successfully removed,
+    /// `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    /// use dtoolkit::{Node, Property};
+    ///
+    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::new(&mut dtb).unwrap();
+    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
+    /// assert!(node.property("prop").is_some());
+    /// assert!(node.remove_property("prop"));
+    /// assert!(node.property("prop").is_none());
+    /// assert!(!node.remove_property("prop"));
+    /// ```
+    pub fn remove_property(&mut self, name: &str) -> bool {
+        if let Some(prop) = self.property_mut(name) {
+            prop.remove();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Returns a mutable iterator over the properties of this node.
     pub fn properties_mut(&mut self) -> FdtPropMutIter<'_> {
         FdtPropMutIter {
