@@ -608,7 +608,7 @@ impl<'a> Fdt<'a> {
     }
 
     pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {
-        let val = big_endian::U32::ref_from_prefix(&self.data[offset..])
+        let val = big_endian::U32::ref_from_prefix(self.data_at_offset(offset)?)
             .map(|(val, _)| val.get())
             .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?;
         FdtToken::try_from(val).map_err(|t| FdtParseError::new(FdtErrorKind::BadToken(t), offset))
@@ -668,13 +668,15 @@ impl<'a> Fdt<'a> {
         offset: usize,
         check_name: bool,
     ) -> Result<usize, FdtParseError> {
-        let len = big_endian::U32::ref_from_prefix(&self.data[offset..])
+        let len = big_endian::U32::ref_from_prefix(self.data_at_offset(offset)?)
             .map(|(val, _)| val.get())
             .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?
             as usize;
-        let nameoff = big_endian::U32::ref_from_prefix(&self.data[offset + FDT_TAGSIZE..])
+
+        let nameoff_offset = offset + FDT_TAGSIZE;
+        let nameoff = big_endian::U32::ref_from_prefix(self.data_at_offset(nameoff_offset)?)
             .map(|(val, _)| val.get())
-            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?
+            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, nameoff_offset))?
             as usize;
 
         if check_name {
@@ -694,6 +696,12 @@ impl<'a> Fdt<'a> {
         }
 
         Ok(Self::align_tag_offset(end_offset))
+    }
+
+    fn data_at_offset(&self, offset: usize) -> Result<&[u8], FdtParseError> {
+        self.data
+            .get(offset..)
+            .ok_or_else(|| FdtParseError::new(FdtErrorKind::InvalidOffset, offset))
     }
 
     pub(crate) fn align_tag_offset(offset: usize) -> usize {
@@ -781,5 +789,41 @@ mod tests {
         header[23] = 0x10;
         let result = Fdt::new(&header);
         assert!(matches!(result, Err(e) if matches!(e.kind, FdtErrorKind::UnsupportedVersion(16))));
+    }
+
+    #[test]
+    fn next_property_offset_out_of_bounds() {
+        #[rustfmt::skip]
+        let data: [u8; 79] = [
+            // Header (0..40)
+            0xd0, 0x0d, 0xfe, 0xed, // magic
+            0x00, 0x00, 0x00, 79,   // totalsize = 79
+            0x00, 0x00, 0x00, 0x38, // off_dt_struct = 56
+            0x00, 0x00, 0x00, 77,   // off_dt_strings = 77
+            0x00, 0x00, 0x00, 0x28, // off_mem_rsvmap = 40
+            0x00, 0x00, 0x00, 0x11, // version = 17
+            0x00, 0x00, 0x00, 0x10, // last_comp_version = 16
+            0x00, 0x00, 0x00, 0x00, // boot_cpuid_phys = 0
+            0x00, 0x00, 0x00, 0x02, // size_dt_strings = 2
+            0x00, 0x00, 0x00, 21,   // size_dt_struct = 21
+            // Memreserve (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR)
+            // Structure block (56..77)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x03, // FDT_PROP
+            0x00, 0x00, 0x00, 0x01, // len = 1
+            0x00, 0x00, 0x00, 0x00, // nameoff = 0
+            0x42, // data = 0x42
+            // Strings block (77..79)
+            b'a', 0x00,
+            // advancing the offset by FDT_TAGSIZE makes offset point after this part,
+            // raising an error
+        ];
+
+        let result = Fdt::new(&data);
+        let err = result.unwrap_err();
+        assert_eq!(err, FdtParseError::new(FdtErrorKind::InvalidOffset, 80));
     }
 }
