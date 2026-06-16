@@ -14,7 +14,7 @@ use zerocopy::{FromBytes, big_endian};
 use crate::Property;
 use crate::error::FdtMutError;
 use crate::fdt::property::InnerPropIter;
-use crate::fdt::{FDT_TAGSIZE, Fdt, FdtProperty};
+use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtProperty};
 use crate::fdt_mut::FdtMut;
 
 /// A mutable property of a device tree node.
@@ -59,9 +59,7 @@ impl FdtPropertyMut<'_> {
         let old_padded = Fdt::align_tag_offset(self.len);
         let new_padded = Fdt::align_tag_offset(new_value.len());
 
-        if new_padded != old_padded {
-            todo!("the new value requires shifting data, which is not yet supported");
-        }
+        self.ensure_new_length_fits(old_padded, new_padded)?;
 
         // Update the length in the FDT property header
         let (len_bytes, _) = <big_endian::U32>::mut_from_prefix(
@@ -84,9 +82,48 @@ impl FdtPropertyMut<'_> {
             self.data.data[self.value_offset + i] = 0;
         }
 
+        self.pad_with_nops(old_padded, new_padded);
+
         self.len = new_value.len();
 
         Ok(())
+    }
+
+    fn ensure_new_length_fits(
+        &mut self,
+        old_padded: usize,
+        new_padded: usize,
+    ) -> Result<(), FdtMutError> {
+        if new_padded > old_padded {
+            let needed_bytes = new_padded - old_padded;
+
+            let mut offset = self.value_offset + old_padded;
+            for _ in 0..(needed_bytes / FDT_TAGSIZE) {
+                if offset + FDT_TAGSIZE > self.data.data.len() {
+                    return Err(FdtMutError::ShiftingRequired);
+                }
+
+                let tag_bytes = &self.data.data[offset..offset + FDT_TAGSIZE];
+                if tag_bytes != FDT_NOP.to_be_bytes() {
+                    return Err(FdtMutError::ShiftingRequired);
+                }
+
+                offset += FDT_TAGSIZE;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn pad_with_nops(&mut self, old_padded: usize, new_padded: usize) {
+        if new_padded < old_padded {
+            let mut offset = self.value_offset + new_padded;
+            while offset < self.value_offset + old_padded {
+                self.data.data[offset..offset + FDT_TAGSIZE]
+                    .copy_from_slice(&FDT_NOP.to_be_bytes());
+                offset += FDT_TAGSIZE;
+            }
+        }
     }
 
     /// Returns a read only view of this property.
