@@ -29,6 +29,31 @@ See LICENSE for details.
 If you want to contribute to the project, see details of
 [how we accept contributions](CONTRIBUTING.md).
 
+## Fuzzing
+
+Fuzzing helps prevent unexpected panics and ensures correct behavior on
+unexpected inputs. The project uses `cargo-fuzz`, which is not part of the
+default Rust installation.  It is recommended to run the relevant fuzzer for a
+while before pushing a change.
+
+Install `cargo-fuzz` with:
+
+```sh
+cargo +nightly install cargo-fuzz
+```
+
+Run a fuzz target by name from the repository root:
+
+```sh
+cargo +nightly fuzz run <fuzzer name>
+```
+
+For example, to run the `parse` fuzzer:
+
+```sh
+cargo +nightly fuzz run parse
+```
+
 ## Disclaimer
 
 This is not an officially supported Google product. This project is not
