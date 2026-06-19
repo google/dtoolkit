@@ -196,7 +196,7 @@ impl<'a> ReservedMemory<FdtNode<'a>> {
     pub fn alloc_ranges(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + 'a>, StandardError> {
         let address_cells = self.node.parent_address_space.address_cells as usize;
         let size_cells = self.node.parent_address_space.size_cells as usize;
-        if let Some(property) = self.node.property("alloc_ranges") {
+        if let Some(property) = self.node.property("alloc-ranges") {
             Ok(Some(
                 property
                     .as_prop_encoded_array([address_cells, size_cells])?
