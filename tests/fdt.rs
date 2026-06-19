@@ -315,6 +315,7 @@ const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
     load_dtb_dts_pair!("test_pretty_print"),
     load_dtb_dts_pair!("test_props"),
     load_dtb_dts_pair!("test_traversal"),
+    load_dtb_dts_pair!("test_zero_cells"),
     load_dtb_dts_pair!("test"),
 ];
 
@@ -387,4 +388,24 @@ fn round_trip_impl(construct_fdt: impl Fn(&mut [u8]) -> Fdt) {
         let new_dtb = ir.to_dtb();
         assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
     }
+}
+
+#[test]
+fn reserved_memory_alloc_ranges_zero_cells() {
+    let dtb = include_bytes!("dtb/test_zero_cells.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let mut reserved_memory = fdt.reserved_memory().unwrap();
+
+    let range = reserved_memory.next().unwrap();
+
+    // address-cells and size-cells are both 0; expecting prop encoded array error
+
+    // not using assert_matches! since alloc_ranges() return value doesn't implement
+    // Debug
+    assert!(matches!(
+        range.alloc_ranges(),
+        Err(dtoolkit::error::StandardError::PropertyConversion(
+            dtoolkit::error::PropertyError::PropEncodedArraySizeMismatch { size: 0, chunk: 0 },
+        ))
+    ));
 }

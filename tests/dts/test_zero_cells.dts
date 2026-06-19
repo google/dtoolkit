@@ -1,0 +1,17 @@
+/dts-v1/;
+
+/ {
+    #address-cells = <0x00>;
+    #size-cells = <0x00>;
+
+    reserved-memory {
+        #address-cells = <0x00>;
+        #size-cells = <0x00>;
+        ranges;
+
+        mem1@80000000 {
+            reg;
+            alloc-ranges;
+        };
+    };
+};
