@@ -36,7 +36,7 @@ impl<'a, const N: usize> PropEncodedArrayIterator<'a, N> {
     pub(crate) fn new(value: &'a [u8], fields_cells: [usize; N]) -> Result<Self, PropertyError> {
         let chunk_cells: usize = fields_cells.iter().sum();
         let chunk_bytes = chunk_cells * size_of::<u32>();
-        if !value.len().is_multiple_of(chunk_bytes) {
+        if chunk_cells == 0 || !value.len().is_multiple_of(chunk_bytes) {
             return Err(PropertyError::PropEncodedArraySizeMismatch {
                 size: value.len(),
                 chunk: chunk_cells,
@@ -62,5 +62,22 @@ impl<'a, const N: usize> Iterator for PropEncodedArrayIterator<'a, N> {
             (field, cells_slice) = cells_slice.split_at(field_cells);
             Cells(field)
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prop_encoded_array_zero_cells() {
+        assert_eq!(
+            PropEncodedArrayIterator::new(&[], [0, 0]).unwrap_err(),
+            PropertyError::PropEncodedArraySizeMismatch { size: 0, chunk: 0 }
+        );
+        assert_eq!(
+            PropEncodedArrayIterator::new(&[1, 2, 3, 4], [0, 0, 0]).unwrap_err(),
+            PropertyError::PropEncodedArraySizeMismatch { size: 4, chunk: 0 }
+        );
     }
 }
