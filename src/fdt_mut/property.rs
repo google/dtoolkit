@@ -141,6 +141,37 @@ impl FdtPropertyMut<'_> {
             .expect("Fdt should be valid");
         FdtProperty { name, value }
     }
+
+    /// Removes the property by overwriting its structure with `NOP` tags.
+    ///
+    /// The memory previously occupied by this property will be replaced with
+    /// `NOP` tags, rendering it invisible to Device Tree iterators
+    /// without requiring data to be shifted.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    /// use dtoolkit::{Node, Property};
+    ///
+    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::new(&mut dtb).unwrap();
+    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
+    /// let prop = node.property_mut("prop").unwrap();
+    /// prop.remove();
+    /// assert!(node.property("prop").is_none());
+    /// ```
+    pub fn remove(self) {
+        let start = self.prop_offset;
+        let end = Fdt::align_tag_offset(self.value_offset + self.len);
+        let nop_bytes = FDT_NOP.to_be_bytes();
+
+        let mut offset = start;
+        while offset < end {
+            self.data.data[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
+            offset += FDT_TAGSIZE;
+        }
+    }
 }
 
 impl Display for FdtPropertyMut<'_> {
