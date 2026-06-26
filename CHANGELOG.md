@@ -1,3 +1,23 @@
+## [0.3.0] - 2026-06-26
+
+### Features
+
+- Introduced in-place FDT editing functionality. This is incomplete and currently supports: 
+  - Modifying values without reallocation ([#31](https://github.com/google/dtoolkit/pull/31)) 
+  - Shrinking and growing properties ([#32](https://github.com/google/dtoolkit/pull/32))
+  - Removing properties directly by replacing with NOPs ([#42](https://github.com/google/dtoolkit/pull/42))
+
+### Bug Fixes
+
+- *(standard nodes)* Use proper name of the `alloc-ranges` property ([#43](https://github.com/google/dtoolkit/pull/43))
+- *(standard nodes)* Return error instead of panic when size-cells and address-cells are both 0 ([#44](https://github.com/google/dtoolkit/pull/44))
+
+### Refactor
+
+- [**breaking**] Use GATs (Generic Associated Types) in `Node` and `Property` traits ([#29](https://github.com/google/dtoolkit/pull/29))
+  - This allows to specify more precise lifetimes, and allows to implement the `Node` trait for the owned API (the `model` module) directly rather than via reference only
+  - This shouldn't be breaking for typical use cases, unless you implement the `Node` or `Propery` traits in your code
+
 ## [0.2.1] - 2026-06-16
 
 ### Bug Fixes
