@@ -117,10 +117,7 @@ impl DeviceTree {
             return Some(current_node);
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
-            match current_node.child_mut(component) {
-                Some(node) => current_node = node,
-                None => return None,
-            }
+            current_node = current_node.child_mut(component)?;
         }
         Some(current_node)
     }

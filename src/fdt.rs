@@ -599,10 +599,7 @@ impl<'a> Fdt<'a> {
             return Some(current_node);
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
-            match current_node.child(component) {
-                Some(node) => current_node = node,
-                None => return None,
-            }
+            current_node = current_node.child(component)?;
         }
         Some(current_node)
     }

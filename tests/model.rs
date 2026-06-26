@@ -50,12 +50,12 @@ fn tree_modification() {
     // Add a child
     let child = DeviceTreeNode::new("child").unwrap();
     tree.root.add_child(child);
-    assert_eq!((&tree.root).children().count(), 1);
+    assert_eq!(tree.root.children().count(), 1);
 
     // Add a property to the child
     let child = tree.root.child_mut("child").unwrap();
     child.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
-    assert_eq!((&*child).properties().count(), 1);
+    assert_eq!(child.properties().count(), 1);
 
     // Find and modify the property
     let prop = tree
@@ -67,22 +67,19 @@ fn tree_modification() {
     prop.set_value("new-value\0");
 
     // Verify the modification
-    let child = (&tree.root)
-        .children()
-        .find(|c| c.name() == "child")
-        .unwrap();
+    let child = tree.root.children().find(|c| c.name() == "child").unwrap();
     assert_eq!(child.property("prop").unwrap().as_str(), Ok("new-value"));
 
     // Remove the property
     let child = tree.root.child_mut("child").unwrap();
     let removed_prop = child.remove_property("prop");
     assert!(removed_prop.is_some());
-    assert_eq!((&*child).properties().count(), 0);
+    assert_eq!(child.properties().count(), 0);
 
     // Remove the child
     let removed_child = tree.root.remove_child("child");
     assert!(removed_child.is_some());
-    assert_eq!((&tree.root).children().count(), 0);
+    assert_eq!(tree.root.children().count(), 0);
 }
 
 #[test]
@@ -102,7 +99,8 @@ fn find_node_mut() {
     child_a_a.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
 
     // Verify the modification
-    let child_a = (&tree.root)
+    let child_a = tree
+        .root
         .children()
         .find(|c| c.name() == "child-a")
         .unwrap();
@@ -132,7 +130,7 @@ fn device_tree_format() {
 
     assert_eq!(
         fds,
-        r#"/dts-v1/;
+        r"/dts-v1/;
 
 / {
     child-a {
@@ -143,6 +141,6 @@ fn device_tree_format() {
     child-b {
     };
 };
-"#
+"
     );
 }
