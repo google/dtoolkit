@@ -18,9 +18,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-write = ["dep:indexmap", "dep:twox-hash"]
+alloc = []
+arrayvec07 = ["dep:arrayvec"]
+write = ["alloc", "dep:indexmap", "dep:twox-hash"]
 
 [dependencies]
+arrayvec = { version = "0.7", optional = true, default-features = false }
 indexmap = { version = "2", optional = true, default-features = false }
 thiserror = { version = "2", default-features = false }
 twox-hash = { version = "2", optional = true, features = ["xxhash64"], default-features = false }
