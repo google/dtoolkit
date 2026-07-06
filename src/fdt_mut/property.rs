@@ -16,18 +16,19 @@ use crate::error::FdtMutError;
 use crate::fdt::property::InnerPropIter;
 use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtProperty};
 use crate::fdt_mut::FdtMut;
+use crate::fdt_mut::buffer::FdtBuffer;
 
 /// A mutable property of a device tree node.
 #[derive(Debug)]
-pub struct FdtPropertyMut<'a> {
-    pub(crate) data: FdtMut<'a>,
+pub struct FdtPropertyMut<'a, B: FdtBuffer> {
+    pub(crate) data: &'a mut FdtMut<B>,
     pub(crate) nameoff: usize,
     pub(crate) prop_offset: usize,
     pub(crate) value_offset: usize,
     pub(crate) len: usize,
 }
 
-impl FdtPropertyMut<'_> {
+impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// Sets the value of the property.
     ///
     /// # Errors
@@ -49,7 +50,7 @@ impl FdtPropertyMut<'_> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(&mut dtb[..]).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
@@ -63,7 +64,7 @@ impl FdtPropertyMut<'_> {
 
         // Update the length in the FDT property header
         let (len_bytes, _) = <big_endian::U32>::mut_from_prefix(
-            &mut self.data.data[self.prop_offset + FDT_TAGSIZE..],
+            &mut self.data.data_mut()[self.prop_offset + FDT_TAGSIZE..],
         )
         .expect("Fdt should be valid");
         len_bytes.set(
@@ -74,12 +75,12 @@ impl FdtPropertyMut<'_> {
         );
 
         // Copy the new value
-        self.data.data[self.value_offset..self.value_offset + new_value.len()]
+        self.data.data_mut()[self.value_offset..self.value_offset + new_value.len()]
             .copy_from_slice(new_value);
 
         // Zero out any padding bytes
         for i in new_value.len()..new_padded {
-            self.data.data[self.value_offset + i] = 0;
+            self.data.data_mut()[self.value_offset + i] = 0;
         }
 
         self.pad_with_nops(old_padded, new_padded);
@@ -99,11 +100,11 @@ impl FdtPropertyMut<'_> {
 
             let mut offset = self.value_offset + old_padded;
             for _ in 0..(needed_bytes / FDT_TAGSIZE) {
-                if offset + FDT_TAGSIZE > self.data.data.len() {
+                if offset + FDT_TAGSIZE > self.data.data_mut().len() {
                     return Err(FdtMutError::ShiftingRequired);
                 }
 
-                let tag_bytes = &self.data.data[offset..offset + FDT_TAGSIZE];
+                let tag_bytes = &self.data.data_mut()[offset..offset + FDT_TAGSIZE];
                 if tag_bytes != FDT_NOP.to_be_bytes() {
                     return Err(FdtMutError::ShiftingRequired);
                 }
@@ -119,7 +120,7 @@ impl FdtPropertyMut<'_> {
         if new_padded < old_padded {
             let mut offset = self.value_offset + new_padded;
             while offset < self.value_offset + old_padded {
-                self.data.data[offset..offset + FDT_TAGSIZE]
+                self.data.data_mut()[offset..offset + FDT_TAGSIZE]
                     .copy_from_slice(&FDT_NOP.to_be_bytes());
                 offset += FDT_TAGSIZE;
             }
@@ -155,7 +156,7 @@ impl FdtPropertyMut<'_> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(&mut dtb[..]).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// let prop = node.property_mut("prop").unwrap();
     /// prop.remove();
@@ -168,19 +169,19 @@ impl FdtPropertyMut<'_> {
 
         let mut offset = start;
         while offset < end {
-            self.data.data[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
+            self.data.data_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
             offset += FDT_TAGSIZE;
         }
     }
 }
 
-impl Display for FdtPropertyMut<'_> {
+impl<B: FdtBuffer> Display for FdtPropertyMut<'_, B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.as_read_only())
     }
 }
 
-impl<'a> Property for &'a FdtPropertyMut<'_> {
+impl<'a, B: FdtBuffer> Property for &'a FdtPropertyMut<'_, B> {
     type Str = &'a str;
     type StrList = crate::values::FdtStringListIterator<'a>;
     type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
@@ -220,18 +221,18 @@ impl<'a> Property for &'a FdtPropertyMut<'_> {
 
 /// A mutable iterator over the properties of a device tree node.
 #[derive(Debug)]
-pub struct FdtPropMutIter<'a> {
-    pub(crate) data: FdtMut<'a>,
+pub struct FdtPropMutIter<'a, B: FdtBuffer> {
+    pub(crate) data: &'a mut FdtMut<B>,
     pub(crate) inner: InnerPropIter,
 }
 
-impl FdtPropMutIter<'_> {
+impl<B: FdtBuffer> FdtPropMutIter<'_, B> {
     /// Returns the next mutable property.
     ///
     /// # Panics
     ///
     /// Panics if the underlying device tree data is invalid.
-    pub fn next(&mut self) -> Option<FdtPropertyMut<'_>> {
+    pub fn next(&mut self) -> Option<FdtPropertyMut<'_, B>> {
         let fdt = self.data.as_read_only();
         let parsed = self.inner.next(fdt)?;
         Some(FdtPropertyMut {
@@ -239,7 +240,7 @@ impl FdtPropMutIter<'_> {
             value_offset: parsed.value_offset,
             len: parsed.len,
             nameoff: parsed.nameoff,
-            data: self.data.reborrow(),
+            data: self.data,
         })
     }
 }

@@ -11,34 +11,37 @@
 //! This module provides the `FdtMut` struct, which is the entry point for
 //! modifying an FDT blob without converting to an intermediate representation.
 
+mod buffer;
 mod node;
 mod property;
 
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ptr;
 
-pub use self::node::FdtNodeMut;
-pub use self::property::FdtPropertyMut;
+pub use buffer::FdtBuffer;
+pub use node::FdtNodeMut;
+pub use property::FdtPropertyMut;
+
 use crate::error::FdtParseError;
 use crate::fdt::{Fdt, FdtHeader};
 
 /// A mutable flattened device tree.
-pub struct FdtMut<'a> {
-    pub(crate) data: &'a mut [u8],
+pub struct FdtMut<B> {
+    pub(crate) data: B,
 }
 
-impl<'a> FdtMut<'a> {
-    /// Creates a new mutable FDT from a byte slice.
+impl<B: FdtBuffer> FdtMut<B> {
+    /// Creates a new mutable FDT from a buffer.
     ///
     /// # Errors
     ///
     /// Returns an [`FdtParseError`] if the data is not a valid device tree.
-    pub fn new(data: &'a mut [u8]) -> Result<Self, FdtParseError> {
-        Fdt::new(&*data)?;
+    pub fn new(data: B) -> Result<Self, FdtParseError> {
+        Fdt::new(data.as_ref())?;
         Ok(Self { data })
     }
 
-    /// Creates a new `FdtMut` from the given byte slice without validation.
+    /// Creates a new `FdtMut` from the given buffer without validation.
     ///
     /// # Safety
     ///
@@ -46,10 +49,63 @@ impl<'a> FdtMut<'a> {
     /// Tree (FDT) blob. If the blob is invalid, methods on `Fdt` and
     /// related types may panic.
     #[must_use]
-    pub fn new_unchecked(data: &'a mut [u8]) -> Self {
+    pub fn new_unchecked(data: B) -> Self {
         Self { data }
     }
 
+    /// Returns the data of this FDT as a mutable slice.
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        self.data.as_mut()
+    }
+
+    /// Returns a read-only view of this FDT.
+    #[must_use]
+    pub fn as_read_only(&self) -> Fdt<'_> {
+        Fdt {
+            data: self.data.as_ref(),
+        }
+    }
+
+    /// Returns the root node of the device tree.
+    pub fn root_mut(&mut self) -> FdtNodeMut<'_, B> {
+        let root = self.as_read_only().root();
+
+        FdtNodeMut {
+            offset: root.offset,
+            parent_address_space: root.parent_address_space,
+            data: self,
+        }
+    }
+
+    /// Finds a node by its path.
+    ///
+    /// For more details, refer to [`Fdt::find_node`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    /// use dtoolkit::{Node, Property};
+    ///
+    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::new(&mut dtb[..]).unwrap();
+    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
+    /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
+    /// node.property_mut("prop").unwrap().set_value(b"foo\0");
+    /// assert_eq!(node.property("prop").unwrap().value(), b"foo\0");
+    /// ```
+    pub fn find_node_mut(&mut self, path: &str) -> Option<FdtNodeMut<'_, B>> {
+        let node = self.as_read_only().find_node(path)?;
+
+        Some(FdtNodeMut {
+            offset: node.offset,
+            parent_address_space: node.parent_address_space,
+            data: self,
+        })
+    }
+}
+
+impl FdtMut<&mut [u8]> {
     /// Creates a new `FdtMut` from the given pointer without validation.
     ///
     /// # Safety
@@ -117,80 +173,28 @@ impl<'a> FdtMut<'a> {
             Ok(Self::from_raw_unchecked(data))
         }
     }
-
-    /// Returns the data of this FDT as a mutable slice.
-    pub fn data_mut(&mut self) -> &mut [u8] {
-        self.data
-    }
-
-    /// Returns a read-only view of this FDT.
-    #[must_use]
-    pub fn as_read_only(&self) -> Fdt<'_> {
-        Fdt { data: self.data }
-    }
-
-    /// Returns the root node of the device tree.
-    pub fn root_mut(&mut self) -> FdtNodeMut<'_> {
-        let root = self.as_read_only().root();
-
-        FdtNodeMut {
-            offset: root.offset,
-            parent_address_space: root.parent_address_space,
-            data: self.reborrow(),
-        }
-    }
-
-    /// Finds a node by its path.
-    ///
-    /// For more details, refer to [`Fdt::find_node`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt_mut::FdtMut;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(&mut dtb).unwrap();
-    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
-    /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
-    /// node.property_mut("prop").unwrap().set_value(b"foo\0");
-    /// assert_eq!(node.property("prop").unwrap().value(), b"foo\0");
-    /// ```
-    pub fn find_node_mut(&mut self, path: &str) -> Option<FdtNodeMut<'_>> {
-        let node = self.as_read_only().find_node(path)?;
-
-        Some(FdtNodeMut {
-            offset: node.offset,
-            parent_address_space: node.parent_address_space,
-            data: self.reborrow(),
-        })
-    }
-
-    fn reborrow(&mut self) -> FdtMut<'_> {
-        FdtMut { data: self.data }
-    }
 }
 
-impl Debug for FdtMut<'_> {
+impl<B: FdtBuffer> Debug for FdtMut<B> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let slice = self.data.as_ref();
         write!(
             f,
             "FdtMut {{ data: {} bytes at {:?} }}",
-            self.data.len(),
-            self.data.as_ptr()
+            slice.len(),
+            slice.as_ptr()
         )
     }
 }
 
-impl Display for FdtMut<'_> {
+impl<B: FdtBuffer> Display for FdtMut<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.as_read_only())
     }
 }
 
-impl<'a> From<FdtMut<'a>> for Fdt<'a> {
-    fn from(fdt: FdtMut<'a>) -> Self {
+impl<'a> From<FdtMut<&'a mut [u8]>> for Fdt<'a> {
+    fn from(fdt: FdtMut<&'a mut [u8]>) -> Self {
         Self { data: fdt.data }
     }
 }
