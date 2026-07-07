@@ -23,6 +23,7 @@ use core::fmt::Display;
 pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
 pub use property::DeviceTreeProperty;
 
+use crate::Node;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 
@@ -87,6 +88,40 @@ impl DeviceTree {
             root,
             memory_reservations,
         }
+    }
+
+    /// Finds a node by its path and returns a reference to it.
+    ///
+    /// # Performance
+    ///
+    /// This method traverses the device tree, but since child lookup is a
+    /// constant-time operation, performance is linear in the number of path
+    /// segments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::model::{DeviceTree, DeviceTreeNode};
+    ///
+    /// let mut tree = DeviceTree::new();
+    /// tree.root.add_child(DeviceTreeNode::new("child").unwrap());
+    /// let child = tree.find_node("/child").unwrap();
+    /// assert_eq!(child.name(), "child");
+    /// ```
+    #[must_use]
+    pub fn find_node(&self, path: &str) -> Option<&DeviceTreeNode> {
+        if !path.starts_with('/') {
+            return None;
+        }
+        let mut current_node = &self.root;
+        if path == "/" {
+            return Some(current_node);
+        }
+        for component in path.split('/').filter(|s| !s.is_empty()) {
+            current_node = current_node.child(component)?;
+        }
+        Some(current_node)
     }
 
     /// Finds a node by its path and returns a mutable reference to it.
