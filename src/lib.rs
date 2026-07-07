@@ -388,7 +388,7 @@ pub trait Property: Sized {
 /// An integer value split into several big-endian u32 parts.
 ///
 /// This is generally used in prop-encoded-array properties.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
 
 /// Trait for converting cells to integers.

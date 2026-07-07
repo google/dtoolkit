@@ -13,7 +13,7 @@ use crate::error::StandardError;
 use crate::{Cells, ToCellInt};
 
 /// The value of a `reg` property.
-#[derive(Clone, Copy, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Reg<'a> {
     /// The address of the device within the address space of the parent bus.
     pub address: Cells<'a>,

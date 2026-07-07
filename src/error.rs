@@ -14,7 +14,7 @@ use alloc::string::String;
 use thiserror::Error;
 
 /// An error that can occur when accessing a standard node or property.
-#[derive(Copy, Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 pub enum StandardError {
     /// There was an error when converting the property value.
     #[error("error occurred when converting the property value: {0}")]
@@ -41,7 +41,7 @@ pub enum StandardError {
 }
 
 /// An error that can occur when parsing a device tree.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
 #[error("{kind} at offset {offset}")]
 pub struct FdtParseError {
@@ -57,7 +57,7 @@ impl FdtParseError {
 }
 
 /// The kind of an error that can occur when parsing a device tree.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
 pub enum FdtErrorKind {
     /// The magic number of the device tree is invalid.
@@ -97,7 +97,7 @@ pub enum FdtErrorKind {
 }
 
 /// An error that can occur when parsing a property.
-#[derive(Debug, Clone, Copy, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
 pub enum PropertyError {
     /// The property's value has an invalid length for the requested conversion.
@@ -120,7 +120,7 @@ pub enum PropertyError {
 }
 
 /// An error that can occur when building or modifying a device tree model.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
 #[cfg(feature = "write")]
 pub enum ModelError {
@@ -133,7 +133,7 @@ pub enum ModelError {
 }
 
 /// An error that can occur when mutating a device tree.
-#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]
 pub enum FdtMutError {
     /// Shifting data is required, but not supported.

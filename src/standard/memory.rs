@@ -41,7 +41,7 @@ impl<'a> Fdt<'a> {
 }
 
 /// Typed wrapper for a `/memory` node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Memory<N> {
     node: N,
 }
@@ -90,7 +90,7 @@ impl<N: Node> Memory<N> {
 }
 
 /// The value of an `initial-mapped-area` property.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct InitialMappedArea {
     /// The effective address.
     pub effective_address: u64,
@@ -120,7 +120,7 @@ impl InitialMappedArea {
 }
 
 /// Typed wrapper for a `/reserved-memory/*` node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ReservedMemory<N> {
     node: N,
 }

@@ -13,7 +13,7 @@ use crate::error::StandardError;
 use crate::{Cells, ToCellInt};
 
 /// One of the values of a `ranges` property.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Range<'a> {
     /// The address in address space of the child bus.
     pub child_bus_address: Cells<'a>,
