@@ -31,9 +31,16 @@ pub struct FdtPropertyMut<'a, B: FdtBuffer> {
 impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// Sets the value of the property.
     ///
+    /// # Performance
+    ///
+    /// If the new value is too big to fit into available space, this results in
+    /// growing the buffer and shifting the data placed after the property. This
+    /// requires time linear in the buffer size.
+    ///
     /// # Errors
     ///
-    /// Returns an [`FdtMutError`] if shifting data fails.
+    /// Returns an [`FdtMutError::Resize`] if growing the buffer is required and
+    /// it fails.
     ///
     /// # Panics
     ///
@@ -60,7 +67,20 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
         let old_padded = Fdt::align_tag_offset(self.len);
         let new_padded = Fdt::align_tag_offset(new_value.len());
 
-        self.ensure_new_length_fits(old_padded, new_padded)?;
+        if new_padded > old_padded {
+            let needed_bytes = new_padded - old_padded;
+            let available_nops =
+                self.count_available_nops(self.value_offset + old_padded, needed_bytes);
+
+            if available_nops < needed_bytes {
+                let shift_amount = needed_bytes - available_nops;
+                let shift_start = self.value_offset + old_padded + available_nops;
+
+                self.data
+                    .shift_dt_struct(shift_start, shift_amount)
+                    .map_err(FdtMutError::Resize)?;
+            }
+        }
 
         // Update the length in the FDT property header
         let (len_bytes, _) = <big_endian::U32>::mut_from_prefix(
@@ -83,37 +103,28 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
             self.data.data_mut()[self.value_offset + i] = 0;
         }
 
-        self.pad_with_nops(old_padded, new_padded);
+        if new_padded < old_padded {
+            self.pad_with_nops(old_padded, new_padded);
+        }
 
         self.len = new_value.len();
 
         Ok(())
     }
 
-    fn ensure_new_length_fits(
-        &mut self,
-        old_padded: usize,
-        new_padded: usize,
-    ) -> Result<(), FdtMutError> {
-        if new_padded > old_padded {
-            let needed_bytes = new_padded - old_padded;
-
-            let mut offset = self.value_offset + old_padded;
-            for _ in 0..(needed_bytes / FDT_TAGSIZE) {
-                if offset + FDT_TAGSIZE > self.data.data_mut().len() {
-                    return Err(FdtMutError::ShiftingRequired);
-                }
-
-                let tag_bytes = &self.data.data_mut()[offset..offset + FDT_TAGSIZE];
-                if tag_bytes != FDT_NOP.to_be_bytes() {
-                    return Err(FdtMutError::ShiftingRequired);
-                }
-
+    fn count_available_nops(&self, start_offset: usize, max_needed: usize) -> usize {
+        let mut offset = start_offset;
+        let mut count = 0;
+        let fdt = self.data.as_read_only();
+        while count < max_needed {
+            if let Ok(crate::fdt::FdtToken::Nop) = fdt.read_token(offset) {
+                count += FDT_TAGSIZE;
                 offset += FDT_TAGSIZE;
+            } else {
+                break;
             }
         }
-
-        Ok(())
+        count
     }
 
     fn pad_with_nops(&mut self, old_padded: usize, new_padded: usize) {

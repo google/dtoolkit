@@ -159,10 +159,10 @@ pub enum BufferError {
 }
 
 /// An error that can occur when mutating a device tree.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
 pub enum FdtMutError {
-    /// Shifting data is required, but not supported.
-    #[error("shifting data is required, but not supported")]
-    ShiftingRequired,
+    /// Buffer resize failed.
+    #[error("buffer resize failed: {0}")]
+    Resize(#[from] BufferError),
 }
