@@ -358,13 +358,13 @@ fn round_trip_raw_unchecked() {
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_mut() {
-    round_trip_impl(|dtb| FdtMut::new(dtb).unwrap().into());
+    round_trip_impl(|dtb| FdtMut::from_slice(dtb).unwrap().into());
 }
 
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_unchecked_mut() {
-    round_trip_impl(|dtb| FdtMut::new_unchecked(dtb).into());
+    round_trip_impl(|dtb| FdtMut::from_slice_unchecked(dtb).into());
 }
 
 #[test]

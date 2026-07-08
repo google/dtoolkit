@@ -16,7 +16,7 @@ fn modify_property_in_place() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = dtb.to_vec();
 
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
     let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
 
@@ -38,7 +38,7 @@ fn modify_property_shrink_and_grow() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = dtb.to_vec();
 
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
     let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
 
@@ -57,7 +57,7 @@ fn modify_property_shrink_and_grow() {
     assert_eq!(prop.as_str().unwrap(), "hi");
 
     // Now grow it back, since the space is now NOPs
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
     let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
 
@@ -71,7 +71,7 @@ fn modify_property_shrink_and_grow() {
     assert_eq!(prop.as_str().unwrap(), "hello");
 
     // Growing beyond the original space should fail because there are no NOPs
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
     let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
 
@@ -85,7 +85,7 @@ fn remove_property_via_handle() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = dtb.to_vec();
 
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
     let prop_mut = node_mut.property_mut("str-prop").unwrap();
     prop_mut.remove();
@@ -102,7 +102,7 @@ fn remove_property_via_node() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = dtb.to_vec();
 
-    let mut fdt_mut = FdtMut::new(&mut data[..]).unwrap();
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
     let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
 
     assert!(node_mut.remove_property("str-prop"));
