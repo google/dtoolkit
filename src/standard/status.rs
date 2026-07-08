@@ -19,7 +19,7 @@ pub enum Status {
     Okay,
     /// The device is not currently operational, but might become so.
     Disabled,
-    /// The device is operational but shouln't be used.
+    /// The device is operational but shouldn't be used.
     Reserved,
     /// The device is not operational.
     Fail,
@@ -32,7 +32,7 @@ impl Status {
     fn as_str(self) -> &'static str {
         match self {
             Status::Okay => "okay",
-            Status::Disabled => "disadbled",
+            Status::Disabled => "disabled",
             Status::Reserved => "reserved",
             Status::Fail => "fail",
             Status::FailSss => "fail-sss",
@@ -52,7 +52,7 @@ impl FromStr for Status {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "okay" => Ok(Self::Okay),
-            "disadbled" => Ok(Self::Disabled),
+            "disabled" => Ok(Self::Disabled),
             "reserved" => Ok(Self::Reserved),
             "fail" => Ok(Self::Fail),
             "fail-sss" => Ok(Self::FailSss),
