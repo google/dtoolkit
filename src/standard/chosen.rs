@@ -23,7 +23,7 @@ impl<'a> Fdt<'a> {
 }
 
 /// Typed wrapper for a `/chosen` node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Chosen<N> {
     node: N,
 }

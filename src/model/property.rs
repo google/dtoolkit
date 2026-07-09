@@ -17,7 +17,7 @@ use crate::values::{FdtStringListIterator, PropEncodedArrayIterator};
 use crate::{Cells, Property};
 
 /// A mutable, in-memory representation of a device tree property.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DeviceTreeProperty {
     name: String,
     value: Vec<u8>,

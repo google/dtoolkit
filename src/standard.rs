@@ -225,7 +225,7 @@ impl<'a> FdtNode<'a> {
 }
 
 /// The `#address-cells` and `#size-cells` properties of a node.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AddressSpaceProperties {
     /// The `#address-cells` property.
     pub address_cells: u32,

@@ -12,7 +12,7 @@ use core::str::FromStr;
 use crate::error::StandardError;
 
 /// The value of a `status` property.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Status {
     /// The device is operational.
     #[default]

@@ -30,7 +30,7 @@ impl<'a> Fdt<'a> {
 }
 
 /// Typed wrapper for a `/cpus` node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cpus<N> {
     node: N,
 }
@@ -63,7 +63,7 @@ impl<N: Node> Cpus<N> {
 }
 
 /// Typed wrapper for a `/cpus/cpu` node.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cpu<N> {
     node: N,
 }

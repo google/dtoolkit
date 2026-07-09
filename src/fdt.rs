@@ -44,7 +44,7 @@ pub(crate) const FDT_PROP: u32 = 0x3;
 pub(crate) const FDT_NOP: u32 = 0x4;
 
 #[repr(C, packed)]
-#[derive(Debug, Copy, Clone, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
 pub(crate) struct FdtHeader {
     /// Magic number of the device tree.
     pub(crate) magic: big_endian::U32,
@@ -128,7 +128,7 @@ impl Debug for Fdt<'_> {
 }
 
 /// A token in the device tree structure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FdtToken {
     BeginNode,
     EndNode,
