@@ -18,7 +18,7 @@ mod property;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ptr;
 
-pub use buffer::FdtBuffer;
+pub use buffer::{FdtBuffer, SliceBuffer};
 pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
 
@@ -46,7 +46,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// # Safety
     ///
     /// The caller must ensure that `data` contains a valid Flattened Device
-    /// Tree (FDT) blob. If the blob is invalid, methods on `Fdt` and
+    /// Tree (FDT) blob. If the blob is invalid, methods on `FdtMut` and
     /// related types may panic.
     #[must_use]
     pub fn new_unchecked(data: B) -> Self {
@@ -88,7 +88,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(&mut dtb[..]).unwrap();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
@@ -105,7 +105,47 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 }
 
-impl FdtMut<&mut [u8]> {
+impl<'a> FdtMut<SliceBuffer<'a>> {
+    /// Creates a new `FdtMut` from a mutable byte slice by wrapping it in a
+    /// [`SliceBuffer`].
+    ///
+    /// Reads `totalsize` from the FDT header at the start of `slice` to
+    /// determine the active size of the device tree, while using the
+    /// remaining capacity of `slice` (if any) for future expansion.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`FdtParseError`] if `slice` does not contain a valid device
+    /// tree.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
+    /// ```
+    pub fn from_slice(slice: &'a mut [u8]) -> Result<Self, FdtParseError> {
+        let buffer = SliceBuffer::new(slice)?;
+        Self::new(buffer)
+    }
+
+    /// Creates a new `FdtMut` from a mutable byte slice without validation.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `slice` contains a valid Flattened Device
+    /// Tree (FDT) blob. If the blob is invalid, methods on `FdtMut` and
+    /// related types may panic.
+    #[must_use]
+    pub fn from_slice_unchecked(slice: &'a mut [u8]) -> Self {
+        // SAFETY: The caller guarantees that the slice contains a valid device tree.
+        let buffer = SliceBuffer::new_unchecked(slice);
+        Self::new_unchecked(buffer)
+    }
+
     /// Creates a new `FdtMut` from the given pointer without validation.
     ///
     /// # Safety
@@ -129,12 +169,12 @@ impl FdtMut<&mut [u8]> {
         // blob. The caller must ensure that the memory at `data` is valid for
         // at least `size_of::<FdtHeader>()` bytes.
         let header = unsafe { ptr::read_unaligned(data.cast::<FdtHeader>()) };
-        let size = header.totalsize();
+        let size = header.totalsize() as usize;
         // SAFETY: The caller must ensure that `data` is a valid pointer to a Flattened
         // Device Tree (FDT) blob. The caller must ensure the `data` spans
         // `totalsize` bytes (as specified in the FDT header).
-        let slice = unsafe { core::slice::from_raw_parts_mut(data, size as usize) };
-        Self::new_unchecked(slice)
+        let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
+        Self::from_slice_unchecked(slice)
     }
 
     /// Creates a new `FdtMut` from the given pointer.
@@ -193,8 +233,10 @@ impl<B: FdtBuffer> Display for FdtMut<B> {
     }
 }
 
-impl<'a> From<FdtMut<&'a mut [u8]>> for Fdt<'a> {
-    fn from(fdt: FdtMut<&'a mut [u8]>) -> Self {
-        Self { data: fdt.data }
+impl<'a> From<FdtMut<SliceBuffer<'a>>> for Fdt<'a> {
+    fn from(fdt: FdtMut<SliceBuffer<'a>>) -> Self {
+        Self {
+            data: fdt.data.slice,
+        }
     }
 }

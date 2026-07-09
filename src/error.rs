@@ -132,6 +132,32 @@ pub enum ModelError {
     InvalidPropertyName(String),
 }
 
+/// An error that can occur when resizing a buffer.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum BufferError {
+    /// The requested size exceeds the capacity of the buffer.
+    #[error("requested size {requested} exceeds capacity {capacity}")]
+    OutOfSpace {
+        /// The requested size.
+        requested: usize,
+        /// The capacity of the buffer.
+        capacity: usize,
+    },
+
+    /// The requested size exceeds `u32::MAX`.
+    #[error("requested size {requested} exceeds u32::MAX")]
+    FdtLimitExceeded {
+        /// The requested size.
+        requested: usize,
+    },
+
+    /// A memory allocation error occurred when reserving buffer capacity.
+    #[cfg(feature = "alloc")]
+    #[error("memory allocation failed when resizing buffer: {0}")]
+    Alloc(#[from] alloc::collections::TryReserveError),
+}
+
 /// An error that can occur when mutating a device tree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 #[non_exhaustive]

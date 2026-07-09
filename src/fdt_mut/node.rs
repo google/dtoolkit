@@ -60,7 +60,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(&mut dtb[..]).unwrap();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert!(node.property("prop").is_some());
     /// assert!(node.remove_property("prop"));
