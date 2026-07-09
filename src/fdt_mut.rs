@@ -21,8 +21,9 @@ use core::ptr;
 pub use buffer::{FdtBuffer, SliceBuffer};
 pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
+use zerocopy::FromBytes;
 
-use crate::error::FdtParseError;
+use crate::error::{BufferError, FdtParseError};
 use crate::fdt::{Fdt, FdtHeader};
 
 /// A mutable flattened device tree.
@@ -102,6 +103,50 @@ impl<B: FdtBuffer> FdtMut<B> {
             parent_address_space: node.parent_address_space,
             data: self,
         })
+    }
+
+    /// Shifts data starting from `offset` by `amount` bytes to make space.
+    ///
+    /// This method assumes that `offset` is within the device tree structure
+    /// block. It grows the structure block by `amount` and shifts the
+    /// offset of the strings block, which comes after the structure block.
+    fn shift_dt_struct(&mut self, offset: usize, amount: usize) -> Result<(), BufferError> {
+        debug_assert!(
+            {
+                let header = self.as_read_only().header();
+                let struct_start = header.off_dt_struct() as usize;
+                let struct_end = struct_start + header.size_dt_struct() as usize;
+                (struct_start..=struct_end).contains(&offset)
+            },
+            "offset must be within the structure block"
+        );
+
+        let old_size = self.data.as_ref().len();
+        let new_size = old_size + amount;
+
+        self.data.try_resize(new_size)?;
+        self.data
+            .as_mut()
+            .copy_within(offset..old_size, offset + amount);
+
+        let header = self.header_mut();
+
+        let old_totalsize = header.totalsize.get();
+        let old_size_dt_struct = header.size_dt_struct.get();
+        let old_off_dt_strings = header.off_dt_strings.get();
+
+        let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
+        header.totalsize.set(old_totalsize + amount_u32);
+        header.size_dt_struct.set(old_size_dt_struct + amount_u32);
+        header.off_dt_strings.set(old_off_dt_strings + amount_u32);
+
+        Ok(())
+    }
+
+    fn header_mut(&mut self) -> &mut FdtHeader {
+        let (header, _) =
+            FdtHeader::mut_from_prefix(self.data.as_mut()).expect("Fdt should be valid");
+        header
     }
 }
 

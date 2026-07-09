@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::error::FdtMutError;
+use dtoolkit::error::{BufferError, FdtMutError};
 use dtoolkit::fdt::Fdt;
-use dtoolkit::fdt_mut::FdtMut;
+use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
 use dtoolkit::{Node, Property};
 
 #[test]
@@ -77,7 +77,7 @@ fn modify_property_shrink_and_grow() {
 
     let long_val = b"this is too long\0";
     let err = prop_mut.set_value(long_val).unwrap_err();
-    assert_eq!(err, FdtMutError::ShiftingRequired);
+    assert!(matches!(err, FdtMutError::Resize(_)));
 }
 
 #[test]
@@ -151,4 +151,107 @@ fn modify_property_arrayvec_owned() {
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
     assert_eq!(prop.as_str().unwrap(), "hello there");
+}
+
+#[test]
+fn modify_property_grow_slice() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let (_fdt_mut, result) = modify_property_grow(SliceBuffer::new(data.as_mut_slice()).unwrap());
+    let err = result.unwrap_err();
+
+    assert!(matches!(
+        err,
+        FdtMutError::Resize(BufferError::OutOfSpace { .. })
+    ));
+}
+
+#[test]
+fn modify_property_grow_slice_with_capacity() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = [0u8; 2048];
+    data[..dtb.len()].copy_from_slice(dtb);
+
+    let (fdt_mut, result) = modify_property_grow(SliceBuffer::new(&mut data).unwrap());
+    result.unwrap();
+
+    let prop = fdt_mut
+        .as_read_only()
+        .find_node("/test-props")
+        .unwrap()
+        .property("str-prop")
+        .unwrap();
+    assert_eq!(prop.value(), TEST_GROW_VAL);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn modify_property_grow_vec() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = dtb.to_vec();
+
+    let (fdt_mut, result) = modify_property_grow(data);
+    result.unwrap();
+
+    let prop = fdt_mut
+        .as_read_only()
+        .find_node("/test-props")
+        .unwrap()
+        .property("str-prop")
+        .unwrap();
+    assert_eq!(prop.value(), TEST_GROW_VAL);
+}
+
+#[cfg(feature = "arrayvec07")]
+#[test]
+fn modify_property_grow_arrayvec_success() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = arrayvec::ArrayVec::<u8, 2048>::new();
+    data.try_extend_from_slice(dtb).unwrap();
+
+    let (fdt_mut, result) = modify_property_grow(data);
+    result.unwrap();
+
+    let prop = fdt_mut
+        .as_read_only()
+        .find_node("/test-props")
+        .unwrap()
+        .property("str-prop")
+        .unwrap();
+    assert_eq!(prop.value(), TEST_GROW_VAL);
+}
+
+#[cfg(feature = "arrayvec07")]
+#[test]
+fn modify_property_grow_arrayvec_failure() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = arrayvec::ArrayVec::<u8, 650>::new();
+    data.try_extend_from_slice(dtb).unwrap();
+
+    let (_fdt_mut, result) = modify_property_grow(data);
+    let err = result.unwrap_err();
+
+    assert!(matches!(
+        err,
+        FdtMutError::Resize(BufferError::OutOfSpace {
+            requested: 683,
+            capacity: 650
+        })
+    ));
+}
+
+const TEST_GROW_VAL: &[u8] = b"this is a much longer string than the original one\0";
+
+fn modify_property_grow<B: FdtBuffer>(data: B) -> (FdtMut<B>, Result<(), FdtMutError>) {
+    let mut fdt_mut = FdtMut::new(data).expect("FDT should be valid");
+    let mut node_mut = fdt_mut
+        .find_node_mut("/test-props")
+        .expect("/test-props should exist");
+    let mut prop_mut = node_mut
+        .property_mut("str-prop")
+        .expect("str-prop should exist");
+
+    let result = prop_mut.set_value(TEST_GROW_VAL);
+    (fdt_mut, result)
 }
