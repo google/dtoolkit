@@ -77,15 +77,13 @@ impl FdtProperty<'_> {
 
         if self.value.len().is_multiple_of(4) {
             write!(f, " = <")?;
-            for (i, chunk) in self.value.chunks_exact(4).enumerate() {
+            let (chunks, remainder) = self.value.as_chunks::<4>();
+            debug_assert!(remainder.is_empty());
+            for (i, chunk) in chunks.iter().enumerate() {
                 if i > 0 {
                     write!(f, " ")?;
                 }
-                let val = u32::from_be_bytes(
-                    chunk
-                        .try_into()
-                        .expect("u32::from_be_bytes() should always succeed with 4 bytes"),
-                );
+                let val = u32::from_be_bytes(*chunk);
                 write!(f, "0x{val:02x}")?;
             }
             writeln!(f, ">;")?;

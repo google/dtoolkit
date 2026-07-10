@@ -346,12 +346,14 @@ fn round_trip_unchecked() {
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_raw() {
+    // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { Fdt::from_raw(dtb.as_ptr()).unwrap() });
 }
 
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_raw_unchecked() {
+    // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { Fdt::from_raw_unchecked(dtb.as_ptr()) });
 }
 
@@ -370,23 +372,25 @@ fn round_trip_unchecked_mut() {
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_raw_mut() {
+    // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { FdtMut::from_raw(dtb.as_mut_ptr()).unwrap().into() });
 }
 
 #[test]
 #[cfg(feature = "write")]
 fn round_trip_raw_unchecked_mut() {
+    // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { FdtMut::from_raw_unchecked(dtb.as_mut_ptr()).into() });
 }
 
 #[cfg(feature = "write")]
 fn round_trip_impl(construct_fdt: impl Fn(&mut [u8]) -> Fdt) {
     for (dtb, _dts, name) in ALL_DT_FILES {
-        let mut dtb = dtb.to_vec();
-        let fdt = construct_fdt(&mut *dtb);
+        let mut dtb_vec = dtb.to_vec();
+        let fdt = construct_fdt(&mut dtb_vec);
         let ir = DeviceTree::from_fdt(&fdt);
         let new_dtb = ir.to_dtb();
-        assert_eq!(dtb.to_vec(), new_dtb, "Mismatch for {name}");
+        assert_eq!(dtb, &new_dtb, "Mismatch for {name}");
     }
 }
 
