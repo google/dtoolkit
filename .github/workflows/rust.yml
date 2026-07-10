@@ -102,7 +102,7 @@ jobs:
           save-if: 'false'
 
       - name: Run clippy
-        run: cargo clippy --no-deps --all-targets -- -D warnings
+        run: cargo clippy --no-deps --all-features --all-targets -- -D warnings
 
   rustfmt:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
