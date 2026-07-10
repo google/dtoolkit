@@ -21,10 +21,10 @@ use core::ptr;
 pub use buffer::{FdtBuffer, SliceBuffer};
 pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, big_endian};
 
 use crate::error::{BufferError, FdtParseError};
-use crate::fdt::{Fdt, FdtHeader};
+use crate::fdt::{FDT_TAGSIZE, Fdt, FdtHeader, FdtToken};
 
 /// A mutable flattened device tree.
 pub struct FdtMut<B> {
@@ -141,6 +141,102 @@ impl<B: FdtBuffer> FdtMut<B> {
         header.off_dt_strings.set(old_off_dt_strings + amount_u32);
 
         Ok(())
+    }
+
+    /// Compacts the device tree by removing all NOP tags.
+    ///
+    /// This method shifts the structure block to overwrite NOP tags, shifts the
+    /// strings block to start immediately after the compacted structure block,
+    /// and truncates the underlying buffer to the new total size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `FdtMut` was constructed using [`Self::new_unchecked`] but
+    /// contains invalid FDT blob.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../tests/dtb/test_props.dtb").to_vec();
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
+    /// let initial_size = fdt.as_read_only().data().len();
+    ///
+    /// // Removing a property replaces its data with NOP tags.
+    /// let mut node = fdt.find_node_mut("/test-props").unwrap();
+    /// node.remove_property("str-prop");
+    /// assert_eq!(fdt.as_read_only().data().len(), initial_size);
+    ///
+    /// // Compacting the tree removes the NOP tags and shrinks the buffer.
+    /// fdt.compact();
+    /// assert!(fdt.as_read_only().data().len() < initial_size);
+    /// ```
+    pub fn compact(&mut self) {
+        let header = self.as_read_only().header();
+        let off_dt_struct = header.off_dt_struct() as usize;
+        let size_dt_struct = header.size_dt_struct() as usize;
+        let off_dt_strings = header.off_dt_strings() as usize;
+        let size_dt_strings = header.size_dt_strings() as usize;
+
+        let mut read_offset = off_dt_struct;
+        let mut write_offset = off_dt_struct;
+        let struct_end = off_dt_struct + size_dt_struct;
+
+        while read_offset < struct_end {
+            let token = self
+                .as_read_only()
+                .read_token(read_offset)
+                .expect("valid FDT token");
+            let chunk_len = token_chunk_len(self.as_read_only(), read_offset, token);
+
+            if token != FdtToken::Nop {
+                if write_offset != read_offset {
+                    self.data
+                        .as_mut()
+                        .copy_within(read_offset..read_offset + chunk_len, write_offset);
+                }
+                write_offset += chunk_len;
+            }
+
+            read_offset += chunk_len;
+
+            if token == FdtToken::End {
+                break;
+            }
+        }
+
+        let new_size_dt_struct = write_offset - off_dt_struct;
+        let bytes_saved = size_dt_struct - new_size_dt_struct;
+
+        if bytes_saved == 0 {
+            return;
+        }
+
+        // Shift strings block left
+        let strings_start = off_dt_strings;
+        let strings_end = strings_start + size_dt_strings;
+
+        self.data
+            .as_mut()
+            .copy_within(strings_start..strings_end, write_offset);
+
+        // Update header
+        let header = self.header_mut();
+        header
+            .size_dt_struct
+            .set(u32::try_from(new_size_dt_struct).expect("struct size should fit in u32"));
+        header
+            .off_dt_strings
+            .set(u32::try_from(write_offset).expect("strings offset should fit in u32"));
+
+        let old_totalsize = header.totalsize.get();
+        let new_totalsize =
+            old_totalsize - u32::try_from(bytes_saved).expect("bytes saved should fit in u32");
+        header.totalsize.set(new_totalsize);
+
+        // Truncate buffer
+        self.data.truncate(new_totalsize as usize);
     }
 
     fn header_mut(&mut self) -> &mut FdtHeader {
@@ -282,6 +378,27 @@ impl<'a> From<FdtMut<SliceBuffer<'a>>> for Fdt<'a> {
     fn from(fdt: FdtMut<SliceBuffer<'a>>) -> Self {
         Self {
             data: fdt.data.slice,
+        }
+    }
+}
+
+fn token_chunk_len(fdt: Fdt<'_>, offset: usize, token: FdtToken) -> usize {
+    match token {
+        FdtToken::Nop | FdtToken::EndNode | FdtToken::End => FDT_TAGSIZE,
+        FdtToken::BeginNode => {
+            let name_start = offset + FDT_TAGSIZE;
+            let name_end = fdt.find_string_end(name_start).expect("valid node name");
+            Fdt::align_tag_offset(name_end) - offset
+        }
+        FdtToken::Prop => {
+            let (val_len_bytes, _) = big_endian::U32::ref_from_prefix(
+                fdt.data_at_offset(offset + FDT_TAGSIZE)
+                    .expect("valid property length offset"),
+            )
+            .expect("valid property length");
+            let val_len = val_len_bytes.get() as usize;
+            let prop_end = offset + 3 * FDT_TAGSIZE + val_len;
+            Fdt::align_tag_offset(prop_end) - offset
         }
     }
 }
