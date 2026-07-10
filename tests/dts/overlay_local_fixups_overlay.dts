@@ -1,0 +1,8 @@
+/dts-v1/;
+/plugin/;
+
+&{/} {
+    ovl_clk: dev@200 {
+        clocks = <&ovl_clk>;
+    };
+};

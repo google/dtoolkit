@@ -8,7 +8,7 @@
 
 //! Error types for the `dtoolkit` crate.
 
-#[cfg(feature = "write")]
+#[cfg(any(feature = "write", feature = "overlay"))]
 use alloc::string::String;
 
 use thiserror::Error;
@@ -165,4 +165,50 @@ pub enum FdtMutError {
     /// Buffer resize failed.
     #[error("buffer resize failed: {0}")]
     Resize(#[from] BufferError),
+}
+
+/// An error that can occur when inspecting or applying a device tree overlay.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
+#[cfg(feature = "overlay")]
+#[non_exhaustive]
+pub enum OverlayError {
+    /// An error occurred when parsing the device tree blob or header.
+    #[error("FDT parse error: {0}")]
+    Parse(#[from] FdtParseError),
+    /// An error occurred when accessing or converting a property value.
+    #[error("property conversion error: {0}")]
+    Property(#[from] PropertyError),
+    /// A fragment target property (`target` or `target-path`) is missing or
+    /// invalid.
+    #[error("fragment target is missing or invalid")]
+    InvalidFragmentTarget,
+    /// A phandle value overflowed 32-bit space during renumbering or collided
+    /// with a reserved value.
+    #[error(
+        "phandle value overflowed u32 space during renumbering or collided with reserved value"
+    )]
+    PhandleOverflow,
+    /// A location string in `/__fixups__` has an invalid format or offset.
+    #[error("invalid fixup location string")]
+    InvalidFixupLocation,
+    /// An external symbol referenced in `/__fixups__` could not be resolved in
+    /// the base tree.
+    #[error("unresolved symbol referenced in __fixups__: '{0}'")]
+    UnresolvedSymbol(String),
+    /// A target node referenced by a fragment could not be found in the base
+    /// tree.
+    #[error("target node not found in base tree: '{0}'")]
+    TargetNotFound(String),
+    /// A local fixup offset was out of bounds for the property value.
+    #[error("local fixup offset {offset} out of bounds for property '{prop}'")]
+    InvalidLocalFixup {
+        /// The property name.
+        prop: String,
+        /// The invalid byte offset.
+        offset: usize,
+    },
+    /// A model error occurred during overlay application.
+    #[cfg(feature = "write")]
+    #[error("model error: {0}")]
+    Model(#[from] ModelError),
 }

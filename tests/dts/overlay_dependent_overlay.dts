@@ -1,0 +1,13 @@
+/dts-v1/;
+/plugin/;
+
+&{/} {
+    soc {
+        new_node: new-node {
+        };
+    };
+};
+
+&new_node {
+    status = "okay";
+};

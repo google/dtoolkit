@@ -89,6 +89,8 @@ pub mod fdt_mut;
 pub mod memreserve;
 #[cfg(feature = "write")]
 pub mod model;
+#[cfg(feature = "overlay")]
+pub mod overlay;
 pub mod standard;
 mod util;
 mod validate;
