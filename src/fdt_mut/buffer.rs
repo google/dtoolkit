@@ -30,6 +30,8 @@ pub trait FdtBuffer: AsRef<[u8]> + AsMut<[u8]> {
     /// # Errors
     ///
     /// Returns a [`BufferError`] if the buffer cannot be resized to `new_len`.
+    /// This method is guaranteed to never fail if `new_len` is less than or
+    /// equal to the current length.
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError>;
 }
 
@@ -210,6 +212,9 @@ mod tests {
             })
         );
         assert_eq!(buf.as_ref().len(), 50);
+
+        buf.try_resize(45).unwrap();
+        assert_eq!(buf.as_ref().len(), 45);
     }
 
     #[cfg(feature = "alloc")]
@@ -220,6 +225,9 @@ mod tests {
         assert_eq!(vec.try_resize(15), Ok(()));
         assert_eq!(vec.len(), 15);
         assert_eq!(vec[10..15], [0, 0, 0, 0, 0]);
+
+        vec.try_resize(5).unwrap();
+        assert_eq!(vec.len(), 5);
     }
 
     #[cfg(feature = "arrayvec07")]
@@ -239,5 +247,8 @@ mod tests {
             })
         );
         assert_eq!(array.len(), 12); // Length should not change on failure
+
+        array.try_resize(5).unwrap();
+        assert_eq!(array.len(), 5);
     }
 }
