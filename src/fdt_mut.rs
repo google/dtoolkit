@@ -236,7 +236,9 @@ impl<B: FdtBuffer> FdtMut<B> {
         header.totalsize.set(new_totalsize);
 
         // Truncate buffer
-        self.data.truncate(new_totalsize as usize);
+        self.data
+            .try_resize(new_totalsize as usize)
+            .expect("shrinking is infallible");
     }
 
     fn header_mut(&mut self) -> &mut FdtHeader {

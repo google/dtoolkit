@@ -30,23 +30,14 @@ pub trait FdtBuffer: AsRef<[u8]> + AsMut<[u8]> {
     /// # Errors
     ///
     /// Returns a [`BufferError`] if the buffer cannot be resized to `new_len`.
+    /// This method is guaranteed to never fail if `new_len` is less than or
+    /// equal to the current length.
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError>;
-
-    /// Truncates the buffer to `new_len`.
-    ///
-    /// If `new_len` is less than the current length, the buffer is truncated.
-    /// If `new_len` is greater than or equal to the current length, this method
-    /// has no effect.
-    fn truncate(&mut self, new_len: usize);
 }
 
 impl<B: FdtBuffer + ?Sized> FdtBuffer for &mut B {
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         (**self).try_resize(new_len)
-    }
-
-    fn truncate(&mut self, new_len: usize) {
-        (**self).truncate(new_len);
     }
 }
 
@@ -131,18 +122,6 @@ impl<'a> TryFrom<&'a mut [u8]> for SliceBuffer<'a> {
 }
 
 impl FdtBuffer for SliceBuffer<'_> {
-    fn truncate(&mut self, new_len: usize) {
-        let current_len = self.as_ref().len();
-        let header = self.header_mut();
-
-        if new_len < current_len {
-            header.totalsize.set(
-                u32::try_from(new_len)
-                    .expect("if the old length fitted u32, a shorter must fit, too"),
-            );
-        }
-    }
-
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > self.slice.len() {
             return Err(BufferError::OutOfSpace {
@@ -166,10 +145,6 @@ impl FdtBuffer for SliceBuffer<'_> {
 
 #[cfg(feature = "alloc")]
 impl FdtBuffer for Vec<u8> {
-    fn truncate(&mut self, new_len: usize) {
-        self.truncate(new_len);
-    }
-
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > self.len() {
             let additional = new_len - self.len();
@@ -182,10 +157,6 @@ impl FdtBuffer for Vec<u8> {
 
 #[cfg(feature = "arrayvec07")]
 impl<const N: usize> FdtBuffer for ArrayVec<u8, N> {
-    fn truncate(&mut self, new_len: usize) {
-        self.truncate(new_len);
-    }
-
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > N {
             return Err(BufferError::OutOfSpace {
@@ -242,7 +213,7 @@ mod tests {
         );
         assert_eq!(buf.as_ref().len(), 50);
 
-        buf.truncate(45);
+        buf.try_resize(45).unwrap();
         assert_eq!(buf.as_ref().len(), 45);
     }
 
@@ -255,7 +226,7 @@ mod tests {
         assert_eq!(vec.len(), 15);
         assert_eq!(vec[10..15], [0, 0, 0, 0, 0]);
 
-        vec.truncate(5);
+        vec.try_resize(5).unwrap();
         assert_eq!(vec.len(), 5);
     }
 
@@ -277,7 +248,7 @@ mod tests {
         );
         assert_eq!(array.len(), 12); // Length should not change on failure
 
-        array.truncate(5);
+        array.try_resize(5).unwrap();
         assert_eq!(array.len(), 5);
     }
 }
