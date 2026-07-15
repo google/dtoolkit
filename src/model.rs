@@ -14,6 +14,8 @@
 //! flattened device tree blob.
 
 mod node;
+#[cfg(feature = "overlay")]
+pub mod overlay;
 mod property;
 mod writer;
 
