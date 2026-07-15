@@ -392,6 +392,36 @@ impl DeviceTreeNode {
         self.children.insert(child.name.clone(), child);
     }
 
+    /// Adds a child to this node, returning a reference to it.
+    ///
+    /// # Performance
+    ///
+    /// This is a constant-time operation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
+    /// use dtoolkit::{Node, Property};
+    ///
+    /// let mut node = DeviceTreeNode::new("my-node").unwrap();
+    /// let mut child = node.add_child_mut(DeviceTreeNode::new("child").unwrap());
+    /// child.add_property(DeviceTreeProperty::new("test", "value").unwrap());
+    /// assert_eq!(
+    ///     (&node)
+    ///         .child("child")
+    ///         .unwrap()
+    ///         .property("test")
+    ///         .unwrap()
+    ///         .value(),
+    ///     b"value"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn add_child_mut(&mut self, child: DeviceTreeNode) -> &mut DeviceTreeNode {
+        self.children.entry(child.name.clone()).or_insert(child)
+    }
+
     /// Removes a child from this node by its name.
     ///
     /// # Performance
