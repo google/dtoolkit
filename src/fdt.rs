@@ -337,6 +337,25 @@ impl<'a> Fdt<'a> {
         Ok(())
     }
 
+    pub(crate) fn skip_props(
+        self,
+        offset: usize,
+        check_strings: bool,
+    ) -> Result<usize, FdtParseError> {
+        let mut offset = offset;
+        loop {
+            let token = self.read_token(offset)?;
+            match token {
+                FdtToken::Prop => {
+                    let prop_offset = offset + FDT_TAGSIZE;
+                    offset = self.next_property_offset(prop_offset, check_strings)?;
+                }
+                FdtToken::Nop => offset += FDT_TAGSIZE,
+                _ => return Ok(offset),
+            }
+        }
+    }
+
     fn traverse_node(self, offset: usize, check_strings: bool) -> Result<usize, FdtParseError> {
         let mut offset = offset;
         let mut depth = 0;
@@ -362,6 +381,7 @@ impl<'a> Fdt<'a> {
                         }
                     }
                     offset = Self::align_tag_offset(end_offset);
+                    offset = self.skip_props(offset, check_strings)?;
                 }
                 FdtToken::EndNode => {
                     if depth == 0 {
@@ -378,8 +398,7 @@ impl<'a> Fdt<'a> {
                     }
                 }
                 FdtToken::Prop => {
-                    offset += FDT_TAGSIZE;
-                    offset = self.next_property_offset(offset, check_strings)?;
+                    return Err(FdtParseError::new(FdtErrorKind::BadToken(FDT_PROP), offset));
                 }
                 FdtToken::Nop => offset += FDT_TAGSIZE,
                 FdtToken::End => {

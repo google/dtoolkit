@@ -115,10 +115,12 @@ pub(crate) enum InnerPropIter {
 }
 
 impl InnerPropIter {
+    #[must_use]
     pub(crate) fn new(offset: usize) -> Self {
         Self::Start { offset }
     }
 
+    #[must_use]
     pub(crate) fn next<'a>(&mut self, fdt: Fdt<'a>) -> Option<ParsedProperty<'a>> {
         match self {
             Self::Start { offset } => {
@@ -126,50 +128,57 @@ impl InnerPropIter {
                 off += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
                 off = fdt.find_string_end(off).expect("Fdt should be valid");
                 off = Fdt::align_tag_offset(off);
+
+                let result = Self::find_property(fdt, &mut off);
                 *self = Self::Running { offset: off };
-                self.next(fdt)
+                result
             }
-            Self::Running { offset } => Self::next_property_impl(fdt, offset),
+            Self::Running { offset } => Self::next_property_parsed(fdt, offset),
         }
     }
 
-    pub(crate) fn next_property_impl<'a>(
-        fdt: Fdt<'a>,
-        offset: &mut usize,
-    ) -> Option<ParsedProperty<'a>> {
+    #[must_use]
+    fn next_property_parsed<'a>(fdt: Fdt<'a>, offset: &mut usize) -> Option<ParsedProperty<'a>> {
+        *offset = fdt
+            .next_property_offset(*offset + FDT_TAGSIZE, false)
+            .expect("Fdt should be valid");
+        Self::find_property(fdt, offset)
+    }
+
+    #[must_use]
+    fn find_property<'a>(fdt: Fdt<'a>, offset: &mut usize) -> Option<ParsedProperty<'a>> {
         loop {
             let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
-                FdtToken::Prop => {
-                    let prop_offset = *offset;
-                    let len = big_endian::U32::ref_from_prefix(&fdt.data[*offset + FDT_TAGSIZE..])
-                        .expect("Fdt should be valid")
-                        .0
-                        .get() as usize;
-                    let nameoff =
-                        big_endian::U32::ref_from_prefix(&fdt.data[*offset + 2 * FDT_TAGSIZE..])
-                            .expect("Fdt should be valid")
-                            .0
-                            .get() as usize;
-                    let value_offset = *offset + 3 * FDT_TAGSIZE;
-                    *offset = Fdt::align_tag_offset(value_offset + len);
-                    let name = fdt.string(nameoff).expect("Fdt should be valid");
-                    let value = fdt
-                        .data
-                        .get(value_offset..value_offset + len)
-                        .expect("Fdt should be valid");
-                    return Some(ParsedProperty {
-                        name,
-                        value,
-                        nameoff,
-                        prop_offset,
-                        value_offset,
-                        len,
-                    });
-                }
+                FdtToken::Prop => return Some(Self::parse_property(fdt, *offset)),
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
                 _ => return None,
             }
+        }
+    }
+
+    #[must_use]
+    fn parse_property(fdt: Fdt, offset: usize) -> ParsedProperty {
+        let (len, _) = big_endian::U32::ref_from_prefix(&fdt.data[offset + FDT_TAGSIZE..])
+            .expect("Fdt should be valid");
+        let len = len.get() as usize;
+        let (nameoff, _) = big_endian::U32::ref_from_prefix(&fdt.data[offset + 2 * FDT_TAGSIZE..])
+            .expect("Fdt should be valid");
+        let nameoff = nameoff.get() as usize;
+        let value_offset = offset + 3 * FDT_TAGSIZE;
+        let name = fdt.string(nameoff).expect("Fdt should be valid");
+        let value = fdt
+            .data
+            .get(value_offset..value_offset + len)
+            .expect("Fdt should be valid");
+
+        ParsedProperty {
+            name,
+            value,
+            nameoff,
+            prop_offset: offset,
+            value_offset,
+            len,
         }
     }
 }
