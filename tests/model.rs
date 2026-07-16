@@ -115,6 +115,33 @@ fn find_node_mut() {
 }
 
 #[test]
+fn find_node() {
+    let mut tree = DeviceTree::new();
+    tree.root.add_child(
+        DeviceTreeNode::builder("foo")
+            .unwrap()
+            .child(DeviceTreeNode::builder("bar").unwrap().build())
+            .build(),
+    );
+
+    // Normal paths
+    assert_eq!(tree.find_node("/").unwrap().name(), "");
+    assert_eq!(tree.find_node("/foo").unwrap().name(), "foo");
+    assert_eq!(tree.find_node("/foo/bar").unwrap().name(), "bar");
+
+    // Weird but valid paths (due to removing empty segments)
+    assert_eq!(tree.find_node("//").unwrap().name(), "");
+    assert_eq!(tree.find_node("/foo/").unwrap().name(), "foo");
+    assert_eq!(tree.find_node("/foo//bar").unwrap().name(), "bar");
+
+    // Invalid paths
+    assert!(tree.find_node("").is_none());
+    assert!(tree.find_node("foo/").is_none());
+    assert!(tree.find_node("foo//bar").is_none());
+    assert!(tree.find_node("foo").is_none());
+}
+
+#[test]
 fn device_tree_format() {
     let mut tree = DeviceTree::new();
     tree.root.add_child(

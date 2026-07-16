@@ -255,3 +255,79 @@ fn modify_property_grow<B: FdtBuffer>(data: B) -> (FdtMut<B>, Result<(), FdtMutE
     let result = prop_mut.set_value(TEST_GROW_VAL);
     (fdt_mut, result)
 }
+
+#[cfg(feature = "alloc")]
+#[test]
+fn compact_vec() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = dtb.to_vec();
+
+    let fdt_mut = FdtMut::new(data).unwrap();
+
+    test_compact(fdt_mut);
+}
+
+#[test]
+fn compact_slice() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let fdt_mut = FdtMut::from_slice(&mut data[..]).unwrap();
+
+    test_compact(fdt_mut);
+}
+
+#[cfg(feature = "arrayvec07")]
+#[test]
+fn compact_arrayvec() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = arrayvec::ArrayVec::<u8, 2048>::new();
+    data.try_extend_from_slice(dtb).unwrap();
+
+    let fdt_mut = FdtMut::new(data).unwrap();
+
+    test_compact(fdt_mut);
+}
+
+fn test_compact<B: FdtBuffer>(mut fdt_mut: FdtMut<B>) {
+    // Remove some properties to create NOPs
+    let mut node = fdt_mut
+        .find_node_mut("/test-props")
+        .expect("the node should exist in the test data");
+    assert!(node.remove_property("str-prop"));
+    assert!(node.remove_property("u64-prop"));
+
+    let size_before = fdt_mut.as_read_only().data().len();
+
+    // Compact
+    fdt_mut.compact();
+
+    let size_after = fdt_mut.as_read_only().data().len();
+    assert!(size_after < size_before);
+
+    // Verify it still parses and remaining properties are there
+    let fdt = fdt_mut.as_read_only();
+    let node = fdt
+        .find_node("/test-props")
+        .expect("the node should exist in the test data");
+    assert!(node.property("str-prop").is_none());
+    assert!(node.property("u64-prop").is_none());
+    assert!(node.property("u32-prop").is_some());
+}
+
+#[test]
+fn compact_slice_noop() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::from_slice(&mut data[..]).unwrap();
+
+    let size_before = fdt_mut.as_read_only().data().len();
+
+    // Compact should succeed because there are no NOPs to remove, so no resize is
+    // needed
+    fdt_mut.compact();
+
+    let size_after = fdt_mut.as_read_only().data().len();
+    assert_eq!(size_after, size_before);
+}
