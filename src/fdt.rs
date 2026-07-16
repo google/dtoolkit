@@ -695,7 +695,7 @@ impl<'a> Fdt<'a> {
         Ok(Self::align_tag_offset(end_offset))
     }
 
-    fn data_at_offset(&self, offset: usize) -> Result<&[u8], FdtParseError> {
+    pub(crate) fn data_at_offset(&self, offset: usize) -> Result<&[u8], FdtParseError> {
         self.data
             .get(offset..)
             .ok_or_else(|| FdtParseError::new(FdtErrorKind::InvalidOffset, offset))
