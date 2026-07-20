@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = []
 alloc = []
 arrayvec07 = ["dep:arrayvec"]
+overlay = ["alloc"]
 write = ["alloc", "dep:indexmap", "dep:twox-hash"]
 
 [dependencies]

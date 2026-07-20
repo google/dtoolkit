@@ -1,0 +1,9 @@
+/dts-v1/;
+/plugin/;
+
+&{/soc} {
+    status = "okay";
+    new-prop = "foo";
+    serial@1000 {
+    };
+};

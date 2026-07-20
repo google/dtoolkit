@@ -1,0 +1,6 @@
+/dts-v1/;
+
+/ {
+    clk: clock-controller@100 {
+    };
+};

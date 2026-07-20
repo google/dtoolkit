@@ -1,0 +1,8 @@
+/dts-v1/;
+/plugin/;
+
+&soc {
+    uart0: uart@1000 {
+        status = "okay";
+    };
+};
