@@ -131,10 +131,12 @@ pub(crate) enum InnerChildIter {
 }
 
 impl InnerChildIter {
+    #[must_use]
     pub(crate) fn new(offset: usize) -> Self {
         Self::Start { offset }
     }
 
+    #[must_use]
     pub(crate) fn next(&mut self, fdt: Fdt<'_>) -> Option<usize> {
         match self {
             Self::Start { offset } => {
@@ -142,28 +144,45 @@ impl InnerChildIter {
                 off += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
                 off = fdt.find_string_end(off).expect("Fdt should be valid");
                 off = Fdt::align_tag_offset(off);
+
+                let result = Self::skip_props(fdt, &mut off);
                 *self = Self::Running { offset: off };
-                self.next(fdt)
+                result
             }
             Self::Running { offset } => Self::next_child_parsed(fdt, offset),
         }
     }
 
-    pub(crate) fn next_child_parsed(fdt: Fdt<'_>, offset: &mut usize) -> Option<usize> {
+    #[must_use]
+    fn skip_props(fdt: Fdt<'_>, offset: &mut usize) -> Option<usize> {
         loop {
             let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
-                FdtToken::BeginNode => {
-                    let node_offset = *offset;
-                    *offset = fdt
-                        .next_sibling_offset(*offset)
-                        .expect("Fdt should be valid");
-                    return Some(node_offset);
-                }
+                FdtToken::BeginNode => return Some(*offset),
                 FdtToken::Prop => {
                     *offset = fdt
                         .next_property_offset(*offset + FDT_TAGSIZE, false)
                         .expect("Fdt should be valid");
+                }
+                FdtToken::EndNode | FdtToken::End => return None,
+                FdtToken::Nop => *offset += FDT_TAGSIZE,
+            }
+        }
+    }
+
+    #[must_use]
+    fn next_child_parsed(fdt: Fdt<'_>, offset: &mut usize) -> Option<usize> {
+        *offset = fdt
+            .next_sibling_offset(*offset)
+            .expect("Fdt should be valid");
+        loop {
+            let token = fdt.read_token(*offset).expect("Fdt should be valid");
+            match token {
+                FdtToken::BeginNode => {
+                    return Some(*offset);
+                }
+                FdtToken::Prop => {
+                    panic!("Fdt should be valid");
                 }
                 FdtToken::EndNode | FdtToken::End => return None,
                 FdtToken::Nop => *offset += FDT_TAGSIZE,

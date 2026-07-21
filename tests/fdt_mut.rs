@@ -331,3 +331,27 @@ fn compact_slice_noop() {
     let size_after = fdt_mut.as_read_only().data().len();
     assert_eq!(size_after, size_before);
 }
+
+#[test]
+fn test_iter_invalidation() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+
+    let mut fdt = FdtMut::new(dtb.to_vec()).unwrap();
+    let mut node = fdt.find_node_mut("/test-props").unwrap();
+
+    let mut props = node.properties_mut();
+    let mut found = false;
+    while let Some(mut prop) = props.next() {
+        if (&prop).name() == "str-prop" {
+            prop.set_value(b"this value is much longer than original\0")
+                .unwrap();
+            found = true;
+            break;
+        }
+    }
+    assert!(found);
+
+    // ensure this doesn't panic after mutating the property
+    let prop = props.next().unwrap();
+    let _ = (&prop).name();
+}
