@@ -12,9 +12,10 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 
-use crate::Node;
+use crate::error::OverlayError;
 use crate::model::DeviceTreeNode;
-use crate::overlay::get_phandle;
+use crate::overlay::{PHANDLE_PROPS, get_phandle};
+use crate::{Node, Property};
 
 #[allow(unused)]
 fn merge_node(
@@ -65,6 +66,27 @@ fn update_phandles_recursive(
         update_phandles_recursive(child, current_path, phandles, max_ph);
         current_path.truncate(old_len);
     }
+}
+
+/// Adds `offset` to all phandle properties in the given `node` and its
+/// descendants.
+#[allow(unused)]
+fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), OverlayError> {
+    for prop_name in PHANDLE_PROPS {
+        if let Some(prop) = node.property_mut(prop_name)
+            && let Ok(val) = (&*prop).as_u32()
+        {
+            let new_val = val
+                .checked_add(offset)
+                .filter(|x| *x != 0 && *x != u32::MAX)
+                .ok_or(OverlayError::PhandleOverflow)?;
+            prop.set_value(new_val.to_be_bytes().to_vec());
+        }
+    }
+    for child in node.children_mut() {
+        offset_node_phandles(child, offset)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -172,5 +194,54 @@ mod tests {
         assert_eq!(phandles.get(&42).unwrap(), "/root");
         assert_eq!(phandles.get(&43).unwrap(), "/root/child");
         assert_eq!(phandles.get(&100).unwrap(), "/root/child/grandchild");
+    }
+
+    #[test]
+    fn offset_node_phandles_works() {
+        let mut node = DeviceTreeNode::builder("root")
+            .unwrap()
+            .property(DeviceTreeProperty::new("phandle", 42u32.to_be_bytes().to_vec()).unwrap())
+            .child(
+                DeviceTreeNode::builder("child")
+                    .unwrap()
+                    .property(
+                        DeviceTreeProperty::new("linux,phandle", 43u32.to_be_bytes().to_vec())
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .build();
+
+        offset_node_phandles(&mut node, 100).unwrap();
+
+        let expected = DeviceTreeNode::builder("root")
+            .unwrap()
+            .property(DeviceTreeProperty::new("phandle", 142u32.to_be_bytes().to_vec()).unwrap())
+            .child(
+                DeviceTreeNode::builder("child")
+                    .unwrap()
+                    .property(
+                        DeviceTreeProperty::new("linux,phandle", 143u32.to_be_bytes().to_vec())
+                            .unwrap(),
+                    )
+                    .build(),
+            )
+            .build();
+
+        assert_eq!(node, expected);
+    }
+
+    #[test]
+    fn offset_node_phandles_overflow() {
+        let mut node = DeviceTreeNode::builder("root")
+            .unwrap()
+            .property(DeviceTreeProperty::new("phandle", 42u32.to_be_bytes().to_vec()).unwrap())
+            .build();
+
+        offset_node_phandles(&mut node, 100).unwrap();
+
+        // Test overflow
+        let result = offset_node_phandles(&mut node, u32::MAX - 100);
+        assert!(matches!(result, Err(OverlayError::PhandleOverflow)));
     }
 }
