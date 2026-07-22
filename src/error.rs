@@ -211,4 +211,7 @@ pub enum OverlayError {
     #[cfg(feature = "write")]
     #[error("model error: {0}")]
     Model(#[from] ModelError),
+    /// A buffer or slice contains malformed data.
+    #[error("malformed overlay data: {0}")]
+    MalformedData(String),
 }

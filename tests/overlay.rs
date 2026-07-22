@@ -48,6 +48,19 @@ fn apply_overlay_target_path() {
 }
 
 #[test]
+fn apply_overlay_with_local_fixups() {
+    let mut base = apply_overlay!(
+        "overlay_local_fixups_base.dtb",
+        "overlay_local_fixups_overlay.dtb"
+    );
+
+    // Base had max phandle 1, so overlay phandle 1 should be relocated to 2.
+    let dev = base.find_node_mut("/dev@200").unwrap();
+    assert_eq!(dev.property("phandle").unwrap().as_u32().unwrap(), 2);
+    assert_eq!(dev.property("clocks").unwrap().value(), &[0, 0, 0, 2]);
+}
+
+#[test]
 fn apply_overlay_dependent_fragments() {
     // Just verify it applies without error
     let _base = apply_overlay!(

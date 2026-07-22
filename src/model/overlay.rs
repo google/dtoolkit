@@ -17,7 +17,9 @@ use alloc::vec::Vec;
 use crate::error::OverlayError;
 use crate::fdt::Fdt;
 use crate::model::{DeviceTree, DeviceTreeNode};
-use crate::overlay::{Fragment, FragmentTarget, NODE_SYMBOLS, Overlay, PHANDLE_PROPS, get_phandle};
+use crate::overlay::{
+    Fragment, FragmentTarget, NODE_LOCAL_FIXUPS, NODE_SYMBOLS, Overlay, PHANDLE_PROPS, get_phandle,
+};
 use crate::{Node, Property};
 
 /// A utility struct for applying device tree overlays efficiently.
@@ -92,6 +94,8 @@ impl<'a> OverlayApplier<'a> {
     /// Returns an error when applying the overlay fails because of a malformed
     /// overlay data.
     pub fn apply_overlay_tree(&mut self, mut overlay: DeviceTree) -> Result<(), OverlayError> {
+        relocate_local_phandles(&mut overlay, self.max_phandle)?;
+
         let overlay_view = Overlay {
             node: &overlay.root,
         };
@@ -226,6 +230,26 @@ fn update_phandles_recursive(
 
 /// Adds `offset` to all phandle properties in the given `node` and its
 /// descendants.
+fn relocate_local_phandles(
+    overlay: &mut DeviceTree,
+    phandle_offset: u32,
+) -> Result<(), OverlayError> {
+    if phandle_offset == 0 {
+        overlay.root.remove_child(NODE_LOCAL_FIXUPS);
+        return Ok(());
+    }
+
+    offset_node_phandles(&mut overlay.root, phandle_offset)?;
+
+    if let Some(fixup_node) = overlay.root.remove_child(NODE_LOCAL_FIXUPS) {
+        update_local_references(&mut overlay.root, &fixup_node, phandle_offset)?;
+    }
+
+    Ok(())
+}
+
+/// Relocates all local phandles defined in `overlay` and updates internal
+/// references specified by `/__local_fixups__` by adding `phandle_offset`.
 #[allow(unused)]
 fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), OverlayError> {
     for prop_name in PHANDLE_PROPS {
@@ -242,6 +266,74 @@ fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), Ov
     for child in node.children_mut() {
         offset_node_phandles(child, offset)?;
     }
+    Ok(())
+}
+
+const OFFSET_LEN: usize = size_of::<u32>();
+
+fn update_local_references(
+    target_node: &mut DeviceTreeNode,
+    fixup_node: &DeviceTreeNode,
+    offset: u32,
+) -> Result<(), OverlayError> {
+    for fixup_prop in fixup_node.properties() {
+        let prop_name = fixup_prop.name();
+        let target_prop =
+            target_node
+                .property_mut(prop_name)
+                .ok_or_else(|| OverlayError::InvalidLocalFixup {
+                    prop: prop_name.to_string(),
+                    offset: 0,
+                })?;
+
+        let fixup_val = fixup_prop.value();
+        if fixup_val.len() % OFFSET_LEN != 0 {
+            return Err(OverlayError::InvalidLocalFixup {
+                prop: prop_name.to_string(),
+                offset: 0,
+            });
+        }
+
+        let mut new_value = (&*target_prop).value().to_owned();
+        for chunk in fixup_val.as_chunks::<OFFSET_LEN>().0 {
+            let ref_offset = u32::from_be_bytes(*chunk) as usize;
+            let end_offset = ref_offset.checked_add(OFFSET_LEN).ok_or_else(|| {
+                OverlayError::InvalidLocalFixup {
+                    prop: prop_name.to_string(),
+                    offset: ref_offset,
+                }
+            })?;
+            if end_offset > new_value.len() {
+                return Err(OverlayError::InvalidLocalFixup {
+                    prop: prop_name.to_string(),
+                    offset: ref_offset,
+                });
+            }
+            let phandle_bytes = &new_value[ref_offset..end_offset];
+            let old_phandle = u32::from_be_bytes(phandle_bytes.try_into().map_err(|_| {
+                OverlayError::MalformedData("overlay inner slice length mismatch".to_string())
+            })?);
+            let new_phandle = old_phandle
+                .checked_add(offset)
+                .filter(|&v| v != u32::MAX)
+                .ok_or(OverlayError::PhandleOverflow)?;
+            new_value[ref_offset..ref_offset + 4].copy_from_slice(&new_phandle.to_be_bytes());
+        }
+        target_prop.set_value(new_value);
+    }
+
+    for fixup_child in fixup_node.children() {
+        let child_name = fixup_child.name();
+        let target_child =
+            target_node
+                .child_mut(child_name)
+                .ok_or_else(|| OverlayError::InvalidLocalFixup {
+                    prop: child_name.to_string(),
+                    offset: 0,
+                })?;
+        update_local_references(target_child, fixup_child, offset)?;
+    }
+
     Ok(())
 }
 
