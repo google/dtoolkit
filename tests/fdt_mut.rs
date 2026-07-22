@@ -355,3 +355,42 @@ fn test_iter_invalidation() {
     let prop = props.next().unwrap();
     let _ = (&prop).name();
 }
+
+#[test]
+fn remove_node_via_handle() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
+
+    assert!(fdt_mut.as_read_only().find_node("/a/b").is_some());
+    assert!(fdt_mut.as_read_only().find_node("/a/b/c").is_some());
+
+    let mut parent = fdt_mut.find_node_mut("/a/b").unwrap();
+    let child = parent.child_mut("c").unwrap();
+    child.remove();
+
+    let fdt = Fdt::new(&data).unwrap();
+
+    let node_b = fdt.find_node("/a/b").unwrap();
+    assert_eq!(node_b.name(), "b");
+
+    assert!(fdt.find_node("/a/b/c").is_none());
+    assert!(node_b.child("c").is_none());
+}
+
+#[test]
+fn remove_child_by_name() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
+    let mut parent = fdt_mut.find_node_mut("/a/b").unwrap();
+
+    assert!(parent.remove_child("c"));
+    assert!(!parent.remove_child("c")); // Already removed
+
+    let fdt = Fdt::new(&data).unwrap();
+    let node_b = fdt.find_node("/a/b").unwrap();
+    assert!(node_b.child("c").is_none());
+}
