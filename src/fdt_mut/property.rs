@@ -14,7 +14,7 @@ use zerocopy::{FromBytes, big_endian};
 use crate::Property;
 use crate::error::FdtMutError;
 use crate::fdt::property::InnerPropIter;
-use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtProperty};
+use crate::fdt::{FDT_TAGSIZE, Fdt, FdtProperty};
 use crate::fdt_mut::FdtMut;
 use crate::fdt_mut::buffer::FdtBuffer;
 
@@ -104,7 +104,10 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
         }
 
         if new_padded < old_padded {
-            self.pad_with_nops(old_padded, new_padded);
+            self.data.replace_with_nops(
+                self.value_offset + new_padded,
+                self.value_offset + old_padded,
+            );
         }
 
         self.len = new_value.len();
@@ -125,17 +128,6 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
             }
         }
         count
-    }
-
-    fn pad_with_nops(&mut self, old_padded: usize, new_padded: usize) {
-        if new_padded < old_padded {
-            let mut offset = self.value_offset + new_padded;
-            while offset < self.value_offset + old_padded {
-                self.data.data_mut()[offset..offset + FDT_TAGSIZE]
-                    .copy_from_slice(&FDT_NOP.to_be_bytes());
-                offset += FDT_TAGSIZE;
-            }
-        }
     }
 
     /// Returns a read only view of this property.
@@ -176,13 +168,8 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     pub fn remove(self) {
         let start = self.prop_offset;
         let end = Fdt::align_tag_offset(self.value_offset + self.len);
-        let nop_bytes = FDT_NOP.to_be_bytes();
 
-        let mut offset = start;
-        while offset < end {
-            self.data.data_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
-            offset += FDT_TAGSIZE;
-        }
+        self.data.replace_with_nops(start, end);
     }
 }
 

@@ -45,6 +45,35 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         None
     }
 
+    /// Returns a mutable child node by its name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
+    /// let child = parent.child_mut("c").unwrap();
+    ///
+    /// assert_eq!(child.name(), "c");
+    /// ```
+    pub fn child_mut(&mut self, name: &str) -> Option<FdtNodeMut<'_, B>> {
+        let mut children = self.children_mut();
+        while let Some(child) = children.next() {
+            if child.name() == name {
+                return Some(FdtNodeMut {
+                    offset: child.offset,
+                    parent_address_space: child.parent_address_space,
+                    data: self.data,
+                });
+            }
+        }
+        None
+    }
+
     /// Removes a property from this node by its name.
     ///
     /// This is a convenience method that finds a property by name and calls
@@ -74,6 +103,74 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         } else {
             false
         }
+    }
+
+    /// Removes a child node by its name.
+    ///
+    /// This is a convenience method that searches for a child node by name and
+    /// calls [`FdtNodeMut::remove`] on it if found.
+    ///
+    /// Returns `true` if the child was present and successfully removed,
+    /// `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut node = fdt.find_node_mut("/a/b").unwrap();
+    /// assert!(node.child("c").is_some());
+    /// assert!(node.remove_child("c"));
+    /// assert!(node.child("c").is_none());
+    /// assert!(!node.remove_child("c"));
+    /// ```
+    pub fn remove_child(&mut self, name: &str) -> bool {
+        if let Some(child) = self.child_mut(name) {
+            child.remove();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes the node by overwriting its structure with `NOP` tags.
+    ///
+    /// The memory previously occupied by this node, including its name,
+    /// properties, and all nested child nodes, will be replaced with `NOP`
+    /// tags, rendering it invisible to Device Tree iterators without
+    /// requiring data to be shifted.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
+    /// let child = parent.child_mut("c").unwrap();
+    /// child.remove();
+    ///
+    /// assert!(parent.child("c").is_none());
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`FdtMut`] structure was constructed using
+    /// [`FdtMut::new_unchecked`] or [`FdtMut::from_raw_unchecked`] and the FDT
+    /// is not valid.
+    pub fn remove(self) {
+        let fdt = self.data.as_read_only();
+        let start = self.offset;
+        let end = fdt
+            .next_sibling_offset(self.offset)
+            .expect("Fdt should be valid");
+
+        self.data.replace_with_nops(start, end);
     }
 
     /// Returns a mutable iterator over the properties of this node.

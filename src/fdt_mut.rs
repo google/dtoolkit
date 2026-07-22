@@ -24,7 +24,7 @@ pub use property::FdtPropertyMut;
 use zerocopy::{FromBytes, big_endian};
 
 use crate::error::{BufferError, FdtParseError};
-use crate::fdt::{FDT_TAGSIZE, Fdt, FdtHeader, FdtToken};
+use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtToken};
 
 /// A mutable flattened device tree.
 pub struct FdtMut<B> {
@@ -247,6 +247,16 @@ impl<B: FdtBuffer> FdtMut<B> {
         let (header, _) =
             FdtHeader::mut_from_prefix(self.data.as_mut()).expect("Fdt should be valid");
         header
+    }
+
+    fn replace_with_nops(&mut self, start: usize, end: usize) {
+        let nop_bytes = FDT_NOP.to_be_bytes();
+
+        let mut offset = start;
+        while offset < end {
+            self.data.as_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
+            offset += FDT_TAGSIZE;
+        }
     }
 }
 
