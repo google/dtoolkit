@@ -149,6 +149,9 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// strings block to start immediately after the compacted structure block,
     /// and truncates the underlying buffer to the new total size.
     ///
+    /// If there is any data stored in the free space after the strings block,
+    /// it will be lost.
+    ///
     /// # Panics
     ///
     /// Panics if `FdtMut` was constructed using [`Self::new_unchecked`] but
@@ -230,9 +233,8 @@ impl<B: FdtBuffer> FdtMut<B> {
             .off_dt_strings
             .set(u32::try_from(write_offset).expect("strings offset should fit in u32"));
 
-        let old_totalsize = header.totalsize.get();
         let new_totalsize =
-            old_totalsize - u32::try_from(bytes_saved).expect("bytes saved should fit in u32");
+            u32::try_from(write_offset + size_dt_strings).expect("new totalsize should fit in u32");
         header.totalsize.set(new_totalsize);
 
         // Truncate buffer
