@@ -61,6 +61,23 @@ fn apply_overlay_with_local_fixups() {
 }
 
 #[test]
+fn apply_overlay_with_external_fixups_and_symbols() {
+    let mut base = apply_overlay!(
+        "overlay_external_symbols_base.dtb",
+        "overlay_external_symbols_overlay.dtb"
+    );
+
+    let uart = base.find_node_mut("/soc/uart@1000").unwrap();
+    assert_eq!(uart.property("status").unwrap().as_str(), Ok("okay"));
+
+    let base_sym = base.root.child("__symbols__").unwrap();
+    assert_eq!(
+        base_sym.property("uart0").unwrap().as_str(),
+        Ok("/soc/uart@1000")
+    );
+}
+
+#[test]
 fn apply_overlay_dependent_fragments() {
     // Just verify it applies without error
     let _base = apply_overlay!(

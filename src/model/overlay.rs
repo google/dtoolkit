@@ -16,9 +16,10 @@ use alloc::vec::Vec;
 
 use crate::error::OverlayError;
 use crate::fdt::Fdt;
-use crate::model::{DeviceTree, DeviceTreeNode};
+use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
 use crate::overlay::{
-    Fragment, FragmentTarget, NODE_LOCAL_FIXUPS, NODE_SYMBOLS, Overlay, PHANDLE_PROPS, get_phandle,
+    FixupLocation, Fragment, FragmentTarget, NODE_FIXUPS, NODE_LOCAL_FIXUPS, NODE_SYMBOLS, Overlay,
+    PHANDLE_PROPS, get_phandle,
 };
 use crate::{Node, Property};
 
@@ -27,7 +28,6 @@ use crate::{Node, Property};
 /// It caches phandle mappings to avoid repeatedly traversing the entire base
 /// tree.
 #[derive(Debug)]
-#[allow(unused)]
 pub struct OverlayApplier<'a> {
     base: &'a mut DeviceTree,
     phandles: BTreeMap<u32, String>,
@@ -95,6 +95,12 @@ impl<'a> OverlayApplier<'a> {
     /// overlay data.
     pub fn apply_overlay_tree(&mut self, mut overlay: DeviceTree) -> Result<(), OverlayError> {
         relocate_local_phandles(&mut overlay, self.max_phandle)?;
+        resolve_external_fixups(
+            self.base,
+            &mut overlay,
+            &mut self.max_phandle,
+            &mut self.phandles,
+        )?;
 
         let overlay_view = Overlay {
             node: &overlay.root,
@@ -107,9 +113,69 @@ impl<'a> OverlayApplier<'a> {
             fragment_targets.push((frag_name, target_path));
         }
 
+        if let Some(symbols_node) = overlay.root.remove_child(NODE_SYMBOLS) {
+            let base_symbols = if let Some(base_symbols) = self.base.root.child_mut(NODE_SYMBOLS) {
+                base_symbols
+            } else {
+                self.base
+                    .root
+                    .add_child_mut(DeviceTreeNode::new(NODE_SYMBOLS)?)
+            };
+
+            for sym_prop in symbols_node.properties() {
+                Self::rewrite_symbol(&fragment_targets, base_symbols, sym_prop)?;
+            }
+        }
+
         for (frag_name, target_path) in &fragment_targets {
             self.merge_fragment(&mut overlay, frag_name, target_path)?;
         }
+
+        Ok(())
+    }
+
+    /// Rewrites a symbol defined in the overlay to the base DT.
+    fn rewrite_symbol(
+        fragment_targets: &[(String, String)],
+        base_symbols: &mut DeviceTreeNode,
+        sym_prop: &DeviceTreeProperty,
+    ) -> Result<(), OverlayError> {
+        let sym_val = sym_prop.value();
+        let mut new_val_str: Vec<u8> = Vec::new();
+
+        for (frag_name, target_path) in fragment_targets {
+            // symbols referring to /fragment@.../__overlay__/<node> should be rewritten
+            // to just /<node>
+            if let Some(subpath) = sym_val
+                .strip_prefix(b"/")
+                .and_then(|s| s.strip_prefix(frag_name.as_bytes()))
+                .and_then(|s| s.strip_prefix(b"/__overlay__"))
+            {
+                if target_path == "/" {
+                    if subpath.is_empty() {
+                        new_val_str.push(b'/');
+                    } else {
+                        new_val_str.extend_from_slice(subpath);
+                    }
+                } else {
+                    new_val_str.extend_from_slice(target_path.as_bytes());
+                    new_val_str.extend_from_slice(subpath);
+                }
+                break;
+            }
+        }
+
+        if new_val_str.is_empty() {
+            // use the original symbol path if the overlay symbol didn't point to
+            // a fragment inside the overlay
+            new_val_str.extend_from_slice(sym_val);
+        }
+
+        if !new_val_str.ends_with(b"\0") {
+            new_val_str.push(b'\0');
+        }
+
+        base_symbols.add_property(DeviceTreeProperty::new(sym_prop.name(), new_val_str)?);
 
         Ok(())
     }
@@ -250,7 +316,6 @@ fn relocate_local_phandles(
 
 /// Relocates all local phandles defined in `overlay` and updates internal
 /// references specified by `/__local_fixups__` by adding `phandle_offset`.
-#[allow(unused)]
 fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), OverlayError> {
     for prop_name in PHANDLE_PROPS {
         if let Some(prop) = node.property_mut(prop_name)
@@ -332,6 +397,75 @@ fn update_local_references(
                     offset: 0,
                 })?;
         update_local_references(target_child, fixup_child, offset)?;
+    }
+
+    Ok(())
+}
+
+/// Resolves external symbol fixups (`/__fixups__`) in `overlay` against `base`
+/// tree symbols, allocating new phandles in `base` if needed starting from
+/// `max_phandle`.
+fn resolve_external_fixups(
+    base: &mut DeviceTree,
+    overlay: &mut DeviceTree,
+    max_phandle: &mut u32,
+    phandles_cache: &mut BTreeMap<u32, String>,
+) -> Result<(), OverlayError> {
+    let Some(fixup_node) = overlay.root.remove_child(NODE_FIXUPS) else {
+        return Ok(());
+    };
+
+    for fixup_prop in fixup_node.properties() {
+        let symbol_name = fixup_prop.name();
+
+        let target_path = base
+            .root
+            .child(NODE_SYMBOLS)
+            .and_then(|sym| sym.property(symbol_name))
+            .ok_or_else(|| OverlayError::UnresolvedSymbol(symbol_name.to_string()))?
+            .as_str()
+            .map_err(|_| OverlayError::UnresolvedSymbol(symbol_name.to_string()))?
+            .to_string();
+
+        let target_node = base
+            .find_node_mut(&target_path)
+            .ok_or_else(|| OverlayError::TargetNotFound(target_path.clone()))?;
+
+        let phandle = if let Some(p) = get_phandle(target_node) {
+            p
+        } else {
+            *max_phandle = max_phandle
+                .checked_add(1)
+                .filter(|&v| v != u32::MAX)
+                .ok_or(OverlayError::PhandleOverflow)?;
+            let new_p = *max_phandle;
+            target_node.add_property(DeviceTreeProperty::new(
+                "phandle",
+                new_p.to_be_bytes().to_vec(),
+            )?);
+            phandles_cache.insert(new_p, target_path.clone());
+            new_p
+        };
+
+        for loc_str in fixup_prop.as_str_list() {
+            let loc = FixupLocation::parse(loc_str)?;
+            let overlay_node = overlay
+                .find_node_mut(loc.node_path)
+                .ok_or(OverlayError::InvalidFixupLocation)?;
+            let target_prop = overlay_node
+                .property_mut(loc.property_name)
+                .ok_or(OverlayError::InvalidFixupLocation)?;
+            let end_offset = loc
+                .offset
+                .checked_add(4)
+                .ok_or(OverlayError::InvalidFixupLocation)?;
+            if end_offset > (&*target_prop).value().len() {
+                return Err(OverlayError::InvalidFixupLocation);
+            }
+            let mut new_value = (&*target_prop).value().to_owned();
+            new_value[loc.offset..end_offset].copy_from_slice(&phandle.to_be_bytes());
+            target_prop.set_value(new_value);
+        }
     }
 
     Ok(())
