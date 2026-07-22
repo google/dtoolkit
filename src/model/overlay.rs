@@ -8,16 +8,173 @@
 
 //! Implementation of applying the Device Tree Overlays (DTBO).
 
+use alloc::borrow::ToOwned;
 use alloc::collections::BTreeMap;
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use crate::error::OverlayError;
-use crate::model::DeviceTreeNode;
-use crate::overlay::{PHANDLE_PROPS, get_phandle};
+use crate::fdt::Fdt;
+use crate::model::{DeviceTree, DeviceTreeNode};
+use crate::overlay::{Fragment, FragmentTarget, NODE_SYMBOLS, Overlay, PHANDLE_PROPS, get_phandle};
 use crate::{Node, Property};
 
+/// A utility struct for applying device tree overlays efficiently.
+///
+/// It caches phandle mappings to avoid repeatedly traversing the entire base
+/// tree.
+#[derive(Debug)]
 #[allow(unused)]
+pub struct OverlayApplier<'a> {
+    base: &'a mut DeviceTree,
+    phandles: BTreeMap<u32, String>,
+    max_phandle: u32,
+}
+
+impl<'a> OverlayApplier<'a> {
+    /// Creates a new `OverlayApplier` for the given base device tree.
+    pub fn new(base: &'a mut DeviceTree) -> Self {
+        let mut phandles = BTreeMap::new();
+        let mut max_ph = 0;
+        let mut current_path = String::new();
+        Self::build_cache(&base.root, &mut current_path, &mut phandles, &mut max_ph);
+        Self {
+            base,
+            phandles,
+            max_phandle: max_ph,
+        }
+    }
+
+    fn build_cache(
+        node: &DeviceTreeNode,
+        current_path: &mut String,
+        phandles: &mut BTreeMap<u32, String>,
+        max_ph: &mut u32,
+    ) {
+        if let Some(p) = get_phandle(node) {
+            *max_ph = (*max_ph).max(p);
+            let p_str = if current_path.is_empty() {
+                "/".to_string()
+            } else {
+                current_path.clone()
+            };
+            phandles.insert(p, p_str);
+        }
+        for child in node.children() {
+            let old_len = current_path.len();
+            if !current_path.ends_with('/') {
+                current_path.push('/');
+            }
+            current_path.push_str(child.name());
+            Self::build_cache(child, current_path, phandles, max_ph);
+            current_path.truncate(old_len);
+        }
+    }
+
+    /// Applies a read-only Device Tree Overlay ([`Fdt`]) to the base
+    /// [`DeviceTree`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when applying the overlay fails because of a malformed
+    /// overlay data.
+    pub fn apply_overlay(&mut self, overlay: &Fdt<'_>) -> Result<(), OverlayError> {
+        let overlay_tree = DeviceTree::from_fdt(overlay);
+        self.apply_overlay_tree(overlay_tree)
+    }
+
+    /// Applies an in-memory Device Tree Overlay ([`DeviceTree`]) to the base
+    /// [`DeviceTree`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when applying the overlay fails because of a malformed
+    /// overlay data.
+    pub fn apply_overlay_tree(&mut self, mut overlay: DeviceTree) -> Result<(), OverlayError> {
+        let overlay_view = Overlay {
+            node: &overlay.root,
+        };
+        let mut fragment_targets = Vec::new();
+
+        for frag in overlay_view.fragments() {
+            let frag_name = frag.name().to_string();
+            let target_path = self.resolve_fragment_target_path(frag)?;
+            fragment_targets.push((frag_name, target_path));
+        }
+
+        for (frag_name, target_path) in &fragment_targets {
+            self.merge_fragment(&mut overlay, frag_name, target_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn resolve_fragment_target_path(
+        &self,
+        fragment: Fragment<&DeviceTreeNode>,
+    ) -> Result<String, OverlayError> {
+        match fragment.target()? {
+            FragmentTarget::Phandle(phandle) => {
+                if let Some(path) = self.phandles.get(&phandle) {
+                    Ok(path.clone())
+                } else {
+                    Err(OverlayError::TargetNotFound(format!(
+                        "phandle 0x{phandle:x}"
+                    )))
+                }
+            }
+            FragmentTarget::Path(path) => {
+                if path.starts_with('/') {
+                    self.base
+                        .find_node(path)
+                        .map(|_| path.to_string())
+                        .ok_or_else(|| OverlayError::TargetNotFound(path.to_string()))
+                } else {
+                    if let Some(sym_node) = self.base.root.child(NODE_SYMBOLS)
+                        && let Some(sym_prop) = sym_node.property(path)
+                    {
+                        let abs_path = sym_prop.as_str()?;
+                        return Ok(abs_path.to_string());
+                    }
+                    if let Some(aliases_node) = self.base.root.child("aliases")
+                        && let Some(alias_prop) = aliases_node.property(path)
+                    {
+                        let abs_path = alias_prop.as_str()?;
+                        return Ok(abs_path.to_string());
+                    }
+                    Err(OverlayError::TargetNotFound(path.to_string()))
+                }
+            }
+        }
+    }
+
+    fn merge_fragment(
+        &mut self,
+        overlay: &mut DeviceTree,
+        frag_name: &str,
+        target_path: &str,
+    ) -> Result<(), OverlayError> {
+        if let Some(mut frag_node) = overlay.root.remove_child(frag_name)
+            && let Some(overlay_subnode) = frag_node.remove_child("__overlay__")
+        {
+            let target_node = self
+                .base
+                .find_node_mut(target_path)
+                .ok_or_else(|| OverlayError::TargetNotFound(target_path.to_owned()))?;
+            merge_node(
+                target_node,
+                overlay_subnode,
+                target_path,
+                &mut self.phandles,
+                &mut self.max_phandle,
+            );
+        }
+
+        Ok(())
+    }
+}
+
 fn merge_node(
     target: &mut DeviceTreeNode,
     overlay: DeviceTreeNode,
@@ -46,7 +203,6 @@ fn merge_node(
     }
 }
 
-#[allow(unused)]
 fn update_phandles_recursive(
     node: &DeviceTreeNode,
     current_path: &mut String,
