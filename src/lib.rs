@@ -10,8 +10,10 @@
 //!
 //! This library provides a comprehensive API for working with FDTs, including:
 //!
-//! - A read-only API for parsing and traversing FDTs without memory allocation.
-//! - A read-write API for creating and modifying FDTs in memory.
+//! - An in-place API for parsing, traversing, and modifying FDTs without memory
+//!   allocation.
+//! - An intermediate representation API for creating and modifying FDTs using
+//!   computationally efficient data structures.
 //! - Support for applying device tree overlays.
 //! - Outputting device trees in DTS source format.
 //!
@@ -19,30 +21,34 @@
 //! you don't need the Device Tree manipulation functionality, the library is
 //! also no-`alloc`-compatible.
 //!
-//! ## Read-Only API
+//! ## In-place API
 //!
-//! The read-only API is centered around the [`Fdt`](fdt::Fdt) struct, which
-//! provides a safe, zero-copy view of an FDT blob. You can use this API
-//! to traverse the device tree, inspect nodes and properties, and read
-//! property values.
+//! The in-place API is centered around the [`Fdt`](fdt::Fdt) struct for
+//! read-only operations, and the [`FdtMut`](fdt_mut::FdtMut) struct for mutable
+//! operations. Both provide a safe, zero-copy view of an FDT blob. You can use
+//! this API to traverse the device tree, inspect nodes and properties, and read
+//! or write property values in-place.
 //!
-//! Note that because the [`Fdt`](fdt::Fdt) struct is zero-copy, certain
-//! operations such as node or property lookups run in linear time. If you need
-//! to perform these operations often, and you can spare extra memory, it might
-//! be beneficial to convert from [`Fdt`](fdt::Fdt) to
+//! Note that because these structs operate directly on the serialized format,
+//! certain operations such as node or property lookups run in linear time. If
+//! you need to perform these operations often, and you can spare extra memory,
+//! it might be beneficial to convert from [`Fdt`](fdt::Fdt) to
 //! [`DeviceTree`](model::DeviceTree) first.
 //!
-//! ## Read-Write API
+//! ## Intermediate Representation API
 //!
-//! The read-write API is centered around the [`DeviceTree`](model::DeviceTree)
-//! struct, which provides a mutable, in-memory representation of a device tree.
-//! You can use this API to create new device trees from scratch, modify
-//! existing ones, and serialize them back to an FDT blob.
+//! The intermediate representation API is centered around the
+//! [`DeviceTree`](model::DeviceTree) struct, which provides a mutable
+//! representation of a device tree built upon computationally efficient data
+//! structures. You can use this API to create new device trees from scratch,
+//! modify existing ones, and serialize them back to an FDT blob.
 //!
 //! Internally it is built upon hash maps, meaning that most lookup and
 //! modification operations run in constant time.
 //!
 //! # Examples
+//!
+//! ## General usage with the Intermediate Representation API
 //!
 //! ```
 //! use dtoolkit::fdt::Fdt;
@@ -73,6 +79,38 @@
 //!
 //! // Display the DTS
 //! println!("{}", fdt);
+//! ```
+//!
+//! ## In-place editing API
+//!
+//! ```
+//! use dtoolkit::fdt_mut::FdtMut;
+//! use dtoolkit::{Node, Property};
+//!
+//! # let mut dtb = include_bytes!("../tests/dtb/test_props.dtb").to_vec();
+//! let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+//!
+//! let mut node = fdt.find_node_mut("/test-props").unwrap();
+//! node.property_mut("str-prop")
+//!     .unwrap()
+//!     .set_value(b"hello rust\0");
+//! let is_removed = node.remove_property("u32-prop");
+//! ```
+//!
+//! ## Applying Device Tree Overlays
+//!
+//! ```
+//! use dtoolkit::fdt::Fdt;
+//! use dtoolkit::model::DeviceTree;
+//! use dtoolkit::model::overlay::OverlayApplier;
+//!
+//! # let base_dtb = include_bytes!("../tests/dtb/overlay_target_path_base.dtb");
+//! # let overlay_dtb = include_bytes!("../tests/dtb/overlay_target_path_overlay.dtb");
+//! let mut base = DeviceTree::from_fdt(&Fdt::new(base_dtb).unwrap());
+//! let overlay = Fdt::new(overlay_dtb).unwrap();
+//!
+//! let mut applier = OverlayApplier::new(&mut base);
+//! applier.apply_overlay(&overlay).unwrap();
 //! ```
 
 #![cfg_attr(not(test), no_std)]

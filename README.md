@@ -8,14 +8,22 @@ A library for parsing and manipulating Flattened Device Tree (FDT) blobs.
 
 This library provides a comprehensive API for working with FDTs, including:
 
-- A read-only API for parsing and traversing FDTs without memory allocation.
-- A read-write API for creating and modifying FDTs in memory.
+- An in-place API for parsing, traversing, and modifying FDTs without memory
+  allocation.
+- An intermediate representation API for creating and modifying FDTs using
+  computationally efficient data structures.
 - Support for applying device tree overlays.
 - Outputting device trees in DTS source format.
 
 The library is written purely in Rust and is `#![no_std]` compatible. If
 you don't need the Device Tree manipulation functionality, the library is
 also no-`alloc`-compatible.
+
+## Getting Started
+
+Real-world examples of how to use the library, including parsing, editing
+in-place, and applying device tree overlays, can be found in the
+[API documentation](https://docs.rs/dtoolkit).
 
 ## License
 
