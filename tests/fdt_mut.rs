@@ -10,6 +10,8 @@ use dtoolkit::error::{BufferError, FdtMutError};
 use dtoolkit::fdt::Fdt;
 use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
 use dtoolkit::{Node, Property};
+#[cfg(feature = "alloc")]
+use zerocopy::FromBytes;
 
 #[test]
 fn modify_property_in_place() {
@@ -313,6 +315,38 @@ fn test_compact<B: FdtBuffer>(mut fdt_mut: FdtMut<B>) {
     assert!(node.property("str-prop").is_none());
     assert!(node.property("u64-prop").is_none());
     assert!(node.property("u32-prop").is_some());
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn compact_strips_trailing_padding() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut data = dtb.to_vec();
+
+    // Manually append 50 padding bytes to the end of the blob and update totalsize
+    data.extend(core::iter::repeat_n(0xff, 50));
+
+    let (totalsize, _) = zerocopy::big_endian::U32::mut_from_prefix(&mut data[4..8]).unwrap();
+    *totalsize += 50;
+
+    let mut fdt_mut = FdtMut::new(data).unwrap();
+    let size_before_compact = fdt_mut.as_read_only().data().len();
+
+    // Remove a property to ensure the struct shrinks
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    assert!(node.remove_property("str-prop"));
+
+    fdt_mut.compact();
+
+    let fdt = fdt_mut.as_read_only();
+    let size_after_compact = fdt.data().len();
+
+    // Compact should strip the 50 byte padding AND the NOPs left by remove_property
+    assert!(size_after_compact <= size_before_compact - 50);
+
+    let node = fdt.find_node("/test-props").unwrap();
+    assert!(node.property("str-prop").is_none());
+    assert!(node.property("u64-prop").is_some());
 }
 
 #[test]
