@@ -94,14 +94,8 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
                 .expect("length should fit in u32"),
         );
 
-        // Copy the new value
-        self.data.data_mut()[self.value_offset..self.value_offset + new_value.len()]
-            .copy_from_slice(new_value);
-
-        // Zero out any padding bytes
-        for i in new_value.len()..new_padded {
-            self.data.data_mut()[self.value_offset + i] = 0;
-        }
+        self.data
+            .copy_data_with_padding(new_value, new_padded, self.value_offset);
 
         if new_padded < old_padded {
             self.data.replace_with_nops(

@@ -494,3 +494,65 @@ fn remove_child_by_name() {
     let node_b = fdt.find_node("/a/b").unwrap();
     assert!(node_b.child("c").is_none());
 }
+
+#[cfg(feature = "alloc")]
+#[test]
+fn add_property() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut fdt_mut = FdtMut::new(dtb.to_vec()).unwrap();
+    let initial_size = fdt_mut.as_read_only().data().len();
+
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+
+    let prop = node.property("str-prop").unwrap();
+    let val = prop.value().to_vec();
+
+    node.remove_property("str-prop");
+    fdt_mut.compact(); // Remove NOPs to actually shrink DTB
+
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    node.add_property("str-prop", &val).unwrap();
+
+    let final_size = fdt_mut.as_read_only().data().len();
+    assert_eq!(
+        initial_size, final_size,
+        "size should be exactly identical after removing and adding the same property"
+    );
+
+    let node = fdt_mut.as_read_only().find_node("/test-props").unwrap();
+    let str_prop = node.property("str-prop").unwrap();
+    assert_eq!(str_prop.value(), val.as_slice());
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn add_string_deduplication() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut fdt_mut = FdtMut::new(dtb.to_vec()).unwrap();
+    let initial_size = fdt_mut.as_read_only().data().len();
+
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    // adding property with an existing name should not grow the dt_strings block
+    node.add_property("str-prop", &[1, 2, 3, 4]).unwrap();
+
+    // DTB should grow exactly by the property block size (FDT_TAGSIZE * 3 + value
+    // length)
+    let mid_size = fdt_mut.as_read_only().data().len();
+    assert_eq!(
+        initial_size + 16,
+        mid_size,
+        "string block should not grow when reusing existing name, only structural block shifts"
+    );
+
+    // adding property with a new string name should grow the dt_strings block
+    let new_name = "brand-new-property-name";
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    node.add_property(new_name, &[1, 2, 3, 4]).unwrap();
+
+    let final_size = fdt_mut.as_read_only().data().len();
+    assert_eq!(
+        mid_size + 16 + new_name.len() + 1,
+        final_size,
+        "total size must grow to align with dtb block + string length"
+    );
+}

@@ -105,6 +105,58 @@ impl<B: FdtBuffer> FdtMut<B> {
         })
     }
 
+    /// Adds a string to the `dt_strings` block. If the string is already
+    /// present, it returns the existing offset without modifying the block
+    /// to deduplicate data.
+    pub(crate) fn add_string(&mut self, name: &str) -> Result<u32, BufferError> {
+        if let Some(offset) = self.find_existing_string(name) {
+            Ok(offset)
+        } else {
+            self.append_raw_string(name)
+        }
+    }
+
+    fn find_existing_string(&self, name: &str) -> Option<u32> {
+        let fdt = self.as_read_only();
+        let header = fdt.header();
+        let str_block_size = header.size_dt_strings() as usize;
+
+        let mut curr_offset = 0;
+        while curr_offset < str_block_size {
+            let s = fdt.string(curr_offset).expect("FdtMut should be valid");
+            if s == name {
+                return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
+            }
+            curr_offset += s.len() + 1; // plus null terminator
+        }
+
+        None
+    }
+
+    fn append_raw_string(&mut self, name: &str) -> Result<u32, BufferError> {
+        let header = self.as_read_only().header();
+        let str_block_offset = header.off_dt_strings() as usize;
+        let str_block_size = header.size_dt_strings() as usize;
+
+        let name_bytes = name.as_bytes();
+        let name_len = name_bytes.len() + 1; // plus null terminator
+        let target = str_block_offset + str_block_size;
+        let required_size = target + name_len;
+
+        self.ensure_totalsize(required_size)?;
+
+        self.data.as_mut()[target..target + name_bytes.len()].copy_from_slice(name_bytes);
+        self.data.as_mut()[target + name_bytes.len()] = 0;
+
+        let header = self.header_mut();
+        header.size_dt_strings.set(
+            u32::try_from(str_block_size).expect("size_dt_strings fits in u32")
+                + u32::try_from(name_len).expect("name_len fits in u32"),
+        );
+
+        Ok(u32::try_from(str_block_size).expect("str_block_size fits in u32"))
+    }
+
     /// Shifts data starting from `offset` by `amount` bytes to make space.
     ///
     /// This method assumes that `offset` is within the device tree structure
@@ -121,6 +173,11 @@ impl<B: FdtBuffer> FdtMut<B> {
             "offset must be within the structure block"
         );
 
+        let header = self.as_read_only().header();
+        let old_totalsize = header.totalsize.get();
+        let old_size_dt_struct = header.size_dt_struct.get();
+        let old_off_dt_strings = header.off_dt_strings.get();
+
         let old_size = self.data.as_ref().len();
         let new_size = old_size + amount;
 
@@ -130,16 +187,26 @@ impl<B: FdtBuffer> FdtMut<B> {
             .copy_within(offset..old_size, offset + amount);
 
         let header = self.header_mut();
-
-        let old_totalsize = header.totalsize.get();
-        let old_size_dt_struct = header.size_dt_struct.get();
-        let old_off_dt_strings = header.off_dt_strings.get();
-
         let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
         header.totalsize.set(old_totalsize + amount_u32);
         header.size_dt_struct.set(old_size_dt_struct + amount_u32);
         header.off_dt_strings.set(old_off_dt_strings + amount_u32);
 
+        Ok(())
+    }
+
+    /// Ensures the underlying buffer and `totalsize` are large enough to hold
+    /// at least `required_size` bytes, dynamically expanding and updating
+    /// the header where necessary.
+    fn ensure_totalsize(&mut self, required_size: usize) -> Result<(), BufferError> {
+        let old_size = self.data.as_ref().len();
+        if required_size > old_size {
+            self.data.try_resize(required_size)?;
+            let header = self.header_mut();
+            header
+                .totalsize
+                .set(u32::try_from(required_size).expect("totalsize fits in u32"));
+        }
         Ok(())
     }
 
@@ -256,6 +323,14 @@ impl<B: FdtBuffer> FdtMut<B> {
         while offset < end {
             self.data.as_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
             offset += FDT_TAGSIZE;
+        }
+    }
+
+    fn copy_data_with_padding(&mut self, value: &[u8], padded_val_len: usize, val_offset: usize) {
+        let data = self.data_mut();
+        data[val_offset..val_offset + value.len()].copy_from_slice(value);
+        for i in value.len()..padded_val_len {
+            data[val_offset + i] = 0;
         }
     }
 }
