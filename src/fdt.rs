@@ -110,6 +110,35 @@ impl FdtHeader {
     }
 }
 
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]
+pub(crate) struct FdtPropertyHeader {
+    tag: big_endian::U32,
+    len: big_endian::U32,
+    nameoff: big_endian::U32,
+}
+
+impl FdtPropertyHeader {
+    #[must_use]
+    pub(crate) fn new(len: u32, nameoff: u32) -> Self {
+        Self {
+            tag: FDT_PROP.into(),
+            len: len.into(),
+            nameoff: nameoff.into(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn len(&self) -> u32 {
+        self.len.get()
+    }
+
+    #[must_use]
+    pub(crate) fn nameoff(&self) -> u32 {
+        self.nameoff.get()
+    }
+}
+
 /// A flattened device tree.
 #[derive(Clone, Copy)]
 pub struct Fdt<'a> {
@@ -347,8 +376,7 @@ impl<'a> Fdt<'a> {
             let token = self.read_token(offset)?;
             match token {
                 FdtToken::Prop => {
-                    let prop_offset = offset + FDT_TAGSIZE;
-                    offset = self.next_property_offset(prop_offset, check_strings)?;
+                    offset = self.next_property_offset(offset, check_strings)?;
                 }
                 FdtToken::Nop => offset += FDT_TAGSIZE,
                 _ => return Ok(offset),
@@ -684,16 +712,11 @@ impl<'a> Fdt<'a> {
         offset: usize,
         check_name: bool,
     ) -> Result<usize, FdtParseError> {
-        let len = big_endian::U32::ref_from_prefix(self.data_at_offset(offset)?)
-            .map(|(val, _)| val.get())
-            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?
-            as usize;
+        let (header, _) = FdtPropertyHeader::ref_from_prefix(self.data_at_offset(offset)?)
+            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?;
 
-        let nameoff_offset = offset + FDT_TAGSIZE;
-        let nameoff = big_endian::U32::ref_from_prefix(self.data_at_offset(nameoff_offset)?)
-            .map(|(val, _)| val.get())
-            .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, nameoff_offset))?
-            as usize;
+        let len = header.len() as usize;
+        let nameoff = header.nameoff() as usize;
 
         if check_name {
             let name = self.string(nameoff)?;
@@ -705,7 +728,7 @@ impl<'a> Fdt<'a> {
             }
         }
 
-        let prop_offset = offset + 2 * FDT_TAGSIZE;
+        let prop_offset = offset + size_of::<FdtPropertyHeader>();
         let end_offset = prop_offset + len;
         if end_offset > self.data.len() {
             return Err(FdtParseError::new(FdtErrorKind::InvalidLength, prop_offset));
