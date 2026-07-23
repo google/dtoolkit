@@ -11,6 +11,8 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "arrayvec07")]
 use arrayvec::ArrayVec;
+#[cfg(feature = "heapless09")]
+use heapless::Vec as HeaplessVec;
 use zerocopy::FromBytes;
 
 use crate::error::{BufferError, FdtErrorKind, FdtParseError};
@@ -174,6 +176,25 @@ impl<const N: usize> FdtBuffer for ArrayVec<u8, N> {
     }
 }
 
+#[cfg(feature = "heapless09")]
+impl<const N: usize> FdtBuffer for HeaplessVec<u8, N> {
+    fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
+        if new_len > N {
+            return Err(BufferError::OutOfSpace {
+                requested: new_len,
+                capacity: N,
+            });
+        }
+        if new_len < self.len() {
+            self.truncate(new_len);
+        } else if new_len > self.len() {
+            let needed = new_len - self.len();
+            self.extend(core::iter::repeat_n(0, needed));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use zerocopy::IntoBytes;
@@ -235,6 +256,27 @@ mod tests {
     fn arrayvec_buffer() {
         let mut array = ArrayVec::<u8, 15>::new();
         array.try_extend_from_slice(&[0u8; 10]).unwrap();
+
+        assert_eq!(array.try_resize(12), Ok(()));
+        assert_eq!(array.len(), 12);
+
+        assert_eq!(
+            array.try_resize(20),
+            Err(BufferError::OutOfSpace {
+                requested: 20,
+                capacity: 15
+            })
+        );
+        assert_eq!(array.len(), 12); // Length should not change on failure
+
+        array.try_resize(5).unwrap();
+        assert_eq!(array.len(), 5);
+    }
+
+    #[cfg(feature = "heapless09")]
+    #[test]
+    fn heapless_buffer() {
+        let mut array = HeaplessVec::<u8, 15>::from_slice(&[0u8; 10]).unwrap();
 
         assert_eq!(array.try_resize(12), Ok(()));
         assert_eq!(array.len(), 12);
