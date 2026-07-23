@@ -155,6 +155,25 @@ fn modify_property_arrayvec_owned() {
     assert_eq!(prop.as_str().unwrap(), "hello there");
 }
 
+#[cfg(feature = "heapless09")]
+#[test]
+fn modify_property_heapless_owned() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = heapless::Vec::<u8, 2048>::from_slice(dtb).unwrap();
+
+    let mut fdt_mut = FdtMut::new(data).unwrap();
+    let mut node_mut = fdt_mut.find_node_mut("/test-props").unwrap();
+    let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
+
+    let new_val = b"hello there\0";
+    prop_mut.set_value(new_val).unwrap();
+
+    let fdt = fdt_mut.as_read_only();
+    let node = fdt.find_node("/test-props").unwrap();
+    let prop = node.property("str-prop").unwrap();
+    assert_eq!(prop.as_str().unwrap(), "hello there");
+}
+
 #[test]
 fn modify_property_grow_slice() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -243,6 +262,42 @@ fn modify_property_grow_arrayvec_failure() {
     ));
 }
 
+#[cfg(feature = "heapless09")]
+#[test]
+fn modify_property_grow_heapless_success() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = heapless::Vec::<u8, 2048>::from_slice(dtb).unwrap();
+
+    let (fdt_mut, result) = modify_property_grow(data);
+    result.unwrap();
+
+    let prop = fdt_mut
+        .as_read_only()
+        .find_node("/test-props")
+        .unwrap()
+        .property("str-prop")
+        .unwrap();
+    assert_eq!(prop.value(), TEST_GROW_VAL);
+}
+
+#[cfg(feature = "heapless09")]
+#[test]
+fn modify_property_grow_heapless_failure() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = heapless::Vec::<u8, 650>::from_slice(dtb).unwrap();
+
+    let (_fdt_mut, result) = modify_property_grow(data);
+    let err = result.unwrap_err();
+
+    assert!(matches!(
+        err,
+        FdtMutError::Resize(BufferError::OutOfSpace {
+            requested: 683,
+            capacity: 650
+        })
+    ));
+}
+
 const TEST_GROW_VAL: &[u8] = b"this is a much longer string than the original one\0";
 
 fn modify_property_grow<B: FdtBuffer>(data: B) -> (FdtMut<B>, Result<(), FdtMutError>) {
@@ -285,6 +340,17 @@ fn compact_arrayvec() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = arrayvec::ArrayVec::<u8, 2048>::new();
     data.try_extend_from_slice(dtb).unwrap();
+
+    let fdt_mut = FdtMut::new(data).unwrap();
+
+    test_compact(fdt_mut);
+}
+
+#[cfg(feature = "heapless09")]
+#[test]
+fn compact_heapless() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let data = heapless::Vec::<u8, 2048>::from_slice(dtb).unwrap();
 
     let fdt_mut = FdtMut::new(data).unwrap();
 
