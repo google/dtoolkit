@@ -482,28 +482,28 @@ mod tests {
     fn merge_node_works() {
         let mut target = DeviceTreeNode::builder("target")
             .unwrap()
-            .property(DeviceTreeProperty::new("a", vec![1]).unwrap())
+            .property(DeviceTreeProperty::new("a", vec![1u8]).unwrap())
             .child(
                 DeviceTreeNode::builder("child")
                     .unwrap()
-                    .property(DeviceTreeProperty::new("c", vec![3]).unwrap())
+                    .property(DeviceTreeProperty::new("c", vec![3u8]).unwrap())
                     .build(),
             )
             .build();
 
         let overlay = DeviceTreeNode::builder("overlay")
             .unwrap()
-            .property(DeviceTreeProperty::new("b", vec![4]).unwrap())
+            .property(DeviceTreeProperty::new("b", vec![4u8]).unwrap())
             .child(
                 DeviceTreeNode::builder("child")
                     .unwrap()
-                    .property(DeviceTreeProperty::new("d", vec![5]).unwrap())
+                    .property(DeviceTreeProperty::new("d", vec![5u8]).unwrap())
                     .build(),
             )
             .child(
                 DeviceTreeNode::builder("new_child")
                     .unwrap()
-                    .property(DeviceTreeProperty::new("e", vec![6]).unwrap())
+                    .property(DeviceTreeProperty::new("e", vec![6u8]).unwrap())
                     .build(),
             )
             .build();
@@ -521,19 +521,19 @@ mod tests {
 
         let expected = DeviceTreeNode::builder("target")
             .unwrap()
-            .property(DeviceTreeProperty::new("a", vec![1]).unwrap())
-            .property(DeviceTreeProperty::new("b", vec![4]).unwrap())
+            .property(DeviceTreeProperty::new("a", vec![1u8]).unwrap())
+            .property(DeviceTreeProperty::new("b", vec![4u8]).unwrap())
             .child(
                 DeviceTreeNode::builder("child")
                     .unwrap()
-                    .property(DeviceTreeProperty::new("c", vec![3]).unwrap())
-                    .property(DeviceTreeProperty::new("d", vec![5]).unwrap())
+                    .property(DeviceTreeProperty::new("c", vec![3u8]).unwrap())
+                    .property(DeviceTreeProperty::new("d", vec![5u8]).unwrap())
                     .build(),
             )
             .child(
                 DeviceTreeNode::builder("new_child")
                     .unwrap()
-                    .property(DeviceTreeProperty::new("e", vec![6]).unwrap())
+                    .property(DeviceTreeProperty::new("e", vec![6u8]).unwrap())
                     .build(),
             )
             .build();

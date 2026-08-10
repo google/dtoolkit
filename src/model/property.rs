@@ -14,7 +14,7 @@ use zerocopy::FromBytes;
 
 use crate::error::ModelError;
 use crate::values::{FdtStringListIterator, PropEncodedArrayIterator};
-use crate::{Cells, Property};
+use crate::{Cells, Property, ToPropertyValue};
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -54,28 +54,27 @@ impl DeviceTreeProperty {
     /// use dtoolkit::Property;
     /// use dtoolkit::model::DeviceTreeProperty;
     ///
-    /// let prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap();
+    /// let prop = DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap();
     /// assert_eq!((&prop).name(), "my-prop");
     /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
     /// ```
-    pub fn new(name: impl Into<String>, value: impl Into<Vec<u8>>) -> Result<Self, ModelError> {
+    pub fn new<T: ToPropertyValue>(name: impl Into<String>, value: T) -> Result<Self, ModelError> {
         let name = name.into();
         if !crate::validate::is_valid_property_name(&name) {
             return Err(ModelError::InvalidPropertyName(name));
         }
-        Ok(Self {
-            name,
-            value: value.into(),
-        })
+        Ok(Self::new_unchecked(name, value))
     }
 
     /// Creates a new `DeviceTreeProperty` with the given name and value without
     /// validation.
     #[must_use]
-    pub fn new_unchecked(name: impl Into<String>, value: impl Into<Vec<u8>>) -> Self {
+    pub fn new_unchecked<T: ToPropertyValue>(name: impl Into<String>, value: T) -> Self {
+        let mut vec = alloc::vec![0; value.property_value_len()];
+        value.write_property_value(&mut vec);
         Self {
             name: name.into(),
-            value: value.into(),
+            value: vec,
         }
     }
 
@@ -87,12 +86,13 @@ impl DeviceTreeProperty {
     /// use dtoolkit::Property;
     /// use dtoolkit::model::DeviceTreeProperty;
     ///
-    /// let mut prop = DeviceTreeProperty::new("my-prop", vec![1, 2, 3, 4]).unwrap();
-    /// prop.set_value(vec![5, 6, 7, 8]);
+    /// let mut prop = DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap();
+    /// prop.set_value(vec![5u8, 6, 7, 8]);
     /// assert_eq!((&prop).value(), &[5, 6, 7, 8]);
     /// ```
-    pub fn set_value(&mut self, value: impl Into<Vec<u8>>) {
-        self.value = value.into();
+    pub fn set_value<T: ToPropertyValue>(&mut self, value: T) {
+        self.value.resize(value.property_value_len(), 0);
+        value.write_property_value(&mut self.value);
     }
 }
 
