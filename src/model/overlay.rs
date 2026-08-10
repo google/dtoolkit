@@ -204,13 +204,13 @@ impl<'a> OverlayApplier<'a> {
                     if let Some(sym_node) = self.base.root.child(NODE_SYMBOLS)
                         && let Some(sym_prop) = sym_node.property(path)
                     {
-                        let abs_path = sym_prop.as_str()?;
+                        let abs_path = sym_prop.value_as::<&str>()?;
                         return Ok(abs_path.to_string());
                     }
                     if let Some(aliases_node) = self.base.root.child("aliases")
                         && let Some(alias_prop) = aliases_node.property(path)
                     {
-                        let abs_path = alias_prop.as_str()?;
+                        let abs_path = alias_prop.value_as::<&str>()?;
                         return Ok(abs_path.to_string());
                     }
                     Err(OverlayError::TargetNotFound(path.to_string()))
@@ -319,7 +319,7 @@ fn relocate_local_phandles(
 fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), OverlayError> {
     for prop_name in PHANDLE_PROPS {
         if let Some(prop) = node.property_mut(prop_name)
-            && let Ok(val) = (&*prop).as_u32()
+            && let Ok(val) = (&*prop).value_as::<u32>()
         {
             let new_val = val
                 .checked_add(offset)
@@ -423,7 +423,7 @@ fn resolve_external_fixups(
             .child(NODE_SYMBOLS)
             .and_then(|sym| sym.property(symbol_name))
             .ok_or_else(|| OverlayError::UnresolvedSymbol(symbol_name.to_string()))?
-            .as_str()
+            .value_as::<&str>()
             .map_err(|_| OverlayError::UnresolvedSymbol(symbol_name.to_string()))?
             .to_string();
 
@@ -447,7 +447,7 @@ fn resolve_external_fixups(
             new_p
         };
 
-        for loc_str in fixup_prop.as_str_list() {
+        for loc_str in fixup_prop.value_as::<crate::values::FdtStringListIterator>()? {
             let loc = FixupLocation::parse(loc_str)?;
             let overlay_node = overlay
                 .find_node_mut(loc.node_path)

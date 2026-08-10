@@ -10,10 +10,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
 
-use zerocopy::FromBytes;
-
 use crate::error::ModelError;
-use crate::values::{FdtStringListIterator, PropEncodedArrayIterator};
+use crate::values::PropEncodedArrayIterator;
 use crate::{Cells, Property, ToPropertyValue};
 
 /// A mutable, in-memory representation of a device tree property.
@@ -24,8 +22,6 @@ pub struct DeviceTreeProperty {
 }
 
 impl<'a> Property for &'a DeviceTreeProperty {
-    type Str = &'a str;
-    type StrList = FdtStringListIterator<'a>;
     type PropEncodedArray<const N: usize> = PropEncodedArrayIterator<'a, N>;
     type CellsItem = Cells<'a>;
 

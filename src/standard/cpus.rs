@@ -11,6 +11,7 @@ use core::ops::Deref;
 
 use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
+use crate::values::FdtStringListIterator;
 use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
@@ -51,7 +52,10 @@ impl<N: Display> Display for Cpus<N> {
 
 impl<N: Node> Cpus<N> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N::Child<'_>>> + '_ {
+    pub fn cpus<'a>(&'a self) -> impl Iterator<Item = Cpu<N::Child<'a>>> + 'a
+    where
+        N: 'a,
+    {
         self.node.children().filter_map(|child| {
             if child.name_without_address().as_ref() == "cpu" {
                 Some(Cpu { node: child })
@@ -85,8 +89,15 @@ impl<N: Display> Display for Cpu<N> {
 impl<N: Node> Cpu<N> {
     /// Returns the value of the standard `enable-method` property if it is
     /// present.
-    pub fn enable_method(&self) -> Option<<<N as Node>::Property<'_> as Property>::StrList> {
-        Some(self.node.property("enable-method")?.as_str_list())
+    #[must_use]
+    pub fn enable_method<'a>(&'a self) -> Option<FdtStringListIterator<'a>>
+    where
+        N: 'a,
+    {
+        self.node
+            .property("enable-method")?
+            .value_as::<FdtStringListIterator<'a>>()
+            .ok()
     }
 
     /// Returns the value of the standard `cpu-release-addr` property if it is
@@ -98,7 +109,7 @@ impl<N: Node> Cpu<N> {
     pub fn cpu_release_addr(&self) -> Result<Option<u64>, PropertyError> {
         self.node
             .property("cpu-release-addr")
-            .map(|value| value.as_u64())
+            .map(|value| value.value_as::<u64>())
             .transpose()
     }
 }

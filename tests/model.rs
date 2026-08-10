@@ -37,10 +37,16 @@ fn tree_creation() {
     assert_eq!(root.children().count(), 2);
 
     let child_a = root.children().find(|c| c.name() == "child-a").unwrap();
-    assert_eq!(child_a.property("child-prop").unwrap().as_str(), Ok("a"));
+    assert_eq!(
+        child_a.property("child-prop").unwrap().value_as::<&str>(),
+        Ok("a")
+    );
 
     let child_b = root.children().find(|c| c.name() == "child-b").unwrap();
-    assert_eq!(child_b.property("child-prop").unwrap().as_str(), Ok("b"));
+    assert_eq!(
+        child_b.property("child-prop").unwrap().value_as::<&str>(),
+        Ok("b")
+    );
 }
 
 #[test]
@@ -68,7 +74,10 @@ fn tree_modification() {
 
     // Verify the modification
     let child = tree.root.children().find(|c| c.name() == "child").unwrap();
-    assert_eq!(child.property("prop").unwrap().as_str(), Ok("new-value"));
+    assert_eq!(
+        child.property("prop").unwrap().value_as::<&str>(),
+        Ok("new-value")
+    );
 
     // Remove the property
     let child = tree.root.child_mut("child").unwrap();
@@ -108,7 +117,10 @@ fn find_node_mut() {
         .children()
         .find(|c| c.name() == "child-a-a")
         .unwrap();
-    assert_eq!(child_a_a.property("prop").unwrap().as_str(), Ok("value"));
+    assert_eq!(
+        child_a_a.property("prop").unwrap().value_as::<&str>(),
+        Ok("value")
+    );
 
     // Find a non-existent node
     assert!(tree.find_node_mut("/child-a/child-c").is_none());

@@ -74,7 +74,7 @@
 //! // Find the child node and read its property.
 //! let child_node = fdt.find_node("/child").unwrap();
 //! let prop = child_node.property("my-property").unwrap();
-//! let val: &str = prop.as_str().unwrap().as_ref();
+//! let val = prop.value_as::<&str>().unwrap();
 //! assert_eq!(val, "hello");
 //!
 //! // Display the DTS
@@ -139,32 +139,21 @@ use core::ops::{BitOr, Shl};
 use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
-pub use crate::values::ToPropertyValue;
+pub use crate::values::{
+    FdtStringListIterator, FromPropertyValue, PropEncodedArrayIterator, ToPropertyValue,
+};
 
 macro_rules! impl_property_methods {
     (get_value = |$self:ident| $get_value:expr) => {
-        fn as_cells(&$self) -> Result<$crate::Cells<'a>, $crate::error::PropertyError> {
-            Ok($crate::Cells(
-                <[zerocopy::big_endian::U32]>::ref_from_bytes($get_value)
-                    .map_err(|_| $crate::error::PropertyError::InvalidLength)?,
-            ))
-        }
-
-        fn as_str(&$self) -> Result<&'a str, $crate::error::PropertyError> {
-            let cstr =
-                core::ffi::CStr::from_bytes_with_nul($get_value).map_err(|_| $crate::error::PropertyError::InvalidString)?;
-            cstr.to_str().map_err(|_| $crate::error::PropertyError::InvalidString)
-        }
-
-        fn as_str_list(&$self) -> $crate::values::FdtStringListIterator<'a> {
-            $crate::values::FdtStringListIterator { value: $get_value }
+        fn value_as<'v, T: crate::FromPropertyValue<'v>>(&$self) -> Result<T, crate::error::PropertyError> where Self: 'v {
+            T::from_property_value($get_value)
         }
 
         fn as_prop_encoded_array<const N: usize>(
             &$self,
             fields_cells: [usize; N],
-        ) -> Result<$crate::values::PropEncodedArrayIterator<'a, N>, $crate::error::PropertyError> {
-            $crate::values::PropEncodedArrayIterator::new($get_value, fields_cells)
+        ) -> Result<crate::values::PropEncodedArrayIterator<'a, N>, crate::error::PropertyError> {
+            crate::values::PropEncodedArrayIterator::new($get_value, fields_cells)
         }
     };
 }
@@ -287,12 +276,6 @@ pub trait Node: Sized {
 
 /// A property of a device tree node.
 pub trait Property: Sized {
-    /// The type used for strings in the property.
-    type Str: AsRef<str>;
-
-    /// The type used for the strings iterator.
-    type StrList: Iterator<Item = Self::Str>;
-
     /// The type used for the prop-encoded-array iterator.
     type PropEncodedArray<const N: usize>: Iterator<Item = [Self::CellsItem; N]>;
 
@@ -307,106 +290,14 @@ pub trait Property: Sized {
     #[must_use]
     fn value(&self) -> &[u8];
 
-    /// Returns the value of this property as a `u32`.
+    /// Returns the value of this property as a given type.
     ///
     /// # Errors
     ///
-    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
-    /// not 4 bytes long.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("u32-prop").unwrap();
-    /// assert_eq!(prop.as_u32().unwrap(), 0x12345678);
-    /// ```
-    fn as_u32(&self) -> Result<u32, PropertyError> {
-        self.value()
-            .try_into()
-            .map(u32::from_be_bytes)
-            .map_err(|_| PropertyError::InvalidLength)
-    }
-
-    /// Returns the value of this property as a `u64`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`PropertyError::InvalidLength`] if the property's value is
-    /// not 8 bytes long.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("u64-prop").unwrap();
-    /// assert_eq!(prop.as_u64().unwrap(), 0x1122334455667788);
-    /// ```
-    fn as_u64(&self) -> Result<u64, PropertyError> {
-        self.value()
-            .try_into()
-            .map(u64::from_be_bytes)
-            .map_err(|_| PropertyError::InvalidLength)
-    }
-
-    /// Returns the value of this property as a slide of 32-bit cells.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value of the property isn't a multiple of 4
-    /// bytes long.
-    fn as_cells(&self) -> Result<Self::CellsItem, PropertyError>;
-
-    /// Returns the value of this property as a string.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`PropertyError::InvalidString`] if the property's value is
-    /// not a null-terminated string or contains invalid UTF-8.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("str-prop").unwrap();
-    /// assert_eq!(prop.as_str().unwrap(), "hello world");
-    /// ```
-    fn as_str(&self) -> Result<Self::Str, PropertyError>;
-
-    /// Returns an iterator over the strings in this property.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/test-props").unwrap();
-    /// let prop = node.property("str-list-prop").unwrap();
-    /// let mut str_list = prop.as_str_list();
-    /// assert_eq!(str_list.next(), Some("first"));
-    /// assert_eq!(str_list.next(), Some("second"));
-    /// assert_eq!(str_list.next(), Some("third"));
-    /// assert_eq!(str_list.next(), None);
-    /// ```
-    fn as_str_list(&self) -> Self::StrList;
+    /// Returns an error if the value cannot be parsed or has invalid length.
+    fn value_as<'a, T: FromPropertyValue<'a>>(&self) -> Result<T, PropertyError>
+    where
+        Self: 'a;
 
     /// Returns an iterator over the elements of the property interpreted as a
     /// `prop-encoded-array`.

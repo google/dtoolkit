@@ -36,15 +36,24 @@ fn apply_overlay_target_path() {
     );
 
     let soc = base.find_node_mut("/soc").unwrap();
-    assert_eq!(soc.property("status").unwrap().as_str(), Ok("okay"));
-    assert_eq!(soc.property("new-prop").unwrap().as_str(), Ok("foo"));
+    assert_eq!(
+        soc.property("status").unwrap().value_as::<&str>(),
+        Ok("okay")
+    );
+    assert_eq!(
+        soc.property("new-prop").unwrap().value_as::<&str>(),
+        Ok("foo")
+    );
     assert!(soc.child("serial@1000").is_some());
 
     // Verify round-trip through serialization
     let dtb = base.to_dtb();
     let fdt = Fdt::new(&dtb).unwrap();
     let fdt_soc = fdt.find_node("/soc").unwrap();
-    assert_eq!(fdt_soc.property("status").unwrap().as_str(), Ok("okay"));
+    assert_eq!(
+        fdt_soc.property("status").unwrap().value_as::<&str>(),
+        Ok("okay")
+    );
 }
 
 #[test]
@@ -56,7 +65,10 @@ fn apply_overlay_with_local_fixups() {
 
     // Base had max phandle 1, so overlay phandle 1 should be relocated to 2.
     let dev = base.find_node_mut("/dev@200").unwrap();
-    assert_eq!(dev.property("phandle").unwrap().as_u32().unwrap(), 2);
+    assert_eq!(
+        dev.property("phandle").unwrap().value_as::<u32>().unwrap(),
+        2
+    );
     assert_eq!(dev.property("clocks").unwrap().value(), &[0, 0, 0, 2]);
 }
 
@@ -68,11 +80,14 @@ fn apply_overlay_with_external_fixups_and_symbols() {
     );
 
     let uart = base.find_node_mut("/soc/uart@1000").unwrap();
-    assert_eq!(uart.property("status").unwrap().as_str(), Ok("okay"));
+    assert_eq!(
+        uart.property("status").unwrap().value_as::<&str>(),
+        Ok("okay")
+    );
 
     let base_sym = base.root.child("__symbols__").unwrap();
     assert_eq!(
-        base_sym.property("uart0").unwrap().as_str(),
+        base_sym.property("uart0").unwrap().value_as::<&str>(),
         Ok("/soc/uart@1000")
     );
 }
