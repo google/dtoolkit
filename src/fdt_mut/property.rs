@@ -11,12 +11,12 @@ use core::fmt::{Display, Formatter};
 
 use zerocopy::{FromBytes, big_endian};
 
-use crate::Property;
 use crate::error::FdtMutError;
 use crate::fdt::property::InnerPropIter;
 use crate::fdt::{FDT_TAGSIZE, Fdt, FdtProperty};
 use crate::fdt_mut::FdtMut;
 use crate::fdt_mut::buffer::FdtBuffer;
+use crate::{Property, ToPropertyValue};
 
 /// A mutable property of a device tree node.
 #[derive(Debug)]
@@ -63,9 +63,10 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
     /// assert_eq!(node.property("prop").unwrap().value(), b"foo\0");
     /// ```
-    pub fn set_value(&mut self, new_value: &[u8]) -> Result<(), FdtMutError> {
+    pub fn set_value<T: ToPropertyValue>(&mut self, new_value: T) -> Result<(), FdtMutError> {
+        let new_len = new_value.property_value_len();
         let old_padded = Fdt::align_tag_offset(self.len);
-        let new_padded = Fdt::align_tag_offset(new_value.len());
+        let new_padded = Fdt::align_tag_offset(new_len);
 
         if new_padded > old_padded {
             let needed_bytes = new_padded - old_padded;
@@ -87,15 +88,10 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
             &mut self.data.data_mut()[self.prop_offset + FDT_TAGSIZE..],
         )
         .expect("Fdt should be valid");
-        len_bytes.set(
-            new_value
-                .len()
-                .try_into()
-                .expect("length should fit in u32"),
-        );
+        len_bytes.set(new_len.try_into().expect("length should fit in u32"));
 
         self.data
-            .copy_data_with_padding(new_value, new_padded, self.value_offset);
+            .write_property_value_with_padding(&new_value, new_padded, self.value_offset);
 
         if new_padded < old_padded {
             self.data.replace_with_nops(
@@ -104,7 +100,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
             );
         }
 
-        self.len = new_value.len();
+        self.len = new_len;
 
         Ok(())
     }

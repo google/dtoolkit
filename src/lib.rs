@@ -61,7 +61,7 @@
 //! // Add a child node to the root.
 //! let child = DeviceTreeNode::builder("child")
 //!     .unwrap()
-//!     .property(DeviceTreeProperty::new("my-property", "hello\0").unwrap())
+//!     .property(DeviceTreeProperty::new("my-property", "hello").unwrap())
 //!     .build();
 //! tree.root.add_child(child);
 //!
@@ -133,13 +133,13 @@ pub mod standard;
 mod util;
 mod validate;
 mod values;
-
 use core::fmt::{self, Display, Formatter};
 use core::ops::{BitOr, Shl};
 
 use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
+pub use crate::values::ToPropertyValue;
 
 macro_rules! impl_property_methods {
     (get_value = |$self:ident| $get_value:expr) => {

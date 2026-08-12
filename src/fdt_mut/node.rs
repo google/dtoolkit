@@ -19,7 +19,7 @@ use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
-use crate::{Node, Property};
+use crate::{Node, Property, ToPropertyValue};
 
 /// A mutable device tree node.
 #[derive(Debug)]
@@ -86,10 +86,10 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ///
     /// Panics if the node name or existing structure is invalid, or if lengths
     /// exceed `u32::MAX`.
-    pub fn add_property(
+    pub fn add_property<T: ToPropertyValue>(
         &mut self,
         name: &str,
-        value: &[u8],
+        value: T,
     ) -> Result<FdtPropertyMut<'_, B>, crate::error::FdtMutError> {
         let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
@@ -98,14 +98,15 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         offset = Fdt::align_tag_offset(name_end);
         let insert_offset = fdt.skip_props(offset, false).expect("valid dt");
 
-        let padded_val_len = Fdt::align_tag_offset(value.len());
+        let val_len = value.property_value_len();
+        let padded_val_len = Fdt::align_tag_offset(val_len);
         let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
 
         self.data.shift_dt_struct(insert_offset, required_space)?;
 
         let data = self.data.data_mut();
         let header = FdtPropertyHeader::new(
-            u32::try_from(value.len()).expect("len fits in u32"),
+            u32::try_from(val_len).expect("len fits in u32"),
             u32::try_from(nameoff).expect("nameoff fits in u32"),
         );
         data[insert_offset..insert_offset + size_of::<FdtPropertyHeader>()]
@@ -113,12 +114,12 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
 
         let val_offset = insert_offset + size_of::<FdtPropertyHeader>();
         self.data
-            .copy_data_with_padding(value, padded_val_len, val_offset);
+            .write_property_value_with_padding(&value, padded_val_len, val_offset);
 
         Ok(FdtPropertyMut {
             prop_offset: insert_offset,
             value_offset: val_offset,
-            len: value.len(),
+            len: val_len,
             nameoff,
             data: self.data,
         })
