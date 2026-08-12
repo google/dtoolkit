@@ -9,10 +9,12 @@
 use core::fmt;
 use core::fmt::{Display, Formatter};
 
+use zerocopy::IntoBytes;
+
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
-use crate::fdt::{FDT_PROP, FDT_TAGSIZE, Fdt, FdtNode};
+use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtPropertyHeader};
 use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
@@ -98,24 +100,19 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
 
         let val_len = value.property_value_len();
         let padded_val_len = Fdt::align_tag_offset(val_len);
-        let required_space = FDT_TAGSIZE * 3 + padded_val_len;
+        let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
 
         self.data.shift_dt_struct(insert_offset, required_space)?;
 
         let data = self.data.data_mut();
-        data[insert_offset..insert_offset + FDT_TAGSIZE].copy_from_slice(&FDT_PROP.to_be_bytes());
-        data[insert_offset + FDT_TAGSIZE..insert_offset + 2 * FDT_TAGSIZE].copy_from_slice(
-            &u32::try_from(val_len)
-                .expect("len fits in u32")
-                .to_be_bytes(),
+        let header = FdtPropertyHeader::new(
+            u32::try_from(val_len).expect("len fits in u32"),
+            u32::try_from(nameoff).expect("nameoff fits in u32"),
         );
-        data[insert_offset + 2 * FDT_TAGSIZE..insert_offset + 3 * FDT_TAGSIZE].copy_from_slice(
-            &u32::try_from(nameoff)
-                .expect("nameoff fits in u32")
-                .to_be_bytes(),
-        );
+        data[insert_offset..insert_offset + size_of::<FdtPropertyHeader>()]
+            .copy_from_slice(header.as_bytes());
 
-        let val_offset = insert_offset + 3 * FDT_TAGSIZE;
+        let val_offset = insert_offset + size_of::<FdtPropertyHeader>();
         self.data
             .write_property_value_with_padding(&value, padded_val_len, val_offset);
 

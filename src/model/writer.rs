@@ -14,7 +14,8 @@ use alloc::vec::Vec;
 use zerocopy::IntoBytes;
 
 use crate::fdt::{
-    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_MAGIC, FDT_PROP, FDT_TAGSIZE, Fdt, FdtHeader,
+    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_MAGIC, FDT_TAGSIZE, Fdt, FdtHeader,
+    FdtPropertyHeader,
 };
 use crate::memreserve::MemoryReservation;
 use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
@@ -119,10 +120,7 @@ impl DeviceTree {
     }
 
     fn calculate_prop_size(string_map: &mut StringMap, prop: &DeviceTreeProperty) -> usize {
-        let mut size = 0;
-        size += FDT_TAGSIZE; // FDT_PROP
-        size += size_of::<u32>(); // len
-        size += size_of::<u32>(); // nameoff
+        let mut size = size_of::<FdtPropertyHeader>();
 
         // ensure the name is in the map
         string_map.insert(prop.name());
@@ -164,13 +162,11 @@ impl DeviceTree {
     fn write_prop(dtb: &mut Vec<u8>, string_map: &StringMap, prop: &DeviceTreeProperty) {
         let name_offset = string_map.get_offset(prop.name());
 
-        dtb.extend_from_slice(&FDT_PROP.to_be_bytes());
-        dtb.extend_from_slice(
-            &u32::try_from(prop.value().len())
-                .expect("property value length exceeds u32")
-                .to_be_bytes(),
+        let header = FdtPropertyHeader::new(
+            u32::try_from(prop.value().len()).expect("property value length exceeds u32"),
+            name_offset,
         );
-        dtb.extend_from_slice(&name_offset.to_be_bytes());
+        dtb.extend_from_slice(header.as_bytes());
         dtb.extend_from_slice(prop.value());
         Self::align(dtb);
     }

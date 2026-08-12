@@ -10,9 +10,9 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use zerocopy::{FromBytes, big_endian};
+use zerocopy::FromBytes;
 
-use super::{FDT_TAGSIZE, Fdt, FdtToken};
+use super::{FDT_TAGSIZE, Fdt, FdtPropertyHeader, FdtToken};
 use crate::Property;
 
 /// A property of a device tree node.
@@ -140,7 +140,7 @@ impl InnerPropIter {
     #[must_use]
     fn next_property_parsed<'a>(fdt: Fdt<'a>, offset: &mut usize) -> Option<ParsedProperty<'a>> {
         *offset = fdt
-            .next_property_offset(*offset + FDT_TAGSIZE, false)
+            .next_property_offset(*offset, false)
             .expect("Fdt should be valid");
         Self::find_property(fdt, offset)
     }
@@ -159,13 +159,11 @@ impl InnerPropIter {
 
     #[must_use]
     fn parse_property(fdt: Fdt, offset: usize) -> ParsedProperty {
-        let (len, _) = big_endian::U32::ref_from_prefix(&fdt.data[offset + FDT_TAGSIZE..])
-            .expect("Fdt should be valid");
-        let len = len.get() as usize;
-        let (nameoff, _) = big_endian::U32::ref_from_prefix(&fdt.data[offset + 2 * FDT_TAGSIZE..])
-            .expect("Fdt should be valid");
-        let nameoff = nameoff.get() as usize;
-        let value_offset = offset + 3 * FDT_TAGSIZE;
+        let (header, _) =
+            FdtPropertyHeader::ref_from_prefix(&fdt.data[offset..]).expect("Fdt should be valid");
+        let len = header.len() as usize;
+        let nameoff = header.nameoff() as usize;
+        let value_offset = offset + size_of::<FdtPropertyHeader>();
         let name = fdt.string(nameoff).expect("Fdt should be valid");
         let value = fdt
             .data

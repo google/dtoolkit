@@ -161,7 +161,7 @@ impl InnerChildIter {
                 FdtToken::BeginNode => return Some(*offset),
                 FdtToken::Prop => {
                     *offset = fdt
-                        .next_property_offset(*offset + FDT_TAGSIZE, false)
+                        .next_property_offset(*offset, false)
                         .expect("Fdt should be valid");
                 }
                 FdtToken::EndNode | FdtToken::End => return None,
