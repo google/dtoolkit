@@ -9,10 +9,10 @@
 use core::fmt;
 use core::fmt::{Display, Formatter};
 
-use crate::fdt::FdtNode;
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
+use crate::fdt::{FDT_PROP, FDT_TAGSIZE, Fdt, FdtNode};
 use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
@@ -72,6 +72,59 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
             }
         }
         None
+    }
+
+    /// Adds a new property to this node.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if resizing the buffer fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node name or existing structure is invalid, or if lengths
+    /// exceed `u32::MAX`.
+    pub fn add_property(
+        &mut self,
+        name: &str,
+        value: &[u8],
+    ) -> Result<FdtPropertyMut<'_, B>, crate::error::FdtMutError> {
+        let nameoff = self.data.add_string(name)? as usize;
+        let fdt = self.as_read_only().fdt;
+        let mut offset = self.offset + FDT_TAGSIZE;
+        let name_end = fdt.find_string_end(offset).expect("valid node name");
+        offset = Fdt::align_tag_offset(name_end);
+        let insert_offset = fdt.skip_props(offset, false).expect("valid dt");
+
+        let padded_val_len = Fdt::align_tag_offset(value.len());
+        let required_space = FDT_TAGSIZE * 3 + padded_val_len;
+
+        self.data.shift_dt_struct(insert_offset, required_space)?;
+
+        let data = self.data.data_mut();
+        data[insert_offset..insert_offset + FDT_TAGSIZE].copy_from_slice(&FDT_PROP.to_be_bytes());
+        data[insert_offset + FDT_TAGSIZE..insert_offset + 2 * FDT_TAGSIZE].copy_from_slice(
+            &u32::try_from(value.len())
+                .expect("len fits in u32")
+                .to_be_bytes(),
+        );
+        data[insert_offset + 2 * FDT_TAGSIZE..insert_offset + 3 * FDT_TAGSIZE].copy_from_slice(
+            &u32::try_from(nameoff)
+                .expect("nameoff fits in u32")
+                .to_be_bytes(),
+        );
+
+        let val_offset = insert_offset + 3 * FDT_TAGSIZE;
+        self.data
+            .copy_data_with_padding(value, padded_val_len, val_offset);
+
+        Ok(FdtPropertyMut {
+            prop_offset: insert_offset,
+            value_offset: val_offset,
+            len: value.len(),
+            nameoff,
+            data: self.data,
+        })
     }
 
     /// Removes a property from this node by its name.
