@@ -433,7 +433,7 @@ fn compact_slice_noop() {
 }
 
 #[test]
-fn test_iter_invalidation() {
+fn iter_invalidation() {
     let dtb = include_bytes!("dtb/test_props.dtb");
 
     let mut fdt = FdtMut::new(dtb.to_vec()).unwrap();
@@ -533,7 +533,7 @@ fn add_string_deduplication() {
 
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
     // adding property with an existing name should not grow the dt_strings block
-    node.add_property("str-prop", &[1, 2, 3, 4]).unwrap();
+    node.add_property("str-prop", [1u8, 2, 3, 4]).unwrap();
 
     // DTB should grow exactly by the property block size (FDT_TAGSIZE * 3 + value
     // length)
@@ -547,7 +547,7 @@ fn add_string_deduplication() {
     // adding property with a new string name should grow the dt_strings block
     let new_name = "brand-new-property-name";
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
-    node.add_property(new_name, &[1, 2, 3, 4]).unwrap();
+    node.add_property(new_name, [1u8, 2, 3, 4]).unwrap();
 
     let final_size = fdt_mut.as_read_only().data().len();
     assert_eq!(

@@ -21,13 +21,13 @@ fn tree_creation() {
     tree.root.add_child(
         DeviceTreeNode::builder("child-a")
             .unwrap()
-            .property(DeviceTreeProperty::new("child-prop", "a\0").unwrap())
+            .property(DeviceTreeProperty::new("child-prop", "a").unwrap())
             .build(),
     );
     tree.root.add_child(
         DeviceTreeNode::builder("child-b")
             .unwrap()
-            .property(DeviceTreeProperty::new("child-prop", "b\0").unwrap())
+            .property(DeviceTreeProperty::new("child-prop", "b").unwrap())
             .build(),
     );
 
@@ -54,7 +54,7 @@ fn tree_modification() {
 
     // Add a property to the child
     let child = tree.root.child_mut("child").unwrap();
-    child.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
+    child.add_property(DeviceTreeProperty::new("prop", "value").unwrap());
     assert_eq!(child.properties().count(), 1);
 
     // Find and modify the property
@@ -64,7 +64,7 @@ fn tree_modification() {
         .unwrap()
         .property_mut("prop")
         .unwrap();
-    prop.set_value("new-value\0");
+    prop.set_value("new-value");
 
     // Verify the modification
     let child = tree.root.children().find(|c| c.name() == "child").unwrap();
@@ -96,7 +96,7 @@ fn find_node_mut() {
 
     // Find a nested child and modify it
     let child_a_a = tree.find_node_mut("/child-a/child-a-a").unwrap();
-    child_a_a.add_property(DeviceTreeProperty::new("prop", "value\0").unwrap());
+    child_a_a.add_property(DeviceTreeProperty::new("prop", "value").unwrap());
 
     // Verify the modification
     let child_a = tree

@@ -23,6 +23,7 @@ pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
 use zerocopy::{FromBytes, big_endian};
 
+use crate::ToPropertyValue;
 use crate::error::{BufferError, FdtParseError};
 use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtToken};
 
@@ -326,12 +327,16 @@ impl<B: FdtBuffer> FdtMut<B> {
         }
     }
 
-    fn copy_data_with_padding(&mut self, value: &[u8], padded_val_len: usize, val_offset: usize) {
+    fn write_property_value_with_padding<T: ToPropertyValue>(
+        &mut self,
+        value: &T,
+        padded_val_len: usize,
+        val_offset: usize,
+    ) {
+        let val_len = value.property_value_len();
         let data = self.data_mut();
-        data[val_offset..val_offset + value.len()].copy_from_slice(value);
-        for i in value.len()..padded_val_len {
-            data[val_offset + i] = 0;
-        }
+        value.write_property_value(&mut data[val_offset..val_offset + val_len]);
+        data[val_offset + val_len..val_offset + padded_val_len].fill(0);
     }
 }
 
