@@ -94,7 +94,11 @@ impl<'a> OverlayApplier<'a> {
     /// Returns an error when applying the overlay fails because of a malformed
     /// overlay data.
     pub fn apply_overlay_tree(&mut self, mut overlay: DeviceTree) -> Result<(), OverlayError> {
-        relocate_local_phandles(&mut overlay, self.max_phandle)?;
+        let overlay_max_phandle = relocate_local_phandles(&mut overlay, self.max_phandle)?;
+        // The overlay's local phandles have been relocated into the range above
+        // the base's previous maximum. Bump the running maximum so that new
+        // phandles allocated for external fixups can't collide with them.
+        self.max_phandle = self.max_phandle.max(overlay_max_phandle);
         resolve_external_fixups(
             self.base,
             &mut overlay,
@@ -255,6 +259,13 @@ fn merge_node(
     for (_, prop) in overlay.properties {
         target.add_property(prop);
     }
+    // A phandle merged into an existing node also needs to be tracked, so
+    // that later overlays can resolve it by phandle and new phandles are
+    // allocated above it.
+    if let Some(p) = get_phandle(&*target) {
+        *max_phandle = (*max_phandle).max(p);
+        phandles.insert(p, current_path.to_owned());
+    }
     for (child_name, child) in overlay.children {
         let child_path = if current_path == "/" {
             format!("/{child_name}")
@@ -296,13 +307,15 @@ fn update_phandles_recursive(
 
 /// Adds `offset` to all phandle properties in the given `node` and its
 /// descendants.
+///
+/// Returns the maximum phandle value present in the overlay after relocation.
 fn relocate_local_phandles(
     overlay: &mut DeviceTree,
     phandle_offset: u32,
-) -> Result<(), OverlayError> {
+) -> Result<u32, OverlayError> {
     if phandle_offset == 0 {
         overlay.root.remove_child(NODE_LOCAL_FIXUPS);
-        return Ok(());
+        return Ok(max_phandle(&overlay.root));
     }
 
     offset_node_phandles(&mut overlay.root, phandle_offset)?;
@@ -311,7 +324,16 @@ fn relocate_local_phandles(
         update_local_references(&mut overlay.root, &fixup_node, phandle_offset)?;
     }
 
-    Ok(())
+    Ok(max_phandle(&overlay.root))
+}
+
+/// Returns the maximum phandle value present in `node` and its descendants.
+fn max_phandle(node: &DeviceTreeNode) -> u32 {
+    let mut max = get_phandle(node).unwrap_or(0);
+    for child in node.children() {
+        max = max.max(max_phandle(child));
+    }
+    max
 }
 
 /// Relocates all local phandles defined in `overlay` and updates internal
