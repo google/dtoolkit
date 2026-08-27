@@ -129,15 +129,13 @@ impl<N: Node> Fragment<N> {
     ///     FragmentTarget::Phandle(p) => println!("Targeting phandle: {}", p),
     /// }
     /// ```
-    pub fn target(
-        &self,
-    ) -> Result<FragmentTarget<<N::Property<'_> as Property>::Str>, OverlayError> {
+    pub fn target(&self) -> Result<FragmentTarget<&str>, OverlayError> {
         let target = self.node.property("target");
         let target_path = self.node.property("target-path");
 
         match (target, target_path) {
-            (Some(prop), None) => Ok(FragmentTarget::Phandle(prop.as_u32()?)),
-            (None, Some(prop)) => Ok(FragmentTarget::Path(prop.as_str()?)),
+            (Some(prop), None) => Ok(FragmentTarget::Phandle(prop.value_as::<u32>()?)),
+            (None, Some(prop)) => Ok(FragmentTarget::Path(prop.value_as::<&str>()?)),
             _ => Err(OverlayError::InvalidFragmentTarget),
         }
     }
@@ -227,7 +225,7 @@ impl<'a> FixupLocation<'a> {
 pub fn get_phandle<N: Node>(node: &N) -> Option<u32> {
     for prop in PHANDLE_PROPS {
         if let Some(p) = node.property(prop)
-            && let Ok(val) = p.as_u32()
+            && let Ok(val) = p.value_as::<u32>()
         {
             return Some(val);
         }

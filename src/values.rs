@@ -26,6 +26,12 @@ pub struct FdtStringListIterator<'a> {
     pub(crate) value: &'a [u8],
 }
 
+impl<'a> FromPropertyValue<'a> for FdtStringListIterator<'a> {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        Ok(Self { value })
+    }
+}
+
 impl<'a> Iterator for FdtStringListIterator<'a> {
     type Item = &'a str;
 
@@ -80,6 +86,17 @@ impl<'a, const N: usize> Iterator for PropEncodedArrayIterator<'a, N> {
     }
 }
 
+/// A trait for types that can be parsed from a device tree property value.
+pub trait FromPropertyValue<'a>: Sized {
+    /// Parses a value of `Self` from a device tree property byte slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PropertyError`] if the byte slice cannot be converted into
+    /// `Self`.
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError>;
+}
+
 /// A trait for types that can be serialized into a device tree property value.
 pub trait ToPropertyValue {
     /// Returns the length in bytes of the serialized property value.
@@ -105,6 +122,12 @@ impl<T: ToPropertyValue> ToPropertyValue for &T {
     }
 }
 
+impl<'a> FromPropertyValue<'a> for &'a [u8] {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        Ok(value)
+    }
+}
+
 impl ToPropertyValue for &[u8] {
     fn property_value_len(&self) -> usize {
         self.len()
@@ -115,6 +138,12 @@ impl ToPropertyValue for &[u8] {
     }
 }
 
+impl<'a, const N: usize> FromPropertyValue<'a> for [u8; N] {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        value.try_into().map_err(|_| PropertyError::InvalidLength)
+    }
+}
+
 impl<const N: usize> ToPropertyValue for [u8; N] {
     fn property_value_len(&self) -> usize {
         self.len()
@@ -122,6 +151,19 @@ impl<const N: usize> ToPropertyValue for [u8; N] {
 
     fn write_property_value(&self, buffer: &mut [u8]) {
         buffer.copy_from_slice(self);
+    }
+}
+
+impl<'a, const N: usize> FromPropertyValue<'a> for &'a [u8; N] {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        value.try_into().map_err(|_| PropertyError::InvalidLength)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> FromPropertyValue<'a> for Vec<u8> {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        Ok(value.to_vec())
     }
 }
 
@@ -136,6 +178,15 @@ impl ToPropertyValue for Vec<u8> {
     }
 }
 
+impl<'a> FromPropertyValue<'a> for u32 {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        value
+            .try_into()
+            .map(u32::from_be_bytes)
+            .map_err(|_| PropertyError::InvalidLength)
+    }
+}
+
 impl ToPropertyValue for u32 {
     fn property_value_len(&self) -> usize {
         size_of::<u32>()
@@ -143,6 +194,15 @@ impl ToPropertyValue for u32 {
 
     fn write_property_value(&self, buffer: &mut [u8]) {
         buffer.copy_from_slice(&self.to_be_bytes());
+    }
+}
+
+impl<'a> FromPropertyValue<'a> for u64 {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        value
+            .try_into()
+            .map(u64::from_be_bytes)
+            .map_err(|_| PropertyError::InvalidLength)
     }
 }
 
@@ -156,6 +216,15 @@ impl ToPropertyValue for u64 {
     }
 }
 
+impl<'a> FromPropertyValue<'a> for &'a str {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        let stripped = value
+            .strip_suffix(b"\0")
+            .ok_or(PropertyError::InvalidString)?;
+        core::str::from_utf8(stripped).map_err(|_| PropertyError::InvalidString)
+    }
+}
+
 impl ToPropertyValue for &str {
     fn property_value_len(&self) -> usize {
         self.len() + 1
@@ -165,6 +234,18 @@ impl ToPropertyValue for &str {
         let len = self.len();
         buffer[..len].copy_from_slice(self.as_bytes());
         buffer[len] = 0;
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> FromPropertyValue<'a> for String {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        let stripped = value
+            .strip_suffix(b"\0")
+            .ok_or(PropertyError::InvalidString)?;
+        core::str::from_utf8(stripped)
+            .map(String::from)
+            .map_err(|_| PropertyError::InvalidString)
     }
 }
 
@@ -194,6 +275,24 @@ impl ToPropertyValue for &[u32] {
     }
 }
 
+impl<'a, const N: usize> FromPropertyValue<'a> for [u32; N] {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        if value.len() != N * size_of::<u32>() {
+            return Err(PropertyError::InvalidLength);
+        }
+        let mut out = [0u32; N];
+        for (i, chunk) in value
+            .as_chunks::<{ size_of::<u32>() }>()
+            .0
+            .iter()
+            .enumerate()
+        {
+            out[i] = u32::from_be_bytes(*chunk);
+        }
+        Ok(out)
+    }
+}
+
 impl<const N: usize> ToPropertyValue for [u32; N] {
     fn property_value_len(&self) -> usize {
         self.len() * size_of::<u32>()
@@ -204,6 +303,20 @@ impl<const N: usize> ToPropertyValue for [u32; N] {
         for (chunk, val) in chunks.iter_mut().zip(self) {
             *chunk = val.to_be_bytes();
         }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> FromPropertyValue<'a> for Vec<u32> {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        if !value.len().is_multiple_of(size_of::<u32>()) {
+            return Err(PropertyError::InvalidLength);
+        }
+        let mut out = Vec::with_capacity(value.len() / size_of::<u32>());
+        for chunk in value.as_chunks::<{ size_of::<u32>() }>().0 {
+            out.push(u32::from_be_bytes(*chunk));
+        }
+        Ok(out)
     }
 }
 
@@ -237,6 +350,13 @@ impl ToPropertyValue for &[&str] {
 }
 
 #[cfg(feature = "alloc")]
+impl<'a> FromPropertyValue<'a> for Vec<&'a str> {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        Ok(FdtStringListIterator { value }.collect::<Vec<_>>())
+    }
+}
+
+#[cfg(feature = "alloc")]
 impl ToPropertyValue for Vec<&str> {
     fn property_value_len(&self) -> usize {
         self.iter().map(|s| s.len() + 1).sum()
@@ -249,6 +369,14 @@ impl ToPropertyValue for Vec<&str> {
             buffer[len] = 0;
             buffer = &mut buffer[len + 1..];
         }
+    }
+}
+
+impl<'a> FromPropertyValue<'a> for Cells<'a> {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        let cells = <[big_endian::U32] as FromBytes>::ref_from_bytes(value)
+            .map_err(|_| PropertyError::InvalidLength)?;
+        Ok(Self(cells))
     }
 }
 
@@ -278,6 +406,30 @@ mod tests {
         assert_eq!(
             PropEncodedArrayIterator::new(&[1, 2, 3, 4], [0, 0, 0]).unwrap_err(),
             PropertyError::PropEncodedArraySizeMismatch { size: 4, chunk: 0 }
+        );
+    }
+
+    #[test]
+    fn u32_array_invalid_length() {
+        let bytes = [0, 0, 0, 1, 0, 0, 0, 2, 0]; // 9 bytes, not 8
+        assert_eq!(
+            <[u32; 2]>::from_property_value(&bytes),
+            Err(PropertyError::InvalidLength)
+        );
+        let short_bytes = [0, 0, 0, 1]; // 4 bytes, needed 8
+        assert_eq!(
+            <[u32; 2]>::from_property_value(&short_bytes),
+            Err(PropertyError::InvalidLength)
+        );
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn u32_vec_invalid_length() {
+        let bytes = [0, 0, 0, 1, 0]; // 5 bytes, not multiple of 4
+        assert_eq!(
+            <Vec<u32>>::from_property_value(&bytes),
+            Err(PropertyError::InvalidLength)
         );
     }
 }

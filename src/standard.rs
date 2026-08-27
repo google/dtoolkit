@@ -32,11 +32,12 @@ pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 pub trait NodeStandard: Node {
     /// Returns the value of the standard `compatible` property.
     #[must_use]
-    fn compatible(
-        &self,
-    ) -> Option<impl Iterator<Item = <Self::Property<'_> as Property>::Str> + '_> {
-        self.property("compatible")
-            .map(|property| property.as_str_list())
+    fn compatible(&self) -> Option<impl Iterator<Item = &'_ str> + '_> {
+        self.property("compatible").and_then(|property| {
+            property
+                .value_as::<crate::values::FdtStringListIterator>()
+                .ok()
+        })
     }
 
     /// Returns whether this node has a `compatible` property containing the
@@ -44,7 +45,9 @@ pub trait NodeStandard: Node {
     #[must_use]
     fn is_compatible(&self, compatible_filter: &str) -> bool {
         if let Some(prop) = self.property("compatible") {
-            return prop.as_str_list().any(|c| c.as_ref() == compatible_filter);
+            return prop
+                .value_as::<crate::values::FdtStringListIterator>()
+                .is_ok_and(|mut it| it.any(|c| c == compatible_filter));
         }
         false
     }
@@ -64,9 +67,9 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid UTF-8 string.
-    fn model(&self) -> Result<Option<<Self::Property<'_> as Property>::Str>, PropertyError> {
+    fn model(&self) -> Result<Option<&str>, PropertyError> {
         if let Some(model) = self.property("model") {
-            Ok(Some(model.as_str()?))
+            Ok(Some(model.value_as::<&str>()?))
         } else {
             Ok(None)
         }
@@ -79,7 +82,7 @@ pub trait NodeStandard: Node {
     /// Returns an error if the value isn't a valid u32.
     fn phandle(&self) -> Result<Option<u32>, PropertyError> {
         if let Some(property) = self.property("phandle") {
-            Ok(Some(property.as_u32()?))
+            Ok(Some(property.value_as::<u32>()?))
         } else {
             Ok(None)
         }
@@ -94,7 +97,7 @@ pub trait NodeStandard: Node {
     /// Returns an error if the value isn't a valid status.
     fn status(&self) -> Result<Status, StandardError> {
         if let Some(status) = self.property("status") {
-            Ok(status.as_str()?.as_ref().parse()?)
+            Ok(status.value_as::<&str>()?.parse()?)
         } else {
             Ok(Status::Okay)
         }
@@ -107,7 +110,7 @@ pub trait NodeStandard: Node {
     /// Returns an error if the value isn't a valid u32.
     fn address_cells(&self) -> Result<u32, PropertyError> {
         if let Some(property) = self.property("#address-cells") {
-            Ok(property.as_u32()?)
+            Ok(property.value_as::<u32>()?)
         } else {
             Ok(DEFAULT_ADDRESS_CELLS)
         }
@@ -120,7 +123,7 @@ pub trait NodeStandard: Node {
     /// Returns an error if the value isn't a valid u32.
     fn size_cells(&self) -> Result<u32, PropertyError> {
         if let Some(model) = self.property("#size-cells") {
-            Ok(model.as_u32()?)
+            Ok(model.value_as::<u32>()?)
         } else {
             Ok(DEFAULT_SIZE_CELLS)
         }
@@ -143,7 +146,7 @@ pub trait NodeStandard: Node {
     /// Returns an error if the value isn't a valid u32.
     fn virtual_reg(&self) -> Result<Option<u32>, PropertyError> {
         if let Some(property) = self.property("virtual-reg") {
-            Ok(Some(property.as_u32()?))
+            Ok(Some(property.value_as::<u32>()?))
         } else {
             Ok(None)
         }
@@ -159,6 +162,29 @@ pub trait NodeStandard: Node {
 impl<T: Node> NodeStandard for T {}
 
 impl<'a> FdtNode<'a> {
+    /// Returns the value of the standard `compatible` property.
+    #[must_use]
+    pub fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + 'a> {
+        self.property("compatible").and_then(|property| {
+            property
+                .value_as::<crate::values::FdtStringListIterator<'a>>()
+                .ok()
+        })
+    }
+
+    /// Returns the value of the standard `model` property.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value isn't a valid UTF-8 string.
+    pub fn model(&self) -> Result<Option<&'a str>, PropertyError> {
+        if let Some(model) = self.property("model") {
+            Ok(Some(model.value_as::<&'a str>()?))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Returns the value of the standard `reg` property.
     ///
     /// # Errors

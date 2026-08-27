@@ -9,6 +9,7 @@
 //! A read-only API for inspecting a device tree property.
 
 use core::fmt::{self, Display, Formatter};
+use core::mem::size_of;
 
 use zerocopy::FromBytes;
 
@@ -33,8 +34,6 @@ pub(crate) struct ParsedProperty<'a> {
 }
 
 impl<'a> Property for FdtProperty<'a> {
-    type Str = &'a str;
-    type StrList = crate::values::FdtStringListIterator<'a>;
     type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
     type CellsItem = crate::Cells<'a>;
 
@@ -64,7 +63,9 @@ impl FdtProperty<'_> {
             .all(|&ch| ch.is_ascii_graphic() || ch == b' ' || ch == 0);
         let has_empty = self.value.windows(2).any(|window| window == [0, 0]);
         if is_printable && self.value.ends_with(&[0]) && !has_empty {
-            let mut strings = (*self).as_str_list();
+            let mut strings = (*self)
+                .value_as::<crate::values::FdtStringListIterator>()
+                .map_err(|_| fmt::Error)?;
             if let Some(first) = strings.next() {
                 write!(f, " = \"{first}\"")?;
                 for s in strings {
@@ -75,9 +76,9 @@ impl FdtProperty<'_> {
             }
         }
 
-        if self.value.len().is_multiple_of(4) {
+        if self.value.len().is_multiple_of(size_of::<u32>()) {
             write!(f, " = <")?;
-            let (chunks, remainder) = self.value.as_chunks::<4>();
+            let (chunks, remainder) = self.value.as_chunks::<{ size_of::<u32>() }>();
             debug_assert!(remainder.is_empty());
             for (i, chunk) in chunks.iter().enumerate() {
                 if i > 0 {

@@ -57,19 +57,19 @@ fn read_prop_values() {
 
     let prop = props.next().unwrap();
     assert_eq!(prop.name(), "u32-prop");
-    assert_eq!(prop.as_u32().unwrap(), 0x1234_5678);
+    assert_eq!(prop.value_as::<u32>().unwrap(), 0x1234_5678);
 
     let prop = props.next().unwrap();
     assert_eq!(prop.name(), "u64-prop");
-    assert_eq!(prop.as_u64().unwrap(), 0x1122_3344_5566_7788);
+    assert_eq!(prop.value_as::<u64>().unwrap(), 0x1122_3344_5566_7788);
 
     let prop = props.next().unwrap();
     assert_eq!(prop.name(), "str-prop");
-    assert_eq!(prop.as_str().unwrap(), "hello world");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello world");
 
     let prop = props.next().unwrap();
     assert_eq!(prop.name(), "str-list-prop");
-    let mut str_list = prop.as_str_list();
+    let mut str_list = prop.value_as::<dtoolkit::FdtStringListIterator>().unwrap();
     assert_eq!(str_list.next(), Some("first"));
     assert_eq!(str_list.next(), Some("second"));
     assert_eq!(str_list.next(), Some("third"));
@@ -87,11 +87,11 @@ fn get_property_by_name() {
 
     let prop = node.property("u32-prop").unwrap();
     assert_eq!(prop.name(), "u32-prop");
-    assert_eq!(prop.as_u32().unwrap(), 0x1234_5678);
+    assert_eq!(prop.value_as::<u32>().unwrap(), 0x1234_5678);
 
     let prop = node.property("str-prop").unwrap();
     assert_eq!(prop.name(), "str-prop");
-    assert_eq!(prop.as_str().unwrap(), "hello world");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello world");
 
     assert!(node.property("non-existent-prop").is_none());
 }
@@ -412,4 +412,50 @@ fn reserved_memory_alloc_ranges_zero_cells() {
             dtoolkit::error::PropertyError::PropEncodedArraySizeMismatch { size: 0, chunk: 0 },
         ))
     ));
+}
+
+#[test]
+fn child_of_child_string_lifetime() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let val: &str = {
+        let root = fdt.root();
+        let child1 = root.child("test-props").unwrap();
+        let prop = child1.property("str-prop").unwrap();
+        prop.value_as::<&str>().unwrap()
+    };
+    assert_eq!(val, "hello world");
+}
+
+#[test]
+fn standard_node_outlives_wrapper() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    let model_str: &str = {
+        let root = fdt.root();
+        let standard_props = root.child("standard-props").unwrap();
+        standard_props.model().unwrap().unwrap()
+    };
+    assert_eq!(model_str, "Some Model");
+
+    let compatible: Vec<&str> = {
+        let root = fdt.root();
+        let standard_props = root.child("standard-props").unwrap();
+        standard_props.compatible().unwrap().collect()
+    };
+    assert_eq!(compatible, vec!["abc,def", "some,other"]);
+
+    let dtb_mem = include_bytes!("dtb/test_pretty_print.dtb");
+    let fdt_mem = Fdt::new(dtb_mem).unwrap();
+    let area = {
+        let memory = fdt_mem.memory().unwrap();
+        memory
+            .initial_mapped_area()
+            .unwrap()
+            .unwrap()
+            .next()
+            .unwrap()
+    };
+    assert_eq!(area.size, 0x1000);
 }

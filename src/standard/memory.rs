@@ -67,9 +67,12 @@ impl<N: Node> Memory<N> {
     /// # Errors
     ///
     /// Returns an error if the size of the value isn't a multiple of 5 cells.
-    pub fn initial_mapped_area(
-        &self,
-    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + '_>, PropertyError> {
+    pub fn initial_mapped_area<'a>(
+        &'a self,
+    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + 'a>, PropertyError>
+    where
+        N: 'a,
+    {
         if let Some(property) = self.node.property("initial-mapped-area") {
             Ok(Some(
                 property
@@ -147,10 +150,13 @@ impl<N: Node> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn size(&self) -> Result<Option<<N::Property<'_> as Property>::CellsItem>, PropertyError> {
+    pub fn size<'a>(&'a self) -> Result<Option<crate::Cells<'a>>, PropertyError>
+    where
+        N: 'a,
+    {
         self.node
             .property("size")
-            .map(|value| value.as_cells())
+            .map(|value| value.value_as::<crate::Cells<'a>>())
             .transpose()
     }
 
@@ -161,12 +167,13 @@ impl<N: Node> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn alignment(
-        &self,
-    ) -> Result<Option<<N::Property<'_> as Property>::CellsItem>, PropertyError> {
+    pub fn alignment<'a>(&'a self) -> Result<Option<crate::Cells<'a>>, PropertyError>
+    where
+        N: 'a,
+    {
         self.node
             .property("alignment")
-            .map(|value| value.as_cells())
+            .map(|value| value.value_as::<crate::Cells<'a>>())
             .transpose()
     }
 

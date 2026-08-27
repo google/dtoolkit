@@ -32,7 +32,7 @@ fn modify_property_in_place() {
     let fdt = Fdt::new(&data).unwrap();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hello there");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello there");
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn modify_property_shrink_and_grow() {
     let fdt = Fdt::new(&data).unwrap();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hi");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hi");
 
     // Now grow it back, since the space is now NOPs
     let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
@@ -70,7 +70,7 @@ fn modify_property_shrink_and_grow() {
     let fdt = Fdt::new(&data).unwrap();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hello");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello");
 
     // Growing beyond the original space should fail because there are no NOPs
     let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
@@ -132,7 +132,7 @@ fn modify_property_vec_owned() {
     let fdt = fdt_mut.as_read_only();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hello there");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello there");
 }
 
 #[cfg(feature = "arrayvec07")]
@@ -152,7 +152,7 @@ fn modify_property_arrayvec_owned() {
     let fdt = fdt_mut.as_read_only();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hello there");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello there");
 }
 
 #[cfg(feature = "heapless09")]
@@ -171,7 +171,7 @@ fn modify_property_heapless_owned() {
     let fdt = fdt_mut.as_read_only();
     let node = fdt.find_node("/test-props").unwrap();
     let prop = node.property("str-prop").unwrap();
-    assert_eq!(prop.as_str().unwrap(), "hello there");
+    assert_eq!(prop.value_as::<&str>().unwrap(), "hello there");
 }
 
 #[test]
