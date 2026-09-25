@@ -30,7 +30,8 @@ heapless = { version = "0.9", optional = true, default-features = false }
 indexmap = { version = "2", optional = true, default-features = false }
 thiserror = { version = "2", default-features = false }
 twox-hash = { version = "2", optional = true, features = ["xxhash64"], default-features = false }
-zerocopy = { version = "0.8.28", features = ["derive"] }
+zerocopy = "0.8.28"
+zerocopy-derive = "0.8.28"
 
 [lints.rust]
 deprecated-safe = "warn"

@@ -24,8 +24,9 @@ use core::fmt::{self, Debug, Display, Formatter};
 use core::mem::offset_of;
 use core::ptr;
 
+use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+use zerocopy_derive::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;

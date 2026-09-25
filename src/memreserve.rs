@@ -8,7 +8,8 @@
 
 //! Device tree memory reservations.
 
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, big_endian};
+use zerocopy::big_endian;
+use zerocopy_derive::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 /// A 64-bit memory reservation.
 #[derive(
