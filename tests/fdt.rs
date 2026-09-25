@@ -402,10 +402,11 @@ fn reserved_memory_alloc_ranges_zero_cells() {
 
     let range = reserved_memory.next().unwrap();
 
-    // address-cells and size-cells are both 0; expecting prop encoded array error
+    // address-cells and size-cells are both 0; expecting prop encoded array
+    // error
 
-    // not using assert_matches! since alloc_ranges() return value doesn't implement
-    // Debug
+    // not using assert_matches! since alloc_ranges() return value doesn't
+    // implement Debug
     assert!(matches!(
         range.alloc_ranges(),
         Err(dtoolkit::error::StandardError::PropertyConversion(

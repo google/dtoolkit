@@ -376,7 +376,8 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
     /// related types may panic.
     #[must_use]
     pub fn from_slice_unchecked(slice: &'a mut [u8]) -> Self {
-        // SAFETY: The caller guarantees that the slice contains a valid device tree.
+        // SAFETY: The caller guarantees that the slice contains a valid device
+        // tree.
         let buffer = SliceBuffer::new_unchecked(slice);
         Self::new_unchecked(buffer)
     }
@@ -397,17 +398,19 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
     )]
     #[must_use]
     pub unsafe fn from_raw_unchecked(data: *mut u8) -> Self {
-        // SAFETY: The caller guarantees that `data` is a valid pointer to a Flattened
-        // Device Tree (FDT) blob. We are reading an `FdtHeader` from this
-        // pointer, which is a `#[repr(C, packed)]` struct. The `totalsize`
-        // field of this header is then used to determine the total size of the FDT
+        // SAFETY: The caller guarantees that `data` is a valid pointer to a
+        // Flattened Device Tree (FDT) blob. We are reading an
+        // `FdtHeader` from this pointer, which is a `#[repr(C,
+        // packed)]` struct. The `totalsize` field of this header is
+        // then used to determine the total size of the FDT
         // blob. The caller must ensure that the memory at `data` is valid for
         // at least `size_of::<FdtHeader>()` bytes.
         let header = unsafe { ptr::read_unaligned(data.cast::<FdtHeader>()) };
         let size = header.totalsize() as usize;
-        // SAFETY: The caller must ensure that `data` is a valid pointer to a Flattened
-        // Device Tree (FDT) blob. The caller must ensure the `data` spans
-        // `totalsize` bytes (as specified in the FDT header).
+        // SAFETY: The caller must ensure that `data` is a valid pointer to a
+        // Flattened Device Tree (FDT) blob. The caller must ensure the
+        // `data` spans `totalsize` bytes (as specified in the FDT
+        // header).
         let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
         Self::from_slice_unchecked(slice)
     }
@@ -441,8 +444,8 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         a bootloader. The user must ensure it trusts the data."
     )]
     pub unsafe fn from_raw(data: *mut u8) -> Result<Self, FdtParseError> {
-        // SAFETY: The caller guarantees that `data` is a valid pointer to a Flattened
-        // Device Tree (FDT) blob.
+        // SAFETY: The caller guarantees that `data` is a valid pointer to a
+        // Flattened Device Tree (FDT) blob.
         unsafe {
             Fdt::from_raw(&raw const *data)?;
             Ok(Self::from_raw_unchecked(data))

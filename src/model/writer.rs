@@ -210,8 +210,8 @@ impl StringMap {
     }
 
     fn write_string_block(self, dtb: &mut Vec<u8>) {
-        // write the strings in the order when they appear, mimicking the behavior
-        // of `dtc` (Device Tree Compiler)
+        // write the strings in the order when they appear, mimicking the
+        // behavior of `dtc` (Device Tree Compiler)
         let mut items: Vec<_> = self.string_map.into_iter().collect();
         items.sort_unstable_by_key(|(_s, offset)| *offset);
 

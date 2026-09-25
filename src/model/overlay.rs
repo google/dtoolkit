@@ -144,8 +144,8 @@ impl<'a> OverlayApplier<'a> {
         let mut new_val_str: Vec<u8> = Vec::new();
 
         for (frag_name, target_path) in fragment_targets {
-            // symbols referring to /fragment@.../__overlay__/<node> should be rewritten
-            // to just /<node>
+            // symbols referring to /fragment@.../__overlay__/<node> should be
+            // rewritten to just /<node>
             if let Some(subpath) = sym_val
                 .strip_prefix(b"/")
                 .and_then(|s| s.strip_prefix(frag_name.as_bytes()))
@@ -166,8 +166,8 @@ impl<'a> OverlayApplier<'a> {
         }
 
         if new_val_str.is_empty() {
-            // use the original symbol path if the overlay symbol didn't point to
-            // a fragment inside the overlay
+            // use the original symbol path if the overlay symbol didn't point
+            // to a fragment inside the overlay
             new_val_str.extend_from_slice(sym_val);
         }
 

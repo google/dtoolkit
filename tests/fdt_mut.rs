@@ -389,7 +389,8 @@ fn compact_strips_trailing_padding() {
     let dtb = include_bytes!("dtb/test_props.dtb");
     let mut data = dtb.to_vec();
 
-    // Manually append 50 padding bytes to the end of the blob and update totalsize
+    // Manually append 50 padding bytes to the end of the blob and update
+    // totalsize
     data.extend(core::iter::repeat_n(0xff, 50));
 
     let (totalsize, _) = zerocopy::big_endian::U32::mut_from_prefix(&mut data[4..8]).unwrap();
@@ -407,7 +408,8 @@ fn compact_strips_trailing_padding() {
     let fdt = fdt_mut.as_read_only();
     let size_after_compact = fdt.data().len();
 
-    // Compact should strip the 50 byte padding AND the NOPs left by remove_property
+    // Compact should strip the 50 byte padding AND the NOPs left by
+    // remove_property
     assert!(size_after_compact <= size_before_compact - 50);
 
     let node = fdt.find_node("/test-props").unwrap();
@@ -424,8 +426,8 @@ fn compact_slice_noop() {
 
     let size_before = fdt_mut.as_read_only().data().len();
 
-    // Compact should succeed because there are no NOPs to remove, so no resize is
-    // needed
+    // Compact should succeed because there are no NOPs to remove, so no resize
+    // is needed
     fdt_mut.compact();
 
     let size_after = fdt_mut.as_read_only().data().len();
@@ -532,11 +534,12 @@ fn add_string_deduplication() {
     let initial_size = fdt_mut.as_read_only().data().len();
 
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
-    // adding property with an existing name should not grow the dt_strings block
+    // adding property with an existing name should not grow the dt_strings
+    // block
     node.add_property("str-prop", [1u8, 2, 3, 4]).unwrap();
 
-    // DTB should grow exactly by the property block size (FDT_TAGSIZE * 3 + value
-    // length)
+    // DTB should grow exactly by the property block size (FDT_TAGSIZE * 3 +
+    // value length)
     let mid_size = fdt_mut.as_read_only().data().len();
     assert_eq!(
         initial_size + 16,
