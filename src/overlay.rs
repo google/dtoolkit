@@ -10,8 +10,10 @@
 //!
 //! This module is modeled after the [`standard`](crate::standard) module,
 //! providing generic wrappers over any type implementing [`Node`] so that
-//! overlay inspection works uniformly across both read-only (`FdtNode`) and
-//! in-memory (`DeviceTreeNode`) representations.
+//! overlay inspection works uniformly across both read-only
+//! ([`FdtNode`](crate::fdt::FdtNode)) and
+//! in-memory ([`DeviceTreeNode`](crate::model::DeviceTreeNode))
+//! representations.
 
 use core::ops::Deref;
 
