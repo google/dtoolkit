@@ -1,3 +1,13 @@
+## [0.4.1] - 2026-09-25
+
+### Bug Fixes
+
+- Use glob imports for `zerocopy_derive` to avoid duplicate import errors. ([#77](https://github.com/google/dtoolkit/pull/77))
+
+### Documentation
+
+- Add links to structs mentioned in the `overlay` rustdoc ([#79](https://github.com/google/dtoolkit/pull/79))
+
 ## [0.4.0] - 2026-09-25
 
 ### Features
