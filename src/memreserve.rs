@@ -9,7 +9,10 @@
 //! Device tree memory reservations.
 
 use zerocopy::big_endian;
-use zerocopy_derive::{FromBytes, Immutable, IntoBytes, KnownLayout};
+// Glob import to avoid duplicate import errors if the `derive` feature is
+// enabled on `zerocopy`. See https://github.com/google/zerocopy/issues/1587.
+#[allow(clippy::wildcard_imports)]
+use zerocopy_derive::*;
 
 /// A 64-bit memory reservation.
 #[derive(

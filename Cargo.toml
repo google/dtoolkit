@@ -6,7 +6,6 @@ license = "Apache-2.0 OR MIT"
 rust-version = "1.88"
 description = "A library for parsing and manipulating Flattened Device Tree (FDT) blobs."
 repository = "https://github.com/google/dtoolkit"
-homepage = "https://github.com/google/dtoolkit"
 authors = ["Mateusz Maćkowski <mmac@google.com>"]
 categories = ["embedded", "encoding", "no-std::no-alloc", "parsing"]
 keywords = ["device-tree", "fdt", "dtb", "dts", "parser"]
