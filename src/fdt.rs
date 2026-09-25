@@ -26,7 +26,10 @@ use core::ptr;
 
 use zerocopy::FromBytes;
 use zerocopy::byteorder::big_endian;
-use zerocopy_derive::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+// Glob import to avoid duplicate import errors if the `derive` feature is
+// enabled on `zerocopy`. See https://github.com/google/zerocopy/issues/1587.
+#[allow(clippy::wildcard_imports)]
+use zerocopy_derive::*;
 
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
