@@ -60,3 +60,34 @@ impl FromStr for Status {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_default() {
+        assert_eq!(Status::default(), Status::Okay);
+    }
+
+    #[test]
+    fn status_parse_and_display() {
+        let cases = [
+            (Status::Okay, "okay"),
+            (Status::Disabled, "disabled"),
+            (Status::Reserved, "reserved"),
+            (Status::Fail, "fail"),
+            (Status::FailSss, "fail-sss"),
+        ];
+
+        for (status, s) in cases {
+            assert_eq!(s.parse::<Status>(), Ok(status));
+            assert_eq!(status.to_string(), s);
+        }
+
+        assert_eq!(
+            "unknown".parse::<Status>(),
+            Err(StandardError::InvalidStatus)
+        );
+    }
+}

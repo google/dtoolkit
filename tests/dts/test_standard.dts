@@ -1,0 +1,31 @@
+/dts-v1/;
+
+/ {
+    #address-cells = <0x01>;
+    #size-cells = <0x01>;
+
+    chosen {
+        bootargs = "console=ttyS0 root=/dev/ram0";
+        stdout-path = "/soc/serial@1000";
+        stdin-path = "/soc/serial@1000";
+    };
+
+    cpus {
+        #address-cells = <0x01>;
+        #size-cells = <0x00>;
+
+        cpu@0 {
+            compatible = "arm,cortex-a9";
+            reg = <0x00>;
+            enable-method = "spin-table";
+            cpu-release-addr = <0x12345678 0x9abcdef0>;
+        };
+
+        cpu@1 {
+            compatible = "arm,cortex-a9";
+        };
+
+        l2-cache {
+        };
+    };
+};
