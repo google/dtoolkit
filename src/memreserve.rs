@@ -59,3 +59,16 @@ impl MemoryReservation {
         self.size.get()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_reservation_new() {
+        let res = MemoryReservation::new(0x1000, 0x100);
+
+        assert_eq!(res.address(), 0x1000);
+        assert_eq!(res.size(), 0x100);
+    }
+}

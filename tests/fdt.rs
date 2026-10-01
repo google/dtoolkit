@@ -314,6 +314,7 @@ const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
     load_dtb_dts_pair!("test_memreserve"),
     load_dtb_dts_pair!("test_pretty_print"),
     load_dtb_dts_pair!("test_props"),
+    load_dtb_dts_pair!("test_standard"),
     load_dtb_dts_pair!("test_traversal"),
     load_dtb_dts_pair!("test_zero_cells"),
     load_dtb_dts_pair!("test"),
