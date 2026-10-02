@@ -559,3 +559,20 @@ fn add_string_deduplication() {
         "total size must grow to align with dtb block + string length"
     );
 }
+
+#[test]
+fn property_mut_methods() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut fdt = FdtMut::new(dtb.to_vec()).unwrap();
+    let mut node = fdt.find_node_mut("/test-props").unwrap();
+    let mut props = node.properties_mut();
+    let prop = props.next().unwrap();
+
+    assert_eq!((&prop).name(), "u32-prop");
+    assert_eq!((&prop).value(), &[0x12, 0x34, 0x56, 0x78]);
+    assert_eq!((&prop).value_as::<u32>().unwrap(), 0x1234_5678);
+    assert_eq!(format!("{prop}"), "u32-prop = <0x12345678>;\n");
+
+    let array: Vec<_> = (&prop).as_prop_encoded_array([1]).unwrap().collect();
+    assert_eq!(array.len(), 1);
+}
