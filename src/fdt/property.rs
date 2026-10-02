@@ -79,7 +79,7 @@ impl FdtProperty<'_> {
         if self.value.len().is_multiple_of(size_of::<u32>()) {
             write!(f, " = <")?;
             let (chunks, remainder) = self.value.as_chunks::<{ size_of::<u32>() }>();
-            debug_assert!(remainder.is_empty());
+            debug_assert_eq!(remainder, []);
             for (i, chunk) in chunks.iter().enumerate() {
                 if i > 0 {
                     write!(f, " ")?;

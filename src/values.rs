@@ -432,4 +432,129 @@ mod tests {
             Err(PropertyError::InvalidLength)
         );
     }
+
+    #[test]
+    fn u8_conversions() {
+        let raw = [1u8, 2, 3, 4];
+        let mut buf = [0u8; 4];
+        raw.write_property_value(&mut buf);
+        assert_eq!(buf, raw);
+        assert_eq!(raw.property_value_len(), 4);
+
+        let slice: &[u8] = &buf;
+        assert_eq!(slice.property_value_len(), 4);
+        let mut slice_buf = [0u8; 4];
+        slice.write_property_value(&mut slice_buf);
+        assert_eq!(slice_buf, raw);
+        assert_eq!(<&[u8]>::from_property_value(&buf).unwrap(), &raw[..]);
+
+        let arr: [u8; 4] = FromPropertyValue::from_property_value(&buf).unwrap();
+        assert_eq!(arr, raw);
+        let arr_ref: &[u8; 4] = FromPropertyValue::from_property_value(&buf).unwrap();
+        assert_eq!(arr_ref, &raw);
+    }
+
+    #[test]
+    fn integer_conversions() {
+        let val32: u32 = 0x1234_5678;
+        assert_eq!(val32.property_value_len(), 4);
+        let mut val32_buf = [0u8; 4];
+        val32.write_property_value(&mut val32_buf);
+        assert_eq!(val32_buf, [0x12, 0x34, 0x56, 0x78]);
+
+        let val64: u64 = 0x1122_3344_5566_7788;
+        assert_eq!(val64.property_value_len(), 8);
+        let mut val64_buf = [0u8; 8];
+        val64.write_property_value(&mut val64_buf);
+        assert_eq!(val64_buf, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]);
+    }
+
+    #[test]
+    fn u32_conversions() {
+        let u32_slice: &[u32] = &[0x11, 0x22];
+        assert_eq!(u32_slice.property_value_len(), 8);
+        let mut u32_slice_buf = [0u8; 8];
+        u32_slice.write_property_value(&mut u32_slice_buf);
+        assert_eq!(u32_slice_buf, [0, 0, 0, 0x11, 0, 0, 0, 0x22]);
+
+        let u32_arr: [u32; 2] = [0x11, 0x22];
+        assert_eq!(u32_arr.property_value_len(), 8);
+        let mut u32_arr_buf = [0u8; 8];
+        u32_arr.write_property_value(&mut u32_arr_buf);
+        assert_eq!(u32_arr_buf, [0, 0, 0, 0x11, 0, 0, 0, 0x22]);
+        let decoded_arr: [u32; 2] = FromPropertyValue::from_property_value(&u32_arr_buf).unwrap();
+        assert_eq!(decoded_arr, u32_arr);
+    }
+
+    #[test]
+    fn str_slice_conversions() {
+        let str_list: &[&str] = &["abc", "def"];
+        assert_eq!(str_list.property_value_len(), 8);
+        let mut str_list_buf = [0u8; 8];
+        str_list.write_property_value(&mut str_list_buf);
+        assert_eq!(&str_list_buf, b"abc\0def\0");
+    }
+
+    #[test]
+    fn cells_conversions() {
+        let cells_be = [big_endian::U32::new(0x10), big_endian::U32::new(0x20)];
+        let cells = Cells(&cells_be);
+        assert_eq!(cells.property_value_len(), 8);
+        let mut cells_buf = [0u8; 8];
+        cells.write_property_value(&mut cells_buf);
+        assert_eq!(cells_buf, [0, 0, 0, 0x10, 0, 0, 0, 0x20]);
+        let decoded_cells = Cells::from_property_value(&cells_buf).unwrap();
+        assert_eq!(decoded_cells, cells);
+        assert_eq!(cells.as_ref(), &cells_be[..]);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn vec_u8_conversions() {
+        let vec_u8 = alloc::vec![1u8, 2, 3];
+        assert_eq!(vec_u8.property_value_len(), 3);
+        let mut vec_u8_buf = [0u8; 3];
+        vec_u8.write_property_value(&mut vec_u8_buf);
+        assert_eq!(vec_u8_buf, [1, 2, 3]);
+        let decoded_vec_u8: Vec<u8> = FromPropertyValue::from_property_value(&vec_u8_buf).unwrap();
+        assert_eq!(decoded_vec_u8, vec_u8);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn string_conversions() {
+        let string = String::from("hello");
+        assert_eq!(string.property_value_len(), 6);
+        let mut str_buf = [0u8; 6];
+        string.write_property_value(&mut str_buf);
+        assert_eq!(&str_buf, b"hello\0");
+        let decoded_string: String = FromPropertyValue::from_property_value(&str_buf).unwrap();
+        assert_eq!(decoded_string, string);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn vec_u32_conversions() {
+        let vec_u32 = alloc::vec![0x10, 0x20];
+        assert_eq!(vec_u32.property_value_len(), 8);
+        let mut vec_u32_buf = [0u8; 8];
+        vec_u32.write_property_value(&mut vec_u32_buf);
+        assert_eq!(vec_u32_buf, [0, 0, 0, 0x10, 0, 0, 0, 0x20]);
+        let decoded_vec_u32: Vec<u32> =
+            FromPropertyValue::from_property_value(&vec_u32_buf).unwrap();
+        assert_eq!(decoded_vec_u32, vec_u32);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn vec_str_conversions() {
+        let vec_str = alloc::vec!["foo", "bar"];
+        assert_eq!(vec_str.property_value_len(), 8);
+        let mut vec_str_buf = [0u8; 8];
+        vec_str.write_property_value(&mut vec_str_buf);
+        assert_eq!(&vec_str_buf, b"foo\0bar\0");
+        let decoded_vec_str: Vec<&str> =
+            FromPropertyValue::from_property_value(&vec_str_buf).unwrap();
+        assert_eq!(decoded_vec_str, vec_str);
+    }
 }
