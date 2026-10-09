@@ -45,8 +45,6 @@ impl<B: FdtBuffer> FdtMut<B> {
 
     /// Creates a new `FdtMut` from the given buffer without validation.
     ///
-    /// # Safety
-    ///
     /// The caller must ensure that `data` contains a valid Flattened Device
     /// Tree (FDT) blob. If the blob is invalid, methods on `FdtMut` and
     /// related types may panic.
