@@ -218,8 +218,6 @@ impl<'a> Fdt<'a> {
 
     /// Creates a new `Fdt` from the given byte slice without validation.
     ///
-    /// # Safety
-    ///
     /// The caller must ensure that `data` contains a valid Flattened Device
     /// Tree (FDT) blob. If the blob is invalid, methods on `Fdt` and
     /// related types may panic.
