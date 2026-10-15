@@ -24,7 +24,7 @@ fn modify_property_in_place() {
 
     // change "hello world" to "hello there" which has the same length
     let new_val = b"hello there\0";
-    assert_eq!((&prop_mut).value().len(), 12);
+    assert_eq!(prop_mut.value().len(), 12);
     assert_eq!(new_val.len(), 12);
 
     prop_mut.set_value(new_val).unwrap();
@@ -45,12 +45,12 @@ fn modify_property_shrink_and_grow() {
     let mut prop_mut = node_mut.property_mut("str-prop").unwrap();
 
     let orig_val = b"hello world\0";
-    assert_eq!((&prop_mut).value(), orig_val);
+    assert_eq!(prop_mut.value(), orig_val);
 
     // Shrink the value
     let short_val = b"hi\0";
     prop_mut.set_value(short_val).unwrap();
-    assert_eq!((&prop_mut).value(), short_val);
+    assert_eq!(prop_mut.value(), short_val);
 
     // Check it correctly parses back
     let fdt = Fdt::new(&data).unwrap();
@@ -65,7 +65,7 @@ fn modify_property_shrink_and_grow() {
 
     let medium_val = b"hello\0";
     prop_mut.set_value(medium_val).unwrap();
-    assert_eq!((&prop_mut).value(), medium_val);
+    assert_eq!(prop_mut.value(), medium_val);
 
     let fdt = Fdt::new(&data).unwrap();
     let node = fdt.find_node("/test-props").unwrap();
@@ -444,7 +444,7 @@ fn iter_invalidation() {
     let mut props = node.properties_mut();
     let mut found = false;
     while let Some(mut prop) = props.next() {
-        if (&prop).name() == "str-prop" {
+        if prop.name() == "str-prop" {
             prop.set_value(b"this value is much longer than original\0")
                 .unwrap();
             found = true;
@@ -455,7 +455,7 @@ fn iter_invalidation() {
 
     // ensure this doesn't panic after mutating the property
     let prop = props.next().unwrap();
-    let _ = (&prop).name();
+    let _ = prop.name();
 }
 
 #[test]
@@ -568,11 +568,11 @@ fn property_mut_methods() {
     let mut props = node.properties_mut();
     let prop = props.next().unwrap();
 
-    assert_eq!((&prop).name(), "u32-prop");
-    assert_eq!((&prop).value(), &[0x12, 0x34, 0x56, 0x78]);
-    assert_eq!((&prop).value_as::<u32>().unwrap(), 0x1234_5678);
+    assert_eq!(prop.name(), "u32-prop");
+    assert_eq!(prop.value(), &[0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(prop.value_as::<u32>().unwrap(), 0x1234_5678);
     assert_eq!(format!("{prop}"), "u32-prop = <0x12345678>;\n");
 
-    let array: Vec<_> = (&prop).as_prop_encoded_array([1]).unwrap().collect();
+    let array: Vec<_> = prop.as_prop_encoded_array([1]).unwrap().collect();
     assert_eq!(array.len(), 1);
 }

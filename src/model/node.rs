@@ -60,7 +60,7 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
     ///
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap());
-    /// let prop = (&node).property("my-prop").unwrap();
+    /// let prop = node.property("my-prop").unwrap();
     /// assert_eq!(prop.value(), &[1, 2, 3, 4]);
     /// ```
     fn property(self, name: &str) -> Option<&'a DeviceTreeProperty> {
@@ -88,7 +88,7 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
     ///
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_child(DeviceTreeNode::new("child").unwrap());
-    /// let child = (&node).child("child");
+    /// let child = node.child("child");
     /// assert!(child.is_some());
     /// ```
     fn child(self, name: &str) -> Option<&'a DeviceTreeNode> {
@@ -204,7 +204,7 @@ impl DeviceTreeNode {
     /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap());
     /// let prop = node.property_mut("my-prop").unwrap();
     /// prop.set_value(vec![5u8, 6, 7, 8]);
-    /// assert_eq!((&*prop).value(), &[5, 6, 7, 8]);
+    /// assert_eq!(prop.value(), &[5, 6, 7, 8]);
     /// ```
     #[must_use]
     pub fn property_mut(&mut self, name: &str) -> Option<&mut DeviceTreeProperty> {
@@ -225,11 +225,10 @@ impl DeviceTreeNode {
     ///
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap());
-    /// assert_eq!((&node).property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
+    /// assert_eq!(node.property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
     /// ```
     pub fn add_property(&mut self, property: DeviceTreeProperty) {
-        self.properties
-            .insert((&property).name().to_owned(), property);
+        self.properties.insert(property.name().to_owned(), property);
     }
 
     /// Removes a property from this node by its name.
@@ -248,7 +247,7 @@ impl DeviceTreeNode {
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_property(DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap());
     /// let prop = node.remove_property("my-prop").unwrap();
-    /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
+    /// assert_eq!(prop.value(), &[1, 2, 3, 4]);
     /// assert!(node.property("my-prop").is_none());
     /// ```
     pub fn remove_property(&mut self, name: &str) -> Option<DeviceTreeProperty> {
@@ -276,10 +275,7 @@ impl DeviceTreeNode {
     /// node.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = node.child_mut("child").unwrap();
     /// child.add_property(DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap());
-    /// assert_eq!(
-    ///     (&*child).property("my-prop").unwrap().value(),
-    ///     &[1, 2, 3, 4]
-    /// );
+    /// assert_eq!(child.property("my-prop").unwrap().value(), &[1, 2, 3, 4]);
     /// ```
     #[must_use]
     pub fn child_mut(&mut self, name: &str) -> Option<&mut DeviceTreeNode> {
@@ -300,7 +296,7 @@ impl DeviceTreeNode {
     ///
     /// let mut node = DeviceTreeNode::new("my-node").unwrap();
     /// node.add_child(DeviceTreeNode::new("child").unwrap());
-    /// assert_eq!((&node).child("child").unwrap().name(), "child");
+    /// assert_eq!(node.child("child").unwrap().name(), "child");
     /// ```
     pub fn add_child(&mut self, child: DeviceTreeNode) {
         self.children.insert(child.name.clone(), child);
@@ -322,8 +318,7 @@ impl DeviceTreeNode {
     /// let mut child = node.add_child_mut(DeviceTreeNode::new("child").unwrap());
     /// child.add_property(DeviceTreeProperty::new("test", "value").unwrap());
     /// assert_eq!(
-    ///     (&node)
-    ///         .child("child")
+    ///     node.child("child")
     ///         .unwrap()
     ///         .property("test")
     ///         .unwrap()

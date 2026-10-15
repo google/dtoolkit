@@ -143,7 +143,7 @@ impl DeviceTree {
     /// let mut tree = DeviceTree::new();
     /// tree.root.add_child(DeviceTreeNode::new("child").unwrap());
     /// let child = tree.find_node_mut("/child").unwrap();
-    /// assert_eq!((&*child).name(), "child");
+    /// assert_eq!(child.name(), "child");
     /// ```
     pub fn find_node_mut(&mut self, path: &str) -> Option<&mut DeviceTreeNode> {
         if !path.starts_with('/') {

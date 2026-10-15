@@ -34,7 +34,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     pub fn property_mut(&mut self, name: &str) -> Option<FdtPropertyMut<'_, B>> {
         let mut props = self.properties_mut();
         while let Some(prop) = props.next() {
-            if prop.as_read_only().name() == name {
+            if prop.name() == name {
                 return Some(FdtPropertyMut {
                     prop_offset: prop.prop_offset,
                     value_offset: prop.value_offset,

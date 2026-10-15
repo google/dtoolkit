@@ -45,8 +45,8 @@ impl DeviceTreeProperty {
     /// use dtoolkit::model::DeviceTreeProperty;
     ///
     /// let prop = DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap();
-    /// assert_eq!((&prop).name(), "my-prop");
-    /// assert_eq!((&prop).value(), &[1, 2, 3, 4]);
+    /// assert_eq!(prop.name(), "my-prop");
+    /// assert_eq!(prop.value(), &[1, 2, 3, 4]);
     /// ```
     pub fn new<T: ToPropertyValue>(name: impl Into<String>, value: T) -> Result<Self, ModelError> {
         let name = name.into();
@@ -78,7 +78,7 @@ impl DeviceTreeProperty {
     ///
     /// let mut prop = DeviceTreeProperty::new("my-prop", vec![1u8, 2, 3, 4]).unwrap();
     /// prop.set_value(vec![5u8, 6, 7, 8]);
-    /// assert_eq!((&prop).value(), &[5, 6, 7, 8]);
+    /// assert_eq!(prop.value(), &[5, 6, 7, 8]);
     /// ```
     pub fn set_value<T: ToPropertyValue>(&mut self, value: T) {
         self.value.resize(value.property_value_len(), 0);

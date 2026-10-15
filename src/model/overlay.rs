@@ -319,7 +319,7 @@ fn relocate_local_phandles(
 fn offset_node_phandles(node: &mut DeviceTreeNode, offset: u32) -> Result<(), OverlayError> {
     for prop_name in PHANDLE_PROPS {
         if let Some(prop) = node.property_mut(prop_name)
-            && let Ok(val) = (&*prop).value_as::<u32>()
+            && let Ok(val) = prop.value_as::<u32>()
         {
             let new_val = val
                 .checked_add(offset)
@@ -359,7 +359,7 @@ fn update_local_references(
             });
         }
 
-        let mut new_value = (&*target_prop).value().to_owned();
+        let mut new_value = target_prop.value().to_owned();
         for chunk in fixup_val.as_chunks::<OFFSET_LEN>().0 {
             let ref_offset = u32::from_be_bytes(*chunk) as usize;
             let end_offset = ref_offset.checked_add(OFFSET_LEN).ok_or_else(|| {
@@ -459,10 +459,10 @@ fn resolve_external_fixups(
                 .offset
                 .checked_add(4)
                 .ok_or(OverlayError::InvalidFixupLocation)?;
-            if end_offset > (&*target_prop).value().len() {
+            if end_offset > target_prop.value().len() {
                 return Err(OverlayError::InvalidFixupLocation);
             }
-            let mut new_value = (&*target_prop).value().to_owned();
+            let mut new_value = target_prop.value().to_owned();
             new_value[loc.offset..end_offset].copy_from_slice(&phandle.to_be_bytes());
             target_prop.set_value(new_value);
         }
