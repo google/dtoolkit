@@ -11,8 +11,7 @@ use alloc::vec::Vec;
 use core::str;
 
 use crate::error::ModelError;
-use crate::values::PropEncodedArrayIterator;
-use crate::{Cells, Property, ToPropertyValue};
+use crate::{Property, ToPropertyValue};
 
 /// A mutable, in-memory representation of a device tree property.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -21,19 +20,14 @@ pub struct DeviceTreeProperty {
     value: Vec<u8>,
 }
 
-impl<'a> Property for &'a DeviceTreeProperty {
-    type PropEncodedArray<const N: usize> = PropEncodedArrayIterator<'a, N>;
-    type CellsItem = Cells<'a>;
-
-    fn name(&self) -> &'a str {
+impl<'a> Property<'a> for &'a DeviceTreeProperty {
+    fn name(self) -> &'a str {
         &self.name
     }
 
-    fn value(&self) -> &'a [u8] {
+    fn value(self) -> &'a [u8] {
         &self.value
     }
-
-    crate::impl_property_methods!(get_value = |self| self.value.as_slice());
 }
 
 impl DeviceTreeProperty {
@@ -95,7 +89,7 @@ impl DeviceTreeProperty {
 impl DeviceTreeProperty {
     /// Creates a new [`DeviceTreeProperty`] from any type that implements
     /// [`Property`].
-    pub fn from_property<T: Property>(prop: &T) -> Self {
+    pub fn from_property<'a>(prop: impl Property<'a>) -> Self {
         let name = prop.name().to_string();
         let value = prop.value().to_vec();
         DeviceTreeProperty { name, value }

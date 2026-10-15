@@ -33,19 +33,14 @@ pub(crate) struct ParsedProperty<'a> {
     pub len: usize,
 }
 
-impl<'a> Property for FdtProperty<'a> {
-    type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
-    type CellsItem = crate::Cells<'a>;
-
-    fn name(&self) -> &'a str {
+impl<'a> Property<'a> for FdtProperty<'a> {
+    fn name(self) -> &'a str {
         self.name
     }
 
-    fn value(&self) -> &'a [u8] {
+    fn value(self) -> &'a [u8] {
         self.value
     }
-
-    crate::impl_property_methods!(get_value = |self| self.value);
 }
 
 impl FdtProperty<'_> {

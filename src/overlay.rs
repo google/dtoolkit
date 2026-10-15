@@ -43,7 +43,7 @@ impl<N> Deref for Overlay<N> {
     }
 }
 
-impl<N: Node> Overlay<N> {
+impl<'a, N: Node<'a>> Overlay<N> {
     /// Creates a new `Overlay` wrapper from a given node.
     ///
     /// # Examples
@@ -74,13 +74,12 @@ impl<N: Node> Overlay<N> {
     /// let fdt = Fdt::new(overlay_dtb).unwrap();
     /// let overlay = Overlay::new(fdt.root());
     /// for fragment in overlay.fragments() {
-    ///     let name: &str = fragment.name_without_address().as_ref();
-    ///     assert_eq!(name, "fragment");
+    ///     assert_eq!(fragment.name_without_address(), "fragment");
     /// }
     /// ```
-    pub fn fragments(&self) -> impl Iterator<Item = Fragment<N::Child<'_>>> {
+    pub fn fragments(&self) -> impl Iterator<Item = Fragment<N>> {
         self.node.children().filter_map(|node| {
-            if node.name_without_address().as_ref() == "fragment" {
+            if node.name_without_address() == "fragment" {
                 Some(Fragment { node })
             } else {
                 None
@@ -103,7 +102,7 @@ impl<N> Deref for Fragment<N> {
     }
 }
 
-impl<N: Node> Fragment<N> {
+impl<'a, N: Node<'a>> Fragment<N> {
     /// Returns the target of this fragment (`target` phandle or `target-path`).
     ///
     /// # Errors
@@ -131,13 +130,13 @@ impl<N: Node> Fragment<N> {
     ///     FragmentTarget::Phandle(p) => println!("Targeting phandle: {}", p),
     /// }
     /// ```
-    pub fn target(&self) -> Result<FragmentTarget<&str>, OverlayError> {
+    pub fn target(&self) -> Result<FragmentTarget<&'a str>, OverlayError> {
         let target = self.node.property("target");
         let target_path = self.node.property("target-path");
 
         match (target, target_path) {
             (Some(prop), None) => Ok(FragmentTarget::Phandle(prop.value_as::<u32>()?)),
-            (None, Some(prop)) => Ok(FragmentTarget::Path(prop.value_as::<&str>()?)),
+            (None, Some(prop)) => Ok(FragmentTarget::Path(prop.value_as::<&'a str>()?)),
             _ => Err(OverlayError::InvalidFragmentTarget),
         }
     }
@@ -221,10 +220,10 @@ impl<'a> FixupLocation<'a> {
 ///
 /// # let overlay_dtb = include_bytes!("../tests/dtb/overlay_target_path_overlay.dtb");
 /// let fdt = Fdt::new(overlay_dtb).unwrap();
-/// let phandle = get_phandle(&fdt.root());
+/// let phandle = get_phandle(fdt.root());
 /// assert!(phandle.is_none());
 /// ```
-pub fn get_phandle<N: Node>(node: &N) -> Option<u32> {
+pub fn get_phandle<'a>(node: impl Node<'a>) -> Option<u32> {
     for prop in PHANDLE_PROPS {
         if let Some(p) = node.property(prop)
             && let Ok(val) = p.value_as::<u32>()

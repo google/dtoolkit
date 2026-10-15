@@ -50,14 +50,11 @@ impl<N: Display> Display for Cpus<N> {
     }
 }
 
-impl<N: Node> Cpus<N> {
+impl<'a, N: Node<'a>> Cpus<N> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus<'a>(&'a self) -> impl Iterator<Item = Cpu<N::Child<'a>>> + 'a
-    where
-        N: 'a,
-    {
+    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
         self.node.children().filter_map(|child| {
-            if child.name_without_address().as_ref() == "cpu" {
+            if child.name_without_address() == "cpu" {
                 Some(Cpu { node: child })
             } else {
                 None
@@ -86,14 +83,11 @@ impl<N: Display> Display for Cpu<N> {
     }
 }
 
-impl<N: Node> Cpu<N> {
+impl<'a, N: Node<'a>> Cpu<N> {
     /// Returns the value of the standard `enable-method` property if it is
     /// present.
     #[must_use]
-    pub fn enable_method<'a>(&'a self) -> Option<FdtStringListIterator<'a>>
-    where
-        N: 'a,
-    {
+    pub fn enable_method(&self) -> Option<FdtStringListIterator<'a>> {
         self.node
             .property("enable-method")?
             .value_as::<FdtStringListIterator<'a>>()
@@ -109,7 +103,7 @@ impl<N: Node> Cpu<N> {
     pub fn cpu_release_addr(&self) -> Result<Option<u64>, PropertyError> {
         self.node
             .property("cpu-release-addr")
-            .map(|value| value.value_as::<u64>())
+            .map(Property::value_as)
             .transpose()
     }
 }

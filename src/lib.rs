@@ -143,48 +143,16 @@ pub use crate::values::{
     FdtStringListIterator, FromPropertyValue, PropEncodedArrayIterator, ToPropertyValue,
 };
 
-macro_rules! impl_property_methods {
-    (get_value = |$self:ident| $get_value:expr) => {
-        fn value_as<'v, T: crate::FromPropertyValue<'v>>(&$self) -> Result<T, crate::error::PropertyError> where Self: 'v {
-            T::from_property_value($get_value)
-        }
-
-        fn as_prop_encoded_array<const N: usize>(
-            &$self,
-            fields_cells: [usize; N],
-        ) -> Result<crate::values::PropEncodedArrayIterator<'a, N>, crate::error::PropertyError> {
-            crate::values::PropEncodedArrayIterator::new($get_value, fields_cells)
-        }
-    };
-}
-use impl_property_methods;
-
 /// A device tree node.
-pub trait Node: Sized {
+pub trait Node<'a>: Copy {
     /// The type used for properties of the node.
-    type Property<'a>: Property + 'a
-    where
-        Self: 'a;
-
-    /// The type used for child nodes.
-    type Child<'a>: Node + 'a
-    where
-        Self: 'a;
+    type Property: Property<'a>;
 
     /// The type used for the properties iterator.
-    type Properties<'a>: Iterator<Item = Self::Property<'a>> + 'a
-    where
-        Self: 'a;
+    type Properties: Iterator<Item = Self::Property>;
 
     /// The type used for the children iterator.
-    type Children<'a>: Iterator<Item = Self::Child<'a>> + 'a
-    where
-        Self: 'a;
-
-    /// The type used for the name of the node.
-    type Name<'a>: AsRef<str> + Copy + 'a
-    where
-        Self: 'a;
+    type Children: Iterator<Item = Self>;
 
     /// Returns the name of this node.
     ///
@@ -201,18 +169,21 @@ pub trait Node: Sized {
     /// assert_eq!(child.name(), "child1");
     /// ```
     #[must_use]
-    fn name(&self) -> Self::Name<'_>;
+    fn name(self) -> &'a str;
 
     /// Returns the name of this node without the unit address, if any.
     #[must_use]
-    fn name_without_address(&self) -> Self::Name<'_>;
+    fn name_without_address(self) -> &'a str {
+        util::name_without_address(self.name())
+    }
 
     /// Returns the property with the given name, if any.
     ///
     /// # Performance
     ///
     /// This default implementation iterates through all properties of the node.
-    fn property(&self, name: &str) -> Option<Self::Property<'_>> {
+    #[must_use]
+    fn property(self, name: &str) -> Option<Self::Property> {
         self.properties().find(|property| property.name() == name)
     }
 
@@ -232,7 +203,7 @@ pub trait Node: Sized {
     /// assert_eq!(props.next().unwrap().name(), "u64-prop");
     /// assert_eq!(props.next().unwrap().name(), "str-prop");
     /// ```
-    fn properties(&self) -> Self::Properties<'_>;
+    fn properties(self) -> Self::Properties;
 
     /// Returns a child node by its name.
     ///
@@ -244,13 +215,14 @@ pub trait Node: Sized {
     /// For example, searching for `memory` as a child of `/` would match either
     /// `/memory` or `/memory@4000`, while `memory@4000` would match only the
     /// latter.
-    fn child(&self, name: &str) -> Option<Self::Child<'_>> {
+    #[must_use]
+    fn child(self, name: &str) -> Option<Self> {
         let include_address = name.contains('@');
         self.children().find(|child| {
             if include_address {
-                child.name().as_ref() == name
+                child.name() == name
             } else {
-                child.name_without_address().as_ref() == name
+                child.name_without_address() == name
             }
         })
     }
@@ -271,49 +243,45 @@ pub trait Node: Sized {
     /// assert_eq!(children.next().unwrap().name(), "child2@42");
     /// assert!(children.next().is_none());
     /// ```
-    fn children(&self) -> Self::Children<'_>;
+    fn children(self) -> Self::Children;
 }
 
 /// A property of a device tree node.
-pub trait Property: Sized {
-    /// The type used for the prop-encoded-array iterator.
-    type PropEncodedArray<const N: usize>: Iterator<Item = [Self::CellsItem; N]>;
-
-    /// The type used for the cells.
-    type CellsItem: Copy + ToCellInt;
-
+pub trait Property<'a>: Copy {
     /// Returns the name of this property.
     #[must_use]
-    fn name(&self) -> &str;
+    fn name(self) -> &'a str;
 
     /// Returns the value of this property.
     #[must_use]
-    fn value(&self) -> &[u8];
+    fn value(self) -> &'a [u8];
 
     /// Returns the value of this property as a given type.
     ///
     /// # Errors
     ///
     /// Returns an error if the value cannot be parsed or has invalid length.
-    fn value_as<'a, T: FromPropertyValue<'a>>(&self) -> Result<T, PropertyError>
-    where
-        Self: 'a;
+    fn value_as<T: FromPropertyValue<'a>>(self) -> Result<T, PropertyError> {
+        T::from_property_value(self.value())
+    }
 
     /// Returns an iterator over the elements of the property interpreted as a
     /// `prop-encoded-array`.
     ///
-    /// Each element of the array will have will have the same number of fields,
-    /// where each field has the number of cells specified by the corresponding
-    /// entry in `fields_cells`.
+    /// Each element of the array will have the same number of fields, where
+    /// each field has the number of cells specified by the corresponding entry
+    /// in `fields_cells`.
     ///
     /// # Errors
     ///
     /// Returns an error if the property's value's length can't be divided into
     /// a multiple of the given cells.
     fn as_prop_encoded_array<const N: usize>(
-        &self,
+        self,
         fields_cells: [usize; N],
-    ) -> Result<Self::PropEncodedArray<N>, PropertyError>;
+    ) -> Result<PropEncodedArrayIterator<'a, N>, PropertyError> {
+        PropEncodedArrayIterator::new(self.value(), fields_cells)
+    }
 }
 
 /// An integer value split into several big-endian u32 parts.

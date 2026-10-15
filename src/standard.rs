@@ -29,13 +29,13 @@ pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
 
 /// Methods to access standard properties on FDT nodes.
-pub trait NodeStandard: Node {
+pub trait NodeStandard<'a>: Node<'a> {
     /// Returns the value of the standard `compatible` property.
     #[must_use]
-    fn compatible(&self) -> Option<impl Iterator<Item = &'_ str> + '_> {
+    fn compatible(self) -> Option<impl Iterator<Item = &'a str> + 'a> {
         self.property("compatible").and_then(|property| {
             property
-                .value_as::<crate::values::FdtStringListIterator>()
+                .value_as::<crate::values::FdtStringListIterator<'a>>()
                 .ok()
         })
     }
@@ -43,10 +43,10 @@ pub trait NodeStandard: Node {
     /// Returns whether this node has a `compatible` property containing the
     /// given string.
     #[must_use]
-    fn is_compatible(&self, compatible_filter: &str) -> bool {
+    fn is_compatible(self, compatible_filter: &str) -> bool {
         if let Some(prop) = self.property("compatible") {
             return prop
-                .value_as::<crate::values::FdtStringListIterator>()
+                .value_as::<crate::values::FdtStringListIterator<'a>>()
                 .is_ok_and(|mut it| it.any(|c| c == compatible_filter));
         }
         false
@@ -55,9 +55,9 @@ pub trait NodeStandard: Node {
     /// Finds all child nodes with a `compatible` property containing the given
     /// string.
     fn find_compatible<'f>(
-        &'f self,
+        self,
         compatible_filter: &'f str,
-    ) -> impl Iterator<Item = Self::Child<'f>> + 'f {
+    ) -> impl Iterator<Item = Self> + use<'a, 'f, Self> {
         self.children()
             .filter(move |child| child.is_compatible(compatible_filter))
     }
@@ -67,9 +67,9 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid UTF-8 string.
-    fn model(&self) -> Result<Option<&str>, PropertyError> {
+    fn model(self) -> Result<Option<&'a str>, PropertyError> {
         if let Some(model) = self.property("model") {
-            Ok(Some(model.value_as::<&str>()?))
+            Ok(Some(model.value_as::<&'a str>()?))
         } else {
             Ok(None)
         }
@@ -80,7 +80,7 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    fn phandle(&self) -> Result<Option<u32>, PropertyError> {
+    fn phandle(self) -> Result<Option<u32>, PropertyError> {
         if let Some(property) = self.property("phandle") {
             Ok(Some(property.value_as::<u32>()?))
         } else {
@@ -95,9 +95,9 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid status.
-    fn status(&self) -> Result<Status, StandardError> {
+    fn status(self) -> Result<Status, StandardError> {
         if let Some(status) = self.property("status") {
-            Ok(status.value_as::<&str>()?.parse()?)
+            Ok(status.value_as::<&'a str>()?.parse()?)
         } else {
             Ok(Status::Okay)
         }
@@ -108,7 +108,7 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    fn address_cells(&self) -> Result<u32, PropertyError> {
+    fn address_cells(self) -> Result<u32, PropertyError> {
         if let Some(property) = self.property("#address-cells") {
             Ok(property.value_as::<u32>()?)
         } else {
@@ -121,7 +121,7 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    fn size_cells(&self) -> Result<u32, PropertyError> {
+    fn size_cells(self) -> Result<u32, PropertyError> {
         if let Some(model) = self.property("#size-cells") {
             Ok(model.value_as::<u32>()?)
         } else {
@@ -132,7 +132,7 @@ pub trait NodeStandard: Node {
     /// Returns the values of the standard `#address-cells` and `#size_cells`
     /// properties.
     #[must_use]
-    fn address_space(&self) -> AddressSpaceProperties {
+    fn address_space(self) -> AddressSpaceProperties {
         AddressSpaceProperties {
             address_cells: self.address_cells().unwrap_or(DEFAULT_ADDRESS_CELLS),
             size_cells: self.size_cells().unwrap_or(DEFAULT_SIZE_CELLS),
@@ -144,7 +144,7 @@ pub trait NodeStandard: Node {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid u32.
-    fn virtual_reg(&self) -> Result<Option<u32>, PropertyError> {
+    fn virtual_reg(self) -> Result<Option<u32>, PropertyError> {
         if let Some(property) = self.property("virtual-reg") {
             Ok(Some(property.value_as::<u32>()?))
         } else {
@@ -154,12 +154,12 @@ pub trait NodeStandard: Node {
 
     /// Returns whether the standard `dma-coherent` property is present.
     #[must_use]
-    fn dma_coherent(&self) -> bool {
+    fn dma_coherent(self) -> bool {
         self.property("dma-coherent").is_some()
     }
 }
 
-impl<T: Node> NodeStandard for T {}
+impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
 
 impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `compatible` property.

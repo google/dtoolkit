@@ -431,7 +431,7 @@ fn resolve_external_fixups(
             .find_node_mut(&target_path)
             .ok_or_else(|| OverlayError::TargetNotFound(target_path.clone()))?;
 
-        let phandle = if let Some(p) = get_phandle(target_node) {
+        let phandle = if let Some(p) = get_phandle(&*target_node) {
             p
         } else {
             *max_phandle = max_phandle

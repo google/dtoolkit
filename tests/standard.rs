@@ -136,6 +136,6 @@ fn node_standard() {
 
     let l2 = cpus_container.child("l2-cache").unwrap();
     assert!(!l2.is_compatible("arm,cortex-a9"));
-    assert!(<FdtNode as NodeStandard>::compatible(&l2).is_none());
-    assert_eq!(<FdtNode as NodeStandard>::model(&l2).unwrap(), None);
+    assert!(<FdtNode as NodeStandard>::compatible(l2).is_none());
+    assert_eq!(<FdtNode as NodeStandard>::model(l2).unwrap(), None);
 }

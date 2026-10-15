@@ -169,41 +169,13 @@ impl<B: FdtBuffer> Display for FdtPropertyMut<'_, B> {
     }
 }
 
-impl<'a, B: FdtBuffer> Property for &'a FdtPropertyMut<'_, B> {
-    type PropEncodedArray<const N: usize> = crate::values::PropEncodedArrayIterator<'a, N>;
-    type CellsItem = crate::Cells<'a>;
-
-    fn name(&self) -> &str {
-        let fdt = self.data.as_read_only();
-        fdt.string(self.nameoff).expect("Fdt should be valid")
+impl<'a, B: FdtBuffer> Property<'a> for &'a FdtPropertyMut<'_, B> {
+    fn name(self) -> &'a str {
+        self.as_read_only().name()
     }
 
-    fn value(&self) -> &[u8] {
-        let fdt = self.data.as_read_only();
-        fdt.data
-            .get(self.value_offset..self.value_offset + self.len)
-            .expect("Fdt should be valid")
-    }
-
-    fn value_as<'v, T: crate::FromPropertyValue<'v>>(
-        &self,
-    ) -> Result<T, crate::error::PropertyError>
-    where
-        Self: 'v,
-    {
-        let fdt = self.data.as_read_only();
-        let value = fdt
-            .data
-            .get(self.value_offset..self.value_offset + self.len)
-            .expect("Fdt should be valid");
-        T::from_property_value(value)
-    }
-
-    fn as_prop_encoded_array<const N: usize>(
-        &self,
-        fields_cells: [usize; N],
-    ) -> Result<Self::PropEncodedArray<N>, crate::error::PropertyError> {
-        self.as_read_only().as_prop_encoded_array(fields_cells)
+    fn value(self) -> &'a [u8] {
+        self.as_read_only().value()
     }
 }
 

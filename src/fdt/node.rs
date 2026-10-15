@@ -25,27 +25,10 @@ pub struct FdtNode<'a> {
     pub(crate) parent_address_space: AddressSpaceProperties,
 }
 
-impl<'a> Node for FdtNode<'a> {
-    type Property<'b>
-        = FdtProperty<'a>
-    where
-        Self: 'b;
-    type Name<'b>
-        = &'a str
-    where
-        Self: 'b;
-    type Child<'b>
-        = FdtNode<'a>
-    where
-        Self: 'b;
-    type Properties<'b>
-        = FdtPropIter<'a>
-    where
-        Self: 'b;
-    type Children<'b>
-        = private::FdtChildIter<'a>
-    where
-        Self: 'b;
+impl<'a> Node<'a> for FdtNode<'a> {
+    type Property = FdtProperty<'a>;
+    type Properties = FdtPropIter<'a>;
+    type Children = private::FdtChildIter<'a>;
 
     /// Returns the name of this node.
     ///
@@ -54,25 +37,21 @@ impl<'a> Node for FdtNode<'a> {
     /// Panics if the [`Fdt`] structure was constructed using
     /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
     /// valid.
-    fn name(&self) -> &'a str {
+    fn name(self) -> &'a str {
         let name_offset = self.offset + FDT_TAGSIZE;
         self.fdt
             .string_at_offset(name_offset, None)
             .expect("Fdt should be valid")
     }
 
-    fn name_without_address(&self) -> &'a str {
-        crate::util::name_without_address(self.name())
-    }
-
-    fn properties(&self) -> FdtPropIter<'a> {
+    fn properties(self) -> FdtPropIter<'a> {
         FdtPropIter {
             fdt: self.fdt,
             inner: InnerPropIter::new(self.offset),
         }
     }
 
-    fn children(&self) -> private::FdtChildIter<'a> {
+    fn children(self) -> private::FdtChildIter<'a> {
         private::FdtChildIter {
             fdt: self.fdt,
             inner: InnerChildIter::new(self.offset),

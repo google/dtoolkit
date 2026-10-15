@@ -60,19 +60,16 @@ impl<N: Display> Display for Memory<N> {
     }
 }
 
-impl<N: Node> Memory<N> {
+impl<'a, N: Node<'a>> Memory<N> {
     /// Returns the value of the standard `initial-mapped-area` property of the
     /// memory node.
     ///
     /// # Errors
     ///
     /// Returns an error if the size of the value isn't a multiple of 5 cells.
-    pub fn initial_mapped_area<'a>(
-        &'a self,
-    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + 'a>, PropertyError>
-    where
-        N: 'a,
-    {
+    pub fn initial_mapped_area(
+        &self,
+    ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a, N>>, PropertyError> {
         if let Some(property) = self.node.property("initial-mapped-area") {
             Ok(Some(
                 property
@@ -142,7 +139,7 @@ impl<N: Display> Display for ReservedMemory<N> {
     }
 }
 
-impl<N: Node> ReservedMemory<N> {
+impl<'a, N: Node<'a>> ReservedMemory<N> {
     /// Returns the value of the standard `size` property of the reserved memory
     /// node, if it is present.
     ///
@@ -150,13 +147,10 @@ impl<N: Node> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn size<'a>(&'a self) -> Result<Option<crate::Cells<'a>>, PropertyError>
-    where
-        N: 'a,
-    {
+    pub fn size(&self) -> Result<Option<crate::Cells<'a>>, PropertyError> {
         self.node
             .property("size")
-            .map(|value| value.value_as::<crate::Cells<'a>>())
+            .map(Property::value_as)
             .transpose()
     }
 
@@ -167,13 +161,10 @@ impl<N: Node> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn alignment<'a>(&'a self) -> Result<Option<crate::Cells<'a>>, PropertyError>
-    where
-        N: 'a,
-    {
+    pub fn alignment(&self) -> Result<Option<crate::Cells<'a>>, PropertyError> {
         self.node
             .property("alignment")
-            .map(|value| value.value_as::<crate::Cells<'a>>())
+            .map(Property::value_as)
             .transpose()
     }
 

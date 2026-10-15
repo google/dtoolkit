@@ -198,7 +198,7 @@ fn children_nested() {
         println!("{}", child.name());
     }
 
-    let children_names: Vec<_> = root.children().map(|child| child.name()).collect();
+    let children_names: Vec<_> = root.children().map(Node::name).collect();
     assert_eq!(children_names, vec!["child1", "child3"]);
 
     let child1 = root.child("child1").unwrap();
