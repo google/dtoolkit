@@ -732,6 +732,60 @@ impl<'a> Fdt<'a> {
         Some(current_node)
     }
 
+    /// Returns the node at the given byte offset relative to the start of the
+    /// `dt_struct` block, or `None` if `offset` does not point to a node's
+    /// `FDT_BEGIN_NODE` tag.
+    ///
+    /// This offset representation matches `libfdt` node offsets (where the root
+    /// node `/` is at offset `0`).
+    ///
+    /// # Performance
+    ///
+    /// This method traverses the device tree in linear time to resolve the
+    /// parent node's address space and to verify that `offset` points to the
+    /// beginning of an FDT node (rather than a property value or other data).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// assert_eq!(fdt.node_at_offset(0).unwrap().name(), "");
+    ///
+    /// let node = fdt.find_node("/a/b/c").unwrap();
+    /// let by_offset = fdt.node_at_offset(node.offset()).unwrap();
+    /// assert_eq!(by_offset.name(), "c");
+    /// ```
+    #[must_use]
+    pub fn node_at_offset(self, offset: usize) -> Option<FdtNode<'a>> {
+        let struct_size = self.header().size_dt_struct() as usize;
+        if offset >= struct_size || !offset.is_multiple_of(FDT_TAGSIZE) {
+            return None;
+        }
+
+        let mut current = self.root();
+        loop {
+            if current.offset() == offset {
+                return Some(current);
+            }
+            // Find the last direct child starting at or before `offset`.
+            let child = current
+                .children()
+                .take_while(|c| c.offset() <= offset)
+                .last()?;
+            current = child;
+        }
+    }
+
     pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {
         let val = big_endian::U32::ref_from_prefix(self.data_at_offset(offset)?)
             .map(|(val, _)| val.get())

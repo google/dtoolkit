@@ -578,6 +578,42 @@ fn property_mut_methods() {
 }
 
 #[test]
+fn node_at_offset_mut_and_nop_rejection() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt = FdtMut::from_slice(&mut data).unwrap();
+    let root_off = fdt.root_mut().offset();
+    assert_eq!(root_off, 0);
+
+    let c_off = fdt.find_node_mut("/a/b/c").unwrap().offset();
+    let mut c_node = fdt.node_at_offset_mut(c_off).unwrap();
+    assert_eq!(c_node.name(), "c");
+    c_node
+        .property_mut("prop")
+        .unwrap()
+        .set_value(0x5678u32)
+        .unwrap();
+
+    assert_eq!(
+        fdt.as_read_only()
+            .node_at_offset(c_off)
+            .unwrap()
+            .property("prop")
+            .unwrap()
+            .value_as::<u32>()
+            .unwrap(),
+        0x5678
+    );
+
+    // Removing the node replaces it with NOPs, so c_off is no longer a valid
+    // node offset.
+    fdt.node_at_offset_mut(c_off).unwrap().remove();
+    assert!(fdt.node_at_offset_mut(c_off).is_none());
+    assert!(fdt.as_read_only().node_at_offset(c_off).is_none());
+}
+
+#[test]
 fn from_raw_bounded_mut_rejects_invalid_headers() {
     let dtb = include_bytes!("dtb/test_traversal.dtb");
 

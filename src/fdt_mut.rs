@@ -104,6 +104,38 @@ impl<B: FdtBuffer> FdtMut<B> {
         })
     }
 
+    /// Returns a mutable node at the given byte offset relative to the start of
+    /// the `dt_struct` block, or `None` if `offset` does not point to a node's
+    /// `FDT_BEGIN_NODE` tag.
+    ///
+    /// Note that mutating the FDT in a way that removes the node or shifts,
+    /// grows, or compacts the `dt_struct` block may invalidate previously saved
+    /// offsets.
+    ///
+    /// For more details, refer to [`Fdt::node_at_offset`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
+    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let offset = fdt.find_node_mut("/a/b/c").unwrap().offset();
+    /// let node = fdt.node_at_offset_mut(offset).unwrap();
+    /// assert_eq!(node.name(), "c");
+    /// ```
+    #[must_use]
+    pub fn node_at_offset_mut(&mut self, offset: usize) -> Option<FdtNodeMut<'_, B>> {
+        let node = self.as_read_only().node_at_offset(offset)?;
+
+        Some(FdtNodeMut {
+            offset: node.offset,
+            parent_address_space: node.parent_address_space,
+            data: self,
+        })
+    }
+
     /// Adds a string to the `dt_strings` block. If the string is already
     /// present, it returns the existing offset without modifying the block
     /// to deduplicate data.
