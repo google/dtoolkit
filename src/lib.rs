@@ -290,21 +290,14 @@ pub trait Property<'a>: Copy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Cells<'a>(pub(crate) &'a [big_endian::U32]);
 
-/// Trait for converting cells to integers.
-pub trait ToCellInt {
+impl Cells<'_> {
     /// Converts the value to the given integer type.
     ///
     /// # Errors
     ///
     /// Returns [`StandardError::TooManyCells`] if the value has too many cells
     /// to fit in the given type.
-    fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
-        self,
-    ) -> Result<T, StandardError>;
-}
-
-impl ToCellInt for Cells<'_> {
-    fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
+    pub fn to_int<T: Default + From<u32> + Shl<usize, Output = T> + BitOr<Output = T>>(
         self,
     ) -> Result<T, StandardError> {
         if size_of::<T>() < self.0.len() * size_of::<u32>() {

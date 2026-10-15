@@ -12,7 +12,7 @@ use core::ops::Deref;
 use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
 use crate::standard::Reg;
-use crate::{Node, Property, ToCellInt};
+use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
     /// Returns the `/memory` node.
@@ -110,7 +110,7 @@ impl InitialMappedArea {
         clippy::unwrap_used,
         reason = "The Cells passed are always the correct size"
     )]
-    fn from_cells<C: ToCellInt>([ea, pa, size]: [C; 3]) -> Self {
+    fn from_cells([ea, pa, size]: [Cells<'_>; 3]) -> Self {
         Self {
             effective_address: ea.to_int().unwrap(),
             physical_address: pa.to_int().unwrap(),
@@ -147,7 +147,7 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn size(&self) -> Result<Option<crate::Cells<'a>>, PropertyError> {
+    pub fn size(&self) -> Result<Option<Cells<'a>>, PropertyError> {
         self.node
             .property("size")
             .map(Property::value_as)
@@ -161,7 +161,7 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn alignment(&self) -> Result<Option<crate::Cells<'a>>, PropertyError> {
+    pub fn alignment(&self) -> Result<Option<Cells<'a>>, PropertyError> {
         self.node
             .property("alignment")
             .map(Property::value_as)

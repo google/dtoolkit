@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use dtoolkit::Node;
 use dtoolkit::fdt::{Fdt, FdtNode};
 use dtoolkit::standard::NodeStandard;
-use dtoolkit::{Node, ToCellInt};
 
 #[test]
 fn cpus() {

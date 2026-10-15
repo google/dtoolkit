@@ -12,7 +12,7 @@ use dtoolkit::fdt_mut::FdtMut;
 #[cfg(feature = "write")]
 use dtoolkit::model::DeviceTree;
 use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status};
-use dtoolkit::{Node, Property, ToCellInt};
+use dtoolkit::{Node, Property};
 
 #[test]
 fn read_child_nodes() {
