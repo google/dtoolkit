@@ -413,15 +413,66 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         Self::from_slice_unchecked(slice)
     }
 
+    /// Creates a new `FdtMut` from the given pointer, verifying that the header
+    /// and `totalsize` fit within `max_len` bytes before reading the rest of
+    /// the blob.
+    ///
+    /// The resulting [`SliceBuffer`] is sized to `totalsize` bytes (not
+    /// `max_len`); callers with a larger writable buffer that want to use the
+    /// remaining space for in-place expansion should use
+    /// [`FdtMut::from_slice`].
+    ///
+    /// # Safety
+    ///
+    /// If `max_len >= size_of::<FdtHeader>()` (40 bytes), `data` must be
+    /// valid and accessible for reading at least 8 bytes (`magic` and
+    /// `totalsize`), and if the header contains a valid FDT magic number and
+    /// `40 <= totalsize <= max_len`, the memory region starting at `data` and
+    /// spanning `totalsize` bytes must be valid and accessible for reading and
+    /// writing for the lifetime `'a`.
+    ///
+    /// # Errors
+    ///
+    /// This function can return the same errors as [`Fdt::from_raw_bounded`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt_mut::FdtMut;
+    /// # let mut dtb = include_bytes!("../tests/dtb/test.dtb").to_vec();
+    /// let len = dtb.len();
+    /// let ptr = dtb.as_mut_ptr();
+    /// let fdt = unsafe { FdtMut::from_raw_bounded(ptr, len).unwrap() };
+    /// ```
+    #[expect(
+        unsafe_code,
+        reason = "Having a method that reads a Device Tree from a raw pointer is useful for \
+        embedded applications, where the binary only gets a pointer to DT from the firmware or \
+        a bootloader. The user must ensure it trusts the data."
+    )]
+    pub unsafe fn from_raw_bounded(data: *mut u8, max_len: usize) -> Result<Self, FdtParseError> {
+        // SAFETY: The caller guarantees that `data` points to a readable FDT
+        // header prefix (when `max_len >= size_of::<FdtHeader>()`) and spans
+        // `totalsize` writable bytes when the FDT is valid and
+        // `40 <= totalsize <= max_len`.
+        let size = unsafe { Fdt::from_raw_bounded(data.cast_const(), max_len)? }
+            .data()
+            .len();
+        // SAFETY: `Fdt::from_raw_bounded` validated the entire `size`-byte FDT
+        // blob and verified `size <= max_len` (and `size <= isize::MAX`).
+        let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
+        Ok(Self::from_slice_unchecked(slice))
+    }
+
     /// Creates a new `FdtMut` from the given pointer.
     ///
     /// # Safety
     ///
-    /// The `data` pointer must be a valid pointer to a Flattened Device Tree
-    /// (FDT) blob. The memory region starting at `data` and spanning
-    /// `totalsize` bytes (as specified in the FDT header) must be valid and
-    /// accessible for reading. The FDT blob must be well-formed and adhere
-    /// to the Device Tree Specification.
+    /// The `data` pointer must be valid and accessible for reading at least
+    /// 8 bytes (`magic` and `totalsize`), and if the header contains a valid
+    /// FDT magic number and `totalsize >= 40`, the memory region starting at
+    /// `data` and spanning `totalsize` bytes must be valid and accessible for
+    /// reading and writing for the lifetime `'a`.
     ///
     /// # Errors
     ///
@@ -442,12 +493,9 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         a bootloader. The user must ensure it trusts the data."
     )]
     pub unsafe fn from_raw(data: *mut u8) -> Result<Self, FdtParseError> {
-        // SAFETY: The caller guarantees that `data` is a valid pointer to a
-        // Flattened Device Tree (FDT) blob.
-        unsafe {
-            Fdt::from_raw(&raw const *data)?;
-            Ok(Self::from_raw_unchecked(data))
-        }
+        // SAFETY: The caller guarantees that `data` points to a readable FDT
+        // header and spans `totalsize` writable bytes when the header is valid.
+        unsafe { Self::from_raw_bounded(data, usize::MAX) }
     }
 }
 

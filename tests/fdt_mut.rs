@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::error::{BufferError, FdtMutError};
+use dtoolkit::error::{BufferError, FdtErrorKind, FdtMutError};
 use dtoolkit::fdt::Fdt;
 use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
 use dtoolkit::{Node, Property};
@@ -575,4 +575,27 @@ fn property_mut_methods() {
 
     let array: Vec<_> = prop.as_prop_encoded_array([1]).unwrap().collect();
     assert_eq!(array.len(), 1);
+}
+
+#[test]
+fn from_raw_bounded_mut_rejects_invalid_headers() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+
+    // max_len smaller than header does not dereference pointer.
+    // SAFETY: `max_len < 40`, so `from_raw_bounded` returns before
+    // dereferencing `data`.
+    let err = unsafe { FdtMut::from_raw_bounded(core::ptr::null_mut(), 39) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
+
+    // 8-byte buffer with bad magic or out-of-range totalsize is rejected
+    // without reading 40 bytes.
+    let mut bad_magic = [0u8; 8];
+    // SAFETY: `bad_magic` is 8 readable bytes and has invalid magic.
+    let err = unsafe { FdtMut::from_raw_bounded(bad_magic.as_mut_ptr(), 1024) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidMagic);
+
+    let mut huge_size = [0xd0, 0x0d, 0xfe, 0xed, 0xff, 0xff, 0xff, 0xff];
+    // SAFETY: `huge_size` is 8 readable bytes and `totalsize > max_len`.
+    let err = unsafe { FdtMut::from_raw_bounded(huge_size.as_mut_ptr(), dtb.len()) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }

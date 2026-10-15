@@ -259,19 +259,98 @@ impl<'a> Fdt<'a> {
         Self::new_unchecked(slice)
     }
 
+    /// Creates a new `Fdt` from the given pointer, verifying that the header
+    /// and `totalsize` fit within `max_len` bytes before reading the rest of
+    /// the blob.
+    ///
+    /// # Safety
+    ///
+    /// If `max_len >= size_of::<FdtHeader>()` (40 bytes), `data` must be
+    /// valid and accessible for reading at least 8 bytes (`magic` and
+    /// `totalsize`), and if the header contains a valid FDT magic number and
+    /// `40 <= totalsize <= max_len`, the memory region starting at `data` and
+    /// spanning `totalsize` bytes must be valid and accessible for reading for
+    /// the lifetime `'a`. There must be no existing mutable references to the
+    /// same data for the lifetime `'a`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FdtErrorKind::InvalidLength`] if `max_len` is smaller than an
+    /// FDT header, or if the `totalsize` field in the header is smaller than
+    /// an FDT header, exceeds `max_len`, or exceeds `isize::MAX` bytes.
+    ///
+    /// This function can also return any of the errors returned by
+    /// [`Fdt::new`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::Fdt;
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
+    /// let ptr = dtb.as_ptr();
+    /// let fdt = unsafe { Fdt::from_raw_bounded(ptr, dtb.len()).unwrap() };
+    /// ```
+    #[expect(
+        unsafe_code,
+        reason = "Having a method that reads a Device Tree from a raw pointer is useful for \
+        embedded applications, where the binary only gets a pointer to DT from the firmware or \
+        a bootloader. The user must ensure it trusts the data."
+    )]
+    pub unsafe fn from_raw_bounded(data: *const u8, max_len: usize) -> Result<Self, FdtParseError> {
+        if max_len < size_of::<FdtHeader>() {
+            return Err(FdtParseError::new(FdtErrorKind::InvalidLength, 0));
+        }
+
+        // SAFETY: `max_len >= size_of::<FdtHeader>()` (40 bytes), and the
+        // caller guarantees that at least the 8-byte `(magic, totalsize)`
+        // prefix at `data` is valid for reading.
+        let [magic, totalsize] =
+            unsafe { ptr::read_unaligned(data.cast::<[big_endian::U32; 2]>()) };
+
+        if magic.get() != FDT_MAGIC {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidMagic,
+                offset_of!(FdtHeader, magic),
+            ));
+        }
+
+        let size = totalsize.get() as usize;
+        // `core::slice::from_raw_parts` requires that the total slice size
+        // does not exceed `isize::MAX` bytes.
+        let max_valid_len = max_len.min(isize::MAX.cast_unsigned());
+        if !(size_of::<FdtHeader>()..=max_valid_len).contains(&size) {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidLength,
+                offset_of!(FdtHeader, totalsize),
+            ));
+        }
+
+        // SAFETY: We verified that the header magic is valid and that `size` is
+        // at least `size_of::<FdtHeader>()` and at most `max_len` (and
+        // `isize::MAX`). The caller guarantees that `data` is valid for reading
+        // `totalsize` bytes when `40 <= totalsize <= max_len`.
+        let slice = unsafe { core::slice::from_raw_parts(data, size) };
+        Self::new(slice)
+    }
+
     /// Creates a new `Fdt` from the given pointer.
     ///
     /// # Safety
     ///
-    /// The `data` pointer must be a valid pointer to a Flattened Device Tree
-    /// (FDT) blob. The memory region starting at `data` and spanning
-    /// `totalsize` bytes (as specified in the FDT header) must be valid and
-    /// accessible for reading. The FDT blob must be well-formed and adhere
-    /// to the Device Tree Specification.
+    /// The `data` pointer must be valid and accessible for reading at least
+    /// 8 bytes (`magic` and `totalsize`), and if the header contains a valid
+    /// FDT magic number and `totalsize >= 40`, the memory region starting at
+    /// `data` and spanning `totalsize` bytes must be valid and accessible for
+    /// reading for the lifetime `'a`. There must be no existing mutable
+    /// references to the same data for the lifetime `'a`.
     ///
     /// # Errors
     ///
-    /// This function can return the same errors as [`Fdt::new`].
+    /// Returns [`FdtErrorKind::InvalidLength`] if the `totalsize` field in the
+    /// header exceeds `isize::MAX` bytes.
+    ///
+    /// This function can also return any of the errors returned by
+    /// [`Fdt::new`].
     ///
     /// # Examples
     ///
@@ -288,11 +367,9 @@ impl<'a> Fdt<'a> {
         a bootloader. The user must ensure it trusts the data."
     )]
     pub unsafe fn from_raw(data: *const u8) -> Result<Self, FdtParseError> {
-        // SAFETY: The caller guarantees that `data` is a valid pointer to a
-        // Flattened Device Tree (FDT) blob.
-        let fdt = unsafe { Self::from_raw_unchecked(data) };
-        fdt.validate()?;
-        Ok(fdt)
+        // SAFETY: The caller guarantees that `data` points to a readable FDT
+        // header and spans `totalsize` bytes when the header is valid.
+        unsafe { Self::from_raw_bounded(data, usize::MAX) }
     }
 
     fn validate(self) -> Result<(), FdtParseError> {
@@ -868,5 +945,71 @@ mod tests {
         let result = Fdt::new(&data);
         let err = result.unwrap_err();
         assert_eq!(err, FdtParseError::new(FdtErrorKind::InvalidOffset, 80));
+    }
+
+    #[test]
+    #[expect(unsafe_code, reason = "Testing unsafe from_raw_bounded")]
+    fn from_raw_bounded_validates_before_slicing() {
+        // SAFETY: `max_len` is smaller than `FdtHeader`, so `from_raw_bounded`
+        // returns an error without dereferencing `data`.
+        let err =
+            unsafe { Fdt::from_raw_bounded(ptr::null(), size_of::<FdtHeader>() - 1) }.unwrap_err();
+        assert_eq!(err, FdtParseError::new(FdtErrorKind::InvalidLength, 0));
+
+        // Corrupt magic with huge totalsize in an 8-byte buffer is rejected
+        // before reading 40 bytes or slicing totalsize.
+        let mut bad_magic = [0u8; 8];
+        bad_magic[0..4].copy_from_slice(&0xdead_beefu32.to_be_bytes());
+        bad_magic[4..8].copy_from_slice(&u32::MAX.to_be_bytes());
+        // SAFETY: `bad_magic` has 8 readable bytes, and the invalid magic is
+        // rejected before reading past byte 8.
+        let err = unsafe { Fdt::from_raw_bounded(bad_magic.as_ptr(), usize::MAX) }.unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::InvalidMagic, offset_of!(FdtHeader, magic))
+        );
+        // SAFETY: `bad_magic` has 8 readable bytes, and the invalid magic is
+        // rejected before reading past byte 8.
+        let err = unsafe { Fdt::from_raw(bad_magic.as_ptr()) }.unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::InvalidMagic, offset_of!(FdtHeader, magic))
+        );
+
+        // totalsize smaller than header or exceeding max_len in an 8-byte
+        // buffer is rejected before reading 40 bytes or slicing.
+        for bad_size in [
+            0u32,
+            u32::try_from(size_of::<FdtHeader>() - 1).unwrap(),
+            u32::try_from(FDT_HEADER_OK.len()).unwrap() + 1,
+            u32::MAX,
+        ] {
+            let mut hdr = [0u8; 8];
+            hdr[0..FDT_TAGSIZE].copy_from_slice(&FDT_MAGIC.to_be_bytes());
+            hdr[FDT_TAGSIZE..2 * FDT_TAGSIZE].copy_from_slice(&bad_size.to_be_bytes());
+            // SAFETY: `hdr` has 8 readable bytes and `bad_size` is outside
+            // `size_of::<FdtHeader>()..=FDT_HEADER_OK.len()`.
+            let err =
+                unsafe { Fdt::from_raw_bounded(hdr.as_ptr(), FDT_HEADER_OK.len()) }.unwrap_err();
+            assert_eq!(
+                err,
+                FdtParseError::new(
+                    FdtErrorKind::InvalidLength,
+                    offset_of!(FdtHeader, totalsize)
+                )
+            );
+        }
+
+        // SAFETY: `FDT_HEADER_OK` is a valid FDT of length
+        // `FDT_HEADER_OK.len()`.
+        let fdt =
+            unsafe { Fdt::from_raw_bounded(FDT_HEADER_OK.as_ptr(), FDT_HEADER_OK.len()) }.unwrap();
+        assert_eq!(fdt.data().len(), FDT_HEADER_OK.len());
+        // SAFETY: `FDT_HEADER_OK` is a valid FDT of `totalsize ==
+        // FDT_HEADER_OK.len() <= max_len`.
+        let fdt =
+            unsafe { Fdt::from_raw_bounded(FDT_HEADER_OK.as_ptr(), FDT_HEADER_OK.len() + 64) }
+                .unwrap();
+        assert_eq!(fdt.data().len(), FDT_HEADER_OK.len());
     }
 }

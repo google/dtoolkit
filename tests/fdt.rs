@@ -353,6 +353,13 @@ fn round_trip_raw() {
 
 #[test]
 #[cfg(feature = "write")]
+fn round_trip_raw_bounded() {
+    // SAFETY: dtb is a valid FDT blob
+    round_trip_impl(|dtb| unsafe { Fdt::from_raw_bounded(dtb.as_ptr(), dtb.len()).unwrap() });
+}
+
+#[test]
+#[cfg(feature = "write")]
 fn round_trip_raw_unchecked() {
     // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { Fdt::from_raw_unchecked(dtb.as_ptr()) });
@@ -375,6 +382,17 @@ fn round_trip_unchecked_mut() {
 fn round_trip_raw_mut() {
     // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { FdtMut::from_raw(dtb.as_mut_ptr()).unwrap().into() });
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw_bounded_mut() {
+    // SAFETY: dtb is a valid FDT blob
+    round_trip_impl(|dtb| unsafe {
+        FdtMut::from_raw_bounded(dtb.as_mut_ptr(), dtb.len())
+            .unwrap()
+            .into()
+    });
 }
 
 #[test]
