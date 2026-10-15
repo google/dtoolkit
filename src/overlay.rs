@@ -124,13 +124,12 @@ impl<'a, N: Node<'a>> Fragment<N> {
     ///
     /// match fragment.target().unwrap() {
     ///     FragmentTarget::Path(p) => {
-    ///         let p_str: &str = p.as_ref();
-    ///         assert_eq!(p_str, "/soc");
+    ///         assert_eq!(p, "/soc");
     ///     }
     ///     FragmentTarget::Phandle(p) => println!("Targeting phandle: {}", p),
     /// }
     /// ```
-    pub fn target(&self) -> Result<FragmentTarget<&'a str>, OverlayError> {
+    pub fn target(&self) -> Result<FragmentTarget<'a>, OverlayError> {
         let target = self.node.property("target");
         let target_path = self.node.property("target-path");
 
@@ -144,11 +143,11 @@ impl<'a, N: Node<'a>> Fragment<N> {
 
 /// The target of an overlay fragment in the base tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FragmentTarget<S> {
+pub enum FragmentTarget<'a> {
     /// A 32-bit phandle pointing to a target node in the base tree.
     Phandle(u32),
     /// An absolute device tree path or alias/symbol pointing to a target node.
-    Path(S),
+    Path(&'a str),
 }
 
 /// A parsed location string from a `/__fixups__` property value.

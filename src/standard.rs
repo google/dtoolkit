@@ -162,29 +162,6 @@ pub trait NodeStandard<'a>: Node<'a> {
 impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
 
 impl<'a> FdtNode<'a> {
-    /// Returns the value of the standard `compatible` property.
-    #[must_use]
-    pub fn compatible(&self) -> Option<impl Iterator<Item = &'a str> + 'a> {
-        self.property("compatible").and_then(|property| {
-            property
-                .value_as::<crate::values::FdtStringListIterator<'a>>()
-                .ok()
-        })
-    }
-
-    /// Returns the value of the standard `model` property.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the value isn't a valid UTF-8 string.
-    pub fn model(&self) -> Result<Option<&'a str>, PropertyError> {
-        if let Some(model) = self.property("model") {
-            Ok(Some(model.value_as::<&'a str>()?))
-        } else {
-            Ok(None)
-        }
-    }
-
     /// Returns the value of the standard `reg` property.
     ///
     /// # Errors

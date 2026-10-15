@@ -461,3 +461,16 @@ fn standard_node_outlives_wrapper() {
     };
     assert_eq!(area.size, 0x1000);
 }
+
+#[test]
+fn property_name_and_value_outlive_node_and_property() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let (name, value): (&str, &[u8]) = {
+        let fdt = Fdt::new(dtb).unwrap();
+        let node = fdt.find_node("/test-props").unwrap();
+        let prop = node.property("str-prop").unwrap();
+        (prop.name(), prop.value())
+    };
+    assert_eq!(name, "str-prop");
+    assert_eq!(value, b"hello world\0");
+}
