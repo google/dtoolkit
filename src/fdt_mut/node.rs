@@ -11,6 +11,7 @@ use core::fmt::{Display, Formatter};
 
 use zerocopy::IntoBytes;
 
+use crate::error::FdtMutError;
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
@@ -90,7 +91,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         &mut self,
         name: &str,
         value: T,
-    ) -> Result<FdtPropertyMut<'_, B>, crate::error::FdtMutError> {
+    ) -> Result<FdtPropertyMut<'_, B>, FdtMutError> {
         let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
         let mut offset = self.offset + FDT_TAGSIZE;
@@ -178,9 +179,15 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// assert!(node.child("c").is_none());
     /// assert!(!node.remove_child("c"));
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`FdtMut`] structure was constructed using
+    /// [`FdtMut::new_unchecked`] or [`FdtMut::from_raw_unchecked`] and the FDT
+    /// is not valid.
     pub fn remove_child(&mut self, name: &str) -> bool {
         if let Some(child) = self.child_mut(name) {
-            child.remove();
+            child.remove().expect("child node is never the root node");
             true
         } else {
             false
@@ -194,6 +201,10 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// tags, rendering it invisible to Device Tree iterators without
     /// requiring data to be shifted.
     ///
+    /// # Errors
+    ///
+    /// Returns [`FdtMutError::RemoveRootNode`] if called on the root node.
+    ///
     /// # Examples
     ///
     /// ```
@@ -204,7 +215,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
     /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
     /// let child = parent.child_mut("c").unwrap();
-    /// child.remove();
+    /// child.remove().unwrap();
     ///
     /// assert!(parent.child("c").is_none());
     /// ```
@@ -214,14 +225,18 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// Panics if the [`FdtMut`] structure was constructed using
     /// [`FdtMut::new_unchecked`] or [`FdtMut::from_raw_unchecked`] and the FDT
     /// is not valid.
-    pub fn remove(self) {
+    pub fn remove(self) -> Result<(), FdtMutError> {
         let fdt = self.data.as_read_only();
         let start = self.offset;
+        if start == fdt.root().offset {
+            return Err(FdtMutError::RemoveRootNode);
+        }
         let end = fdt
             .next_sibling_offset(self.offset)
             .expect("Fdt should be valid");
 
         self.data.replace_with_nops(start, end);
+        Ok(())
     }
 
     /// Returns a mutable iterator over the properties of this node.
