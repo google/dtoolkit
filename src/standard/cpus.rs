@@ -52,7 +52,7 @@ impl<N: Display> Display for Cpus<N> {
 
 impl<'a, N: Node<'a>> Cpus<N> {
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
-    pub fn cpus(&self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
+    pub fn cpus(self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
         self.node.children().filter_map(|child| {
             if child.name_without_address() == "cpu" {
                 Some(Cpu { node: child })
@@ -87,7 +87,7 @@ impl<'a, N: Node<'a>> Cpu<N> {
     /// Returns the value of the standard `enable-method` property if it is
     /// present.
     #[must_use]
-    pub fn enable_method(&self) -> Option<FdtStringListIterator<'a>> {
+    pub fn enable_method(self) -> Option<FdtStringListIterator<'a>> {
         self.node
             .property("enable-method")?
             .value_as::<FdtStringListIterator<'a>>()
@@ -100,7 +100,7 @@ impl<'a, N: Node<'a>> Cpu<N> {
     /// # Errors
     ///
     /// Returns an error if the value of the property isn't 8 bytes long.
-    pub fn cpu_release_addr(&self) -> Result<Option<u64>, PropertyError> {
+    pub fn cpu_release_addr(self) -> Result<Option<u64>, PropertyError> {
         self.node
             .property("cpu-release-addr")
             .map(Property::value_as)
