@@ -165,6 +165,9 @@ pub enum FdtMutError {
     /// Buffer resize failed.
     #[error("buffer resize failed: {0}")]
     Resize(#[from] BufferError),
+    /// The root node of a device tree cannot be removed.
+    #[error("cannot remove the root node")]
+    RemoveRootNode,
 }
 
 /// An error that can occur when inspecting or applying a device tree overlay.
