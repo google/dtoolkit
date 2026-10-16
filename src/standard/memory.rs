@@ -68,7 +68,7 @@ impl<'a, N: Node<'a>> Memory<N> {
     ///
     /// Returns an error if the size of the value isn't a multiple of 5 cells.
     pub fn initial_mapped_area(
-        &self,
+        self,
     ) -> Result<Option<impl Iterator<Item = InitialMappedArea> + use<'a, N>>, PropertyError> {
         if let Some(property) = self.node.property("initial-mapped-area") {
             Ok(Some(
@@ -84,7 +84,7 @@ impl<'a, N: Node<'a>> Memory<N> {
     /// Returns the value of the standard `hotpluggable` property of the memory
     /// node.
     #[must_use]
-    pub fn hotpluggable(&self) -> bool {
+    pub fn hotpluggable(self) -> bool {
         self.node.property("hotpluggable").is_some()
     }
 }
@@ -147,7 +147,7 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn size(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+    pub fn size(self) -> Result<Option<Cells<'a>>, PropertyError> {
         self.node
             .property("size")
             .map(Property::value_as)
@@ -161,7 +161,7 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     ///
     /// Returns an error if the value of the property isn't a multiple of 4
     /// bytes long.
-    pub fn alignment(&self) -> Result<Option<Cells<'a>>, PropertyError> {
+    pub fn alignment(self) -> Result<Option<Cells<'a>>, PropertyError> {
         self.node
             .property("alignment")
             .map(Property::value_as)
@@ -169,17 +169,17 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     }
 
     /// Returns whether the standard `no-map` property is present.
-    pub fn no_map(&self) -> bool {
+    pub fn no_map(self) -> bool {
         self.node.property("no-map").is_some()
     }
 
     /// Returns whether the standard `no-map-fixup` property is present.
-    pub fn no_map_fixup(&self) -> bool {
+    pub fn no_map_fixup(self) -> bool {
         self.node.property("no-map-fixup").is_some()
     }
 
     /// Returns whether the standard `reusable` property is present.
-    pub fn reusable(&self) -> bool {
+    pub fn reusable(self) -> bool {
         self.node.property("reusable").is_some()
     }
 }
