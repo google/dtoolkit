@@ -353,6 +353,13 @@ fn round_trip_raw() {
 
 #[test]
 #[cfg(feature = "write")]
+fn round_trip_raw_bounded() {
+    // SAFETY: dtb is a valid FDT blob
+    round_trip_impl(|dtb| unsafe { Fdt::from_raw_bounded(dtb.as_ptr(), dtb.len()).unwrap() });
+}
+
+#[test]
+#[cfg(feature = "write")]
 fn round_trip_raw_unchecked() {
     // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { Fdt::from_raw_unchecked(dtb.as_ptr()) });
@@ -375,6 +382,17 @@ fn round_trip_unchecked_mut() {
 fn round_trip_raw_mut() {
     // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe { FdtMut::from_raw(dtb.as_mut_ptr()).unwrap().into() });
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn round_trip_raw_bounded_mut() {
+    // SAFETY: dtb is a valid FDT blob
+    round_trip_impl(|dtb| unsafe {
+        FdtMut::from_raw_bounded(dtb.as_mut_ptr(), dtb.len())
+            .unwrap()
+            .into()
+    });
 }
 
 #[test]
@@ -473,4 +491,97 @@ fn property_name_and_value_outlive_node_and_property() {
     };
     assert_eq!(name, "str-prop");
     assert_eq!(value, b"hello world\0");
+}
+
+fn collect_all_nodes<'a>(
+    node: dtoolkit::fdt::FdtNode<'a>,
+    out: &mut Vec<dtoolkit::fdt::FdtNode<'a>>,
+) {
+    out.push(node);
+    for child in node.children() {
+        collect_all_nodes(child, out);
+    }
+}
+
+#[test]
+fn node_offsets_round_trip_and_preserve_parent_address_space() {
+    for (dtb, _dts, name) in ALL_DT_FILES {
+        let fdt = Fdt::new(dtb).unwrap();
+        assert_eq!(fdt.root().offset(), 0, "{name}");
+
+        let mut nodes = Vec::new();
+        collect_all_nodes(fdt.root(), &mut nodes);
+        let valid_offsets: Vec<usize> = nodes.iter().map(|n| n.offset()).collect();
+
+        for node in &nodes {
+            let resolved = fdt.node_at_offset(node.offset()).unwrap();
+            assert_eq!(resolved.offset(), node.offset(), "{name}");
+            assert_eq!(resolved.name(), node.name(), "{name}");
+
+            let orig_reg = node.reg().map(|r| r.map(Iterator::collect::<Vec<_>>));
+            let resolved_reg = resolved.reg().map(|r| r.map(Iterator::collect::<Vec<_>>));
+            assert_eq!(resolved_reg, orig_reg, "{name}: {}", node.name());
+
+            let orig_ranges = node.ranges().map(|r| r.map(Iterator::collect::<Vec<_>>));
+            let resolved_ranges = resolved
+                .ranges()
+                .map(|r| r.map(Iterator::collect::<Vec<_>>));
+            assert_eq!(resolved_ranges, orig_ranges, "{name}: {}", node.name());
+        }
+
+        // Every non-node offset up to dtb.len() + 8 must return None.
+        for offset in 0..=dtb.len() + 8 {
+            if !valid_offsets.contains(&offset) {
+                assert!(
+                    fdt.node_at_offset(offset).is_none(),
+                    "{name}: unexpected node at offset {offset}"
+                );
+            }
+        }
+        assert!(fdt.node_at_offset(usize::MAX).is_none());
+    }
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn node_at_offset_deep_nesting_preserves_parent_address_space() {
+    use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
+
+    // Build a deeply nested chain where an inner parent sets custom
+    // #address-cells = <1> and #size-cells = <1>.
+    let mut current = DeviceTreeNode::builder("leaf")
+        .unwrap()
+        .property(DeviceTreeProperty::new("reg", [0x1234_5678u32, 0x100u32]).unwrap())
+        .build();
+
+    for depth in (1..=24).rev() {
+        let mut builder = DeviceTreeNode::builder("n").unwrap();
+        if depth == 24 {
+            builder = builder
+                .property(DeviceTreeProperty::new("#address-cells", 1u32).unwrap())
+                .property(DeviceTreeProperty::new("#size-cells", 1u32).unwrap());
+        }
+        let mut parent = builder.build();
+        parent.add_child(current);
+        current = parent;
+    }
+
+    let mut tree = DeviceTree::new();
+    tree.root.add_child(current);
+    let dtb = tree.to_dtb();
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    let mut nodes = Vec::new();
+    collect_all_nodes(fdt.root(), &mut nodes);
+    assert_eq!(nodes.len(), 26);
+
+    let leaf = *nodes.last().unwrap();
+    assert_eq!(leaf.name(), "leaf");
+
+    let by_offset = fdt.node_at_offset(leaf.offset()).unwrap();
+    assert_eq!(by_offset.name(), "leaf");
+    let regs: Vec<_> = by_offset.reg().unwrap().unwrap().collect();
+    assert_eq!(regs.len(), 1);
+    assert_eq!(regs[0].address::<u32>().unwrap(), 0x1234_5678);
+    assert_eq!(regs[0].size::<u32>().unwrap(), 0x100);
 }

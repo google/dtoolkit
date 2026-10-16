@@ -69,6 +69,37 @@ impl<'a> FdtNode<'a> {
         }
     }
 
+    /// Returns the byte offset of this node's `FDT_BEGIN_NODE` tag relative to
+    /// the start of the `dt_struct` block.
+    ///
+    /// This matches the node offset representation used by `libfdt` (where the
+    /// root node `/` is at offset `0`).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt::Fdt;
+    ///
+    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// assert_eq!(fdt.root().offset(), 0);
+    ///
+    /// let node = fdt.find_node("/a/b/c").unwrap();
+    /// let by_offset = fdt.node_at_offset(node.offset()).unwrap();
+    /// assert_eq!(by_offset.name(), "c");
+    /// ```
+    #[must_use]
+    pub fn offset(self) -> usize {
+        self.offset - self.fdt.header().off_dt_struct() as usize
+    }
+
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         let name = self.name();
         if name.is_empty() {

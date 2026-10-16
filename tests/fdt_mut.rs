@@ -576,3 +576,64 @@ fn property_mut_methods() {
     let array: Vec<_> = prop.as_prop_encoded_array([1]).unwrap().collect();
     assert_eq!(array.len(), 1);
 }
+
+#[test]
+fn node_at_offset_mut_and_nop_rejection() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt = FdtMut::from_slice(&mut data).unwrap();
+    let root_off = fdt.root_mut().offset();
+    assert_eq!(root_off, 0);
+
+    let c_off = fdt.find_node_mut("/a/b/c").unwrap().offset();
+    let mut c_node = fdt.node_at_offset_mut(c_off).unwrap();
+    assert_eq!(c_node.name(), "c");
+    c_node
+        .property_mut("prop")
+        .unwrap()
+        .set_value(0x5678u32)
+        .unwrap();
+
+    assert_eq!(
+        fdt.as_read_only()
+            .node_at_offset(c_off)
+            .unwrap()
+            .property("prop")
+            .unwrap()
+            .value_as::<u32>()
+            .unwrap(),
+        0x5678
+    );
+
+    // Removing the node replaces it with NOPs, so c_off is no longer a valid
+    // node offset.
+    fdt.node_at_offset_mut(c_off).unwrap().remove();
+    assert!(fdt.node_at_offset_mut(c_off).is_none());
+    assert!(fdt.as_read_only().node_at_offset(c_off).is_none());
+}
+
+#[test]
+fn from_raw_bounded_mut_rejects_invalid_headers() {
+    use dtoolkit::error::FdtErrorKind;
+
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+
+    // max_len smaller than header does not dereference pointer.
+    // SAFETY: `max_len < 40`, so `from_raw_bounded` returns before
+    // dereferencing `data`.
+    let err = unsafe { FdtMut::from_raw_bounded(core::ptr::null_mut(), 39) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
+
+    // 8-byte buffer with bad magic or out-of-range totalsize is rejected
+    // without reading 40 bytes.
+    let mut bad_magic = [0u8; 8];
+    // SAFETY: `bad_magic` is 8 readable bytes and has invalid magic.
+    let err = unsafe { FdtMut::from_raw_bounded(bad_magic.as_mut_ptr(), 1024) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidMagic);
+
+    let mut huge_size = [0xd0, 0x0d, 0xfe, 0xed, 0xff, 0xff, 0xff, 0xff];
+    // SAFETY: `huge_size` is 8 readable bytes and `totalsize > max_len`.
+    let err = unsafe { FdtMut::from_raw_bounded(huge_size.as_mut_ptr(), dtb.len()) }.unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
+}
