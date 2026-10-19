@@ -268,6 +268,18 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         }
     }
 
+    /// Returns the byte offset of this node's `FDT_BEGIN_NODE` tag relative to
+    /// the start of the `dt_struct` block.
+    ///
+    /// Note that mutating the FDT in a way that removes this node or shifts,
+    /// grows, or compacts the `dt_struct` block may invalidate this offset.
+    ///
+    /// For more details, refer to [`FdtNode::offset`].
+    #[must_use]
+    pub fn offset(&self) -> usize {
+        self.as_read_only().offset()
+    }
+
     /// Returns the name of this node.
     #[must_use]
     pub fn name(&self) -> &str {
