@@ -629,7 +629,7 @@ fn node_at_offset_mut_and_nop_rejection() {
 
     // Removing the node replaces it with NOPs, so c_off is no longer a valid
     // node offset.
-    fdt.node_at_offset_mut(c_off).unwrap().remove();
+    fdt.node_at_offset_mut(c_off).unwrap().remove().unwrap();
     assert!(fdt.node_at_offset_mut(c_off).is_none());
     assert!(fdt.as_read_only().node_at_offset(c_off).is_none());
 }
