@@ -8,7 +8,9 @@
 
 #![cfg(feature = "write")]
 
+use dtoolkit::fdt::Fdt;
 use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
+use dtoolkit::standard::{AddressSpaceProperties, NodeStandard};
 use dtoolkit::{Node, Property};
 
 #[test]
@@ -182,4 +184,81 @@ fn device_tree_format() {
 };
 "
     );
+}
+
+#[test]
+fn parent_address_space() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let tree = DeviceTree::from_fdt(&fdt);
+
+    let standard_props_node = tree.find_node("/standard-props").unwrap();
+    assert_eq!(
+        standard_props_node.parent_address_space(),
+        AddressSpaceProperties {
+            address_cells: 2,
+            size_cells: 2,
+        }
+    );
+}
+
+#[test]
+fn reg() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let tree = DeviceTree::from_fdt(&fdt);
+
+    let standard_props_node = tree.find_node("/standard-props").unwrap();
+    let reg = standard_props_node
+        .reg()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(reg.len(), 2);
+    assert_eq!(reg[0].address::<u64>().unwrap(), 0x1234_5678_0000_3000);
+    assert_eq!(reg[0].size::<u64>().unwrap(), 32);
+    assert_eq!(reg[1].address::<u64>().unwrap(), 0xfe00);
+    assert_eq!(reg[1].size::<u64>().unwrap(), 256);
+}
+
+#[test]
+fn ranges() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let tree = DeviceTree::from_fdt(&fdt);
+
+    let standard_props_node = tree.find_node("/standard-props").unwrap();
+    let ranges = standard_props_node
+        .ranges()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(ranges.len(), 1);
+    assert_eq!(ranges[0].child_bus_address::<u32>().unwrap(), 0x1111_0000);
+    assert_eq!(
+        ranges[0].parent_bus_address::<u64>().unwrap(),
+        0x2222_0000_3333_0000
+    );
+    assert_eq!(ranges[0].length::<u32>().unwrap(), 0x4444_0000);
+}
+
+#[test]
+fn dma_ranges() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let tree = DeviceTree::from_fdt(&fdt);
+
+    let standard_props_node = tree.find_node("/standard-props").unwrap();
+    let dma_ranges = standard_props_node
+        .dma_ranges()
+        .unwrap()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(dma_ranges.len(), 1);
+    assert_eq!(dma_ranges[0].child_bus_address::<u32>().unwrap(), 0xaaaa);
+    assert_eq!(
+        dma_ranges[0].parent_bus_address::<u64>().unwrap(),
+        0xbbbb_0000_cccc
+    );
+    assert_eq!(dma_ranges[0].length::<u32>().unwrap(), 0xdddd);
 }

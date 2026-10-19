@@ -182,18 +182,19 @@ impl<'a, N: Node<'a>> ReservedMemory<N> {
     pub fn reusable(self) -> bool {
         self.node.property("reusable").is_some()
     }
-}
 
-impl<'a> ReservedMemory<FdtNode<'a>> {
     /// Returns the value of the standard `alloc-ranges` property.
     ///
     /// # Errors
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of address and size cells.
-    pub fn alloc_ranges(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + 'a>, StandardError> {
-        let address_cells = self.node.parent_address_space.address_cells as usize;
-        let size_cells = self.node.parent_address_space.size_cells as usize;
+    pub fn alloc_ranges(
+        self,
+    ) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a, N>>, StandardError> {
+        let parent_address_space = self.node.parent_address_space();
+        let address_cells = parent_address_space.address_cells as usize;
+        let size_cells = parent_address_space.size_cells as usize;
         if let Some(property) = self.node.property("alloc-ranges") {
             Ok(Some(
                 property
