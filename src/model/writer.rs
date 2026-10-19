@@ -13,13 +13,13 @@ use alloc::vec::Vec;
 
 use zerocopy::IntoBytes;
 
+use crate::Property;
 use crate::fdt::{
     FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_MAGIC, FDT_TAGSIZE, Fdt, FdtHeader,
     FdtPropertyHeader,
 };
 use crate::memreserve::MemoryReservation;
 use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-use crate::{Node, Property};
 
 // https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html#header
 const LAST_VERSION: u32 = 17;
@@ -111,7 +111,7 @@ impl DeviceTree {
             size += Self::calculate_prop_size(string_map, prop);
         }
 
-        for child in node.children() {
+        for child in node.children.values() {
             size += Self::calculate_node_size(string_map, child);
         }
 
@@ -152,7 +152,7 @@ impl DeviceTree {
             Self::write_prop(dtb, string_map, prop);
         }
 
-        for child in node.children() {
+        for child in node.children.values() {
             Self::write_node(dtb, string_map, child);
         }
 
