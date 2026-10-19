@@ -470,7 +470,7 @@ fn remove_node_via_handle() {
 
     let mut parent = fdt_mut.find_node_mut("/a/b").unwrap();
     let child = parent.child_mut("c").unwrap();
-    child.remove();
+    child.remove().unwrap();
 
     let fdt = Fdt::new(&data).unwrap();
 
@@ -479,6 +479,27 @@ fn remove_node_via_handle() {
 
     assert!(fdt.find_node("/a/b/c").is_none());
     assert!(node_b.child("c").is_none());
+}
+
+#[test]
+fn remove_root_node_fails() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let mut data = dtb.to_vec();
+
+    let mut fdt_mut = FdtMut::from_slice(&mut data).unwrap();
+    assert_eq!(
+        fdt_mut.root_mut().remove(),
+        Err(FdtMutError::RemoveRootNode)
+    );
+    assert_eq!(
+        fdt_mut.find_node_mut("/").unwrap().remove(),
+        Err(FdtMutError::RemoveRootNode)
+    );
+
+    // ensure the tree remains valid
+    let fdt = Fdt::new(&data).unwrap();
+    assert_eq!(fdt.root().name(), "");
+    assert!(fdt.find_node("/a/b/c").is_some());
 }
 
 #[test]
@@ -608,7 +629,7 @@ fn node_at_offset_mut_and_nop_rejection() {
 
     // Removing the node replaces it with NOPs, so c_off is no longer a valid
     // node offset.
-    fdt.node_at_offset_mut(c_off).unwrap().remove();
+    fdt.node_at_offset_mut(c_off).unwrap().remove().unwrap();
     assert!(fdt.node_at_offset_mut(c_off).is_none());
     assert!(fdt.as_read_only().node_at_offset(c_off).is_none());
 }
