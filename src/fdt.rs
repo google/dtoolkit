@@ -33,9 +33,9 @@ use zerocopy_derive::*;
 
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
-use crate::Node;
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::MemoryReservation;
+use crate::{Node, Tree};
 
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
@@ -182,6 +182,15 @@ impl TryFrom<u32> for FdtToken {
             FDT_END => Ok(FdtToken::End),
             _ => Err(value),
         }
+    }
+}
+
+impl<'a> Tree<'a> for Fdt<'a> {
+    type Node = FdtNode<'a>;
+
+    fn root(self) -> FdtNode<'a> {
+        let offset = self.header().off_dt_struct() as usize;
+        FdtNode::new(self, offset)
     }
 }
 
@@ -664,8 +673,7 @@ impl<'a> Fdt<'a> {
     /// ```
     #[must_use]
     pub fn root(self) -> FdtNode<'a> {
-        let offset = self.header().off_dt_struct() as usize;
-        FdtNode::new(self, offset)
+        Tree::root(self)
     }
 
     /// Finds a node by its path.
@@ -719,17 +727,7 @@ impl<'a> Fdt<'a> {
     /// ```
     #[must_use]
     pub fn find_node(self, path: &str) -> Option<FdtNode<'a>> {
-        if !path.starts_with('/') {
-            return None;
-        }
-        let mut current_node = self.root();
-        if path == "/" {
-            return Some(current_node);
-        }
-        for component in path.split('/').filter(|s| !s.is_empty()) {
-            current_node = current_node.child(component)?;
-        }
-        Some(current_node)
+        Tree::find_node(self, path)
     }
 
     /// Returns the node at the given byte offset relative to the start of the

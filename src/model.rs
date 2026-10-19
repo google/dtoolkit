@@ -25,7 +25,7 @@ use core::fmt::Display;
 pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder, DeviceTreeNodeRef};
 pub use property::DeviceTreeProperty;
 
-use crate::Node;
+use crate::Tree;
 use crate::fdt::Fdt;
 use crate::memreserve::MemoryReservation;
 
@@ -49,6 +49,14 @@ pub struct DeviceTree {
     pub root: DeviceTreeNode,
     /// The memory reservations for this device tree.
     pub memory_reservations: Vec<MemoryReservation>,
+}
+
+impl<'a> Tree<'a> for &'a DeviceTree {
+    type Node = DeviceTreeNodeRef<'a>;
+
+    fn root(self) -> DeviceTreeNodeRef<'a> {
+        self.root.as_read_only()
+    }
 }
 
 impl DeviceTree {
@@ -95,7 +103,7 @@ impl DeviceTree {
     /// Returns a read-only view of the root node of the device tree.
     #[must_use]
     pub fn root(&self) -> DeviceTreeNodeRef<'_> {
-        self.root.as_read_only()
+        Tree::root(self)
     }
 
     /// Finds a node by its path and returns a read-only view of it.
@@ -119,17 +127,7 @@ impl DeviceTree {
     /// ```
     #[must_use]
     pub fn find_node(&self, path: &str) -> Option<DeviceTreeNodeRef<'_>> {
-        if !path.starts_with('/') {
-            return None;
-        }
-        let mut current_node = self.root();
-        if path == "/" {
-            return Some(current_node);
-        }
-        for component in path.split('/').filter(|s| !s.is_empty()) {
-            current_node = current_node.child(component)?;
-        }
-        Some(current_node)
+        Tree::find_node(self, path)
     }
 
     /// Finds a node by its path and returns a mutable reference to it.

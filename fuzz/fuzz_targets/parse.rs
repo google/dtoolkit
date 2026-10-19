@@ -14,7 +14,7 @@
 use dtoolkit::{
     Node, Property,
     fdt::{Fdt, FdtNode},
-    standard::NodeStandard,
+    standard::{NodeStandard, TreeStandard},
 };
 use libfuzzer_sys::fuzz_target;
 
