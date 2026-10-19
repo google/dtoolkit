@@ -49,7 +49,7 @@ impl<'a, N: Node<'a>> Chosen<N> {
     ///
     /// Returns an [`PropertyError::InvalidString`] if the property's value is
     /// not a null-terminated string or contains invalid UTF-8.
-    pub fn bootargs(&self) -> Result<Option<&'a str>, PropertyError> {
+    pub fn bootargs(self) -> Result<Option<&'a str>, PropertyError> {
         self.node
             .property("bootargs")
             .map(Property::value_as)
@@ -62,7 +62,7 @@ impl<'a, N: Node<'a>> Chosen<N> {
     ///
     /// Returns an [`PropertyError::InvalidString`] if the property's value is
     /// not a null-terminated string or contains invalid UTF-8.
-    pub fn stdout_path(&self) -> Result<Option<&'a str>, PropertyError> {
+    pub fn stdout_path(self) -> Result<Option<&'a str>, PropertyError> {
         self.node
             .property("stdout-path")
             .map(Property::value_as)
@@ -75,7 +75,7 @@ impl<'a, N: Node<'a>> Chosen<N> {
     ///
     /// Returns an [`PropertyError::InvalidString`] if the property's value is
     /// not a null-terminated string or contains invalid UTF-8.
-    pub fn stdin_path(&self) -> Result<Option<&'a str>, PropertyError> {
+    pub fn stdin_path(self) -> Result<Option<&'a str>, PropertyError> {
         self.node
             .property("stdin-path")
             .map(Property::value_as)
