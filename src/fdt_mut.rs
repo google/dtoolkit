@@ -23,9 +23,9 @@ pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
 use zerocopy::{FromBytes, big_endian};
 
-use crate::ToPropertyValue;
 use crate::error::{BufferError, FdtParseError};
 use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtToken};
+use crate::{ToPropertyValue, Tree};
 
 /// A mutable flattened device tree.
 pub struct FdtMut<B> {

@@ -49,6 +49,7 @@ impl<'a, N: Node<'a>> Overlay<N> {
     /// # Examples
     ///
     /// ```
+    /// use dtoolkit::Tree;
     /// use dtoolkit::fdt::Fdt;
     /// use dtoolkit::overlay::Overlay;
     ///
@@ -66,9 +67,9 @@ impl<'a, N: Node<'a>> Overlay<N> {
     /// # Examples
     ///
     /// ```
-    /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
     /// use dtoolkit::overlay::Overlay;
+    /// use dtoolkit::{Node, Tree};
     ///
     /// # let overlay_dtb = include_bytes!("../tests/dtb/overlay_target_path_overlay.dtb");
     /// let fdt = Fdt::new(overlay_dtb).unwrap();
@@ -114,6 +115,7 @@ impl<'a, N: Node<'a>> Fragment<N> {
     /// # Examples
     ///
     /// ```
+    /// use dtoolkit::Tree;
     /// use dtoolkit::fdt::Fdt;
     /// use dtoolkit::overlay::{FragmentTarget, Overlay};
     ///
@@ -214,6 +216,7 @@ impl<'a> FixupLocation<'a> {
 /// # Examples
 ///
 /// ```
+/// use dtoolkit::Tree;
 /// use dtoolkit::fdt::Fdt;
 /// use dtoolkit::overlay::get_phandle;
 ///
@@ -236,6 +239,7 @@ pub fn get_phandle<'a>(node: impl Node<'a>) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Tree;
     use crate::fdt::Fdt;
     #[cfg(feature = "write")]
     use crate::model::{DeviceTreeNode, DeviceTreeProperty};

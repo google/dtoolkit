@@ -22,10 +22,60 @@ pub use self::ranges::Range;
 pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{PropertyError, StandardError};
-use crate::{Node, Property};
+use crate::{Node, Property, Tree};
 
 pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
 pub(crate) const DEFAULT_SIZE_CELLS: u32 = 1;
+
+/// Methods to access standard nodes on a device tree.
+pub trait TreeStandard<'a>: Tree<'a> {
+    /// Returns the `/cpus` node.
+    ///
+    /// This should always be included in a valid device tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StandardError::CpusMissing`] if the CPUs node is missing.
+    fn cpus(self) -> Result<Cpus<Self::Node>, StandardError> {
+        let node = self.find_node("/cpus").ok_or(StandardError::CpusMissing)?;
+        Ok(Cpus::new(node))
+    }
+
+    /// Returns the `/memory` node.
+    ///
+    /// This should always be included in a valid device tree.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StandardError::MemoryMissing`] if the memory node is missing.
+    fn memory(self) -> Result<Memory<Self::Node>, StandardError> {
+        let node = self
+            .find_node("/memory")
+            .ok_or(StandardError::MemoryMissing)?;
+        Ok(Memory::new(node))
+    }
+
+    /// Returns the `/reserved-memory/*` nodes, if any.
+    #[must_use]
+    fn reserved_memory(
+        self,
+    ) -> Option<impl Iterator<Item = ReservedMemory<Self::Node>> + use<'a, Self>> {
+        Some(
+            self.find_node("/reserved-memory")?
+                .children()
+                .map(ReservedMemory::new),
+        )
+    }
+
+    /// Returns the `/chosen` node, if it exists.
+    #[must_use]
+    fn chosen(self) -> Option<Chosen<Self::Node>> {
+        let node = self.find_node("/chosen")?;
+        Some(Chosen::new(node))
+    }
+}
+
+impl<'a, T: Tree<'a>> TreeStandard<'a> for T {}
 
 /// Methods to access standard properties on FDT nodes.
 pub trait NodeStandard<'a>: Node<'a> {

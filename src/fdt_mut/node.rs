@@ -21,7 +21,7 @@ use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
 use crate::util::impl_read_only_node_methods;
-use crate::{Node, Property, ToPropertyValue};
+use crate::{Node, Property, ToPropertyValue, Tree};
 
 /// A mutable device tree node.
 #[derive(Debug)]

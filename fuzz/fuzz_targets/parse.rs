@@ -12,9 +12,9 @@
 #![no_main]
 
 use dtoolkit::{
-    Node, Property,
+    Node, Property, Tree,
     fdt::{Fdt, FdtNode},
-    standard::NodeStandard,
+    standard::{NodeStandard, TreeStandard},
 };
 use libfuzzer_sys::fuzz_target;
 
