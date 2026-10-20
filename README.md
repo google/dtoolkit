@@ -3,6 +3,7 @@
 [![Rust CI](https://github.com/google/dtoolkit/actions/workflows/rust.yml/badge.svg)](https://github.com/google/dtoolkit/actions/workflows/rust.yml)
 [![crates.io](https://img.shields.io/crates/v/dtoolkit.svg)](https://crates.io/crates/dtoolkit)
 [![Documentation](https://docs.rs/dtoolkit/badge.svg)](https://docs.rs/dtoolkit)
+[![codecov](https://codecov.io/gh/google/dtoolkit/graph/badge.svg)](https://codecov.io/gh/google/dtoolkit)
 
 A library for parsing and manipulating Flattened Device Tree (FDT) blobs.
 
