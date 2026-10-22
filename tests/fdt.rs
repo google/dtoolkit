@@ -11,7 +11,7 @@ use dtoolkit::fdt::{Fdt, FdtNode};
 use dtoolkit::fdt_mut::FdtMut;
 #[cfg(feature = "write")]
 use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status};
+use dtoolkit::standard::{InitialMappedArea, NodeStandard, Status, TreeStandard};
 use dtoolkit::{Node, Property};
 
 #[test]

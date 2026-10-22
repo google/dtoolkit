@@ -10,35 +10,8 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::{PropertyError, StandardError};
-use crate::fdt::{Fdt, FdtNode};
 use crate::standard::Reg;
 use crate::{Cells, Node, Property};
-
-impl<'a> Fdt<'a> {
-    /// Returns the `/memory` node.
-    ///
-    /// This should always be included in a valid device tree.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StandardError::MemoryMissing`] if the memory node is missing.
-    pub fn memory(self) -> Result<Memory<FdtNode<'a>>, StandardError> {
-        let node = self
-            .find_node("/memory")
-            .ok_or(StandardError::MemoryMissing)?;
-        Ok(Memory { node })
-    }
-
-    /// Returns the `/reserved-memory/*` nodes, if any.
-    #[must_use]
-    pub fn reserved_memory(self) -> Option<impl Iterator<Item = ReservedMemory<FdtNode<'a>>>> {
-        Some(
-            self.find_node("/reserved-memory")?
-                .children()
-                .map(|node| ReservedMemory { node }),
-        )
-    }
-}
 
 /// Typed wrapper for a `/memory` node.
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +34,10 @@ impl<N: Display> Display for Memory<N> {
 }
 
 impl<'a, N: Node<'a>> Memory<N> {
+    pub(super) const fn new(node: N) -> Self {
+        Self { node }
+    }
+
     /// Returns the value of the standard `initial-mapped-area` property of the
     /// memory node.
     ///
@@ -140,6 +117,10 @@ impl<N: Display> Display for ReservedMemory<N> {
 }
 
 impl<'a, N: Node<'a>> ReservedMemory<N> {
+    pub(super) const fn new(node: N) -> Self {
+        Self { node }
+    }
+
     /// Returns the value of the standard `size` property of the reserved memory
     /// node, if it is present.
     ///
