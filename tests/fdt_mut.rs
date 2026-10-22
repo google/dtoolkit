@@ -656,3 +656,14 @@ fn from_raw_bounded_mut_rejects_invalid_headers() {
     let err = unsafe { FdtMut::from_raw_bounded(huge_size.as_mut_ptr(), dtb.len()) }.unwrap_err();
     assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }
+
+#[test]
+fn from_slice_buffer_into_fdt_uses_totalsize() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut buf = [0u8; 256];
+    buf[..dtb.len()].copy_from_slice(dtb);
+
+    let fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let fdt = Fdt::from(fdt_mut);
+    assert_eq!(fdt.data().len(), dtb.len());
+}

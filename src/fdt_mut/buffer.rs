@@ -51,7 +51,7 @@ impl<B: FdtBuffer + ?Sized> FdtBuffer for &mut B {
 /// buffer.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SliceBuffer<'a> {
-    pub(crate) slice: &'a mut [u8],
+    slice: &'a mut [u8],
 }
 
 impl<'a> SliceBuffer<'a> {
@@ -88,6 +88,14 @@ impl<'a> SliceBuffer<'a> {
         Self { slice }
     }
 
+    pub(super) fn into_slice(self) -> &'a [u8] {
+        &self.slice[..self.len()]
+    }
+
+    fn len(&self) -> usize {
+        self.header().totalsize() as usize
+    }
+
     fn header(&self) -> &FdtHeader {
         let (header, _) = FdtHeader::ref_from_prefix(self.slice)
             .expect("FDT header should be valid after SliceBuffer construction");
@@ -103,14 +111,13 @@ impl<'a> SliceBuffer<'a> {
 
 impl AsRef<[u8]> for SliceBuffer<'_> {
     fn as_ref(&self) -> &[u8] {
-        let len = self.header().totalsize() as usize;
-        &self.slice[..len]
+        &self.slice[..self.len()]
     }
 }
 
 impl AsMut<[u8]> for SliceBuffer<'_> {
     fn as_mut(&mut self) -> &mut [u8] {
-        let len = self.header().totalsize() as usize;
+        let len = self.len();
         &mut self.slice[..len]
     }
 }
@@ -131,7 +138,7 @@ impl FdtBuffer for SliceBuffer<'_> {
                 capacity: self.slice.len(),
             });
         }
-        let current_len = self.as_ref().len();
+        let current_len = self.len();
         if new_len > current_len {
             self.slice[current_len..new_len].fill(0);
         }

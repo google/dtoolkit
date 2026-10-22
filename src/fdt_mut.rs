@@ -551,9 +551,7 @@ impl<B: FdtBuffer> Display for FdtMut<B> {
 
 impl<'a> From<FdtMut<SliceBuffer<'a>>> for Fdt<'a> {
     fn from(fdt: FdtMut<SliceBuffer<'a>>) -> Self {
-        Self {
-            data: fdt.data.slice,
-        }
+        Self::new_unchecked(fdt.data.into_slice())
     }
 }
 
