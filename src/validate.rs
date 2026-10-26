@@ -8,6 +8,8 @@
 
 //! Validation functions for Device Tree node and property names.
 
+const MAX_NAME_LEN: usize = 31;
+
 const fn is_valid_node_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, ',' | '.' | '_' | '+' | '-')
 }
@@ -18,8 +20,11 @@ const fn is_valid_property_char(c: char) -> bool {
 
 /// Validates a node name according to the Devicetree Specification.
 ///
+/// If `strict_length` is `true`, the node name (before `@`) must not exceed 31
+/// characters.
+///
 /// Returns `true` if valid, `false` otherwise.
-pub(crate) fn is_valid_node_name(name: &str) -> bool {
+pub(crate) fn is_valid_node_name(name: &str, strict_length: bool) -> bool {
     // The root node is a special case with an empty name.
     if name.is_empty() {
         return true;
@@ -33,7 +38,7 @@ pub(crate) fn is_valid_node_name(name: &str) -> bool {
         return false;
     }
 
-    if node_name.is_empty() || node_name.len() > 31 {
+    if node_name.is_empty() || (strict_length && node_name.len() > MAX_NAME_LEN) {
         return false;
     }
 
@@ -56,9 +61,12 @@ pub(crate) fn is_valid_node_name(name: &str) -> bool {
 
 /// Validates a property name according to the Devicetree Specification.
 ///
+/// If `strict_length` is `true`, the property name must not exceed 31
+/// characters.
+///
 /// Returns `true` if valid, `false` otherwise.
-pub(crate) fn is_valid_property_name(name: &str) -> bool {
-    if name.is_empty() || name.len() > 31 {
+pub(crate) fn is_valid_property_name(name: &str, strict_length: bool) -> bool {
+    if name.is_empty() || (strict_length && name.len() > MAX_NAME_LEN) {
         return false;
     }
 
@@ -70,43 +78,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_node_names() {
-        assert!(is_valid_node_name(""));
-        assert!(is_valid_node_name("cpu"));
-        assert!(is_valid_node_name("cpu@0"));
-        assert!(is_valid_node_name("memory@10000000"));
-        assert!(is_valid_node_name("serial@3f201000"));
-        assert!(is_valid_node_name("a,b.c_d+e-f"));
+    fn valid_node_names() {
+        assert!(is_valid_node_name("", true));
+        assert!(is_valid_node_name("cpu", true));
+        assert!(is_valid_node_name("cpu@0", true));
+        assert!(is_valid_node_name("memory@10000000", true));
+        assert!(is_valid_node_name("serial@3f201000", true));
+        assert!(is_valid_node_name("a,b.c_d+e-f", true));
+        assert!(is_valid_node_name(
+            "this-is-a-very-long-node-name-that-exceeds-thirty-one-characters",
+            false
+        ));
     }
 
     #[test]
-    fn test_invalid_node_names() {
-        assert!(!is_valid_node_name("cpu@0@1")); // Too many '@'
-        assert!(!is_valid_node_name("cpu@")); // Empty unit address
-        assert!(!is_valid_node_name("@0")); // Empty node name
-        assert!(!is_valid_node_name("cpu name")); // Invalid space
-        assert!(!is_valid_node_name("cpu#name")); // Invalid '#'
+    fn invalid_node_names() {
+        assert!(!is_valid_node_name("cpu@0@1", false)); // Too many '@'
+        assert!(!is_valid_node_name("cpu@", false)); // Empty unit address
+        assert!(!is_valid_node_name("@0", false)); // Empty node name
+        assert!(!is_valid_node_name("cpu name", false)); // Invalid space
+        assert!(!is_valid_node_name("cpu#name", false)); // Invalid '#'
         assert!(!is_valid_node_name(
-            "this-is-a-very-long-node-name-that-exceeds-thirty-one-characters"
+            "this-is-a-very-long-node-name-that-exceeds-thirty-one-characters",
+            true
         )); // > 31 chars
     }
 
     #[test]
-    fn test_valid_property_names() {
-        assert!(is_valid_property_name("reg"));
-        assert!(is_valid_property_name("#address-cells"));
-        assert!(is_valid_property_name("device_type"));
-        assert!(is_valid_property_name("compatible"));
-        assert!(is_valid_property_name("a,b.c_d+e-f?#"));
+    fn valid_property_names() {
+        assert!(is_valid_property_name("reg", true));
+        assert!(is_valid_property_name("#address-cells", true));
+        assert!(is_valid_property_name("device_type", true));
+        assert!(is_valid_property_name("compatible", true));
+        assert!(is_valid_property_name("a,b.c_d+e-f?#", true));
+        assert!(is_valid_property_name(
+            "snps,dis-u2-freeclk-exists-quirk",
+            false
+        ));
     }
 
     #[test]
-    fn test_invalid_property_names() {
-        assert!(!is_valid_property_name("")); // Empty
-        assert!(!is_valid_property_name("my prop")); // Invalid space
-        assert!(!is_valid_property_name("my@prop")); // Invalid '@'
+    fn invalid_property_names() {
+        assert!(!is_valid_property_name("", false)); // Empty
+        assert!(!is_valid_property_name("my prop", false)); // Invalid space
+        assert!(!is_valid_property_name("my@prop", false)); // Invalid '@'
         assert!(!is_valid_property_name(
-            "this-is-a-very-long-property-name-that-exceeds-thirty-one-characters"
+            "this-is-a-very-long-property-name-that-exceeds-thirty-one-characters",
+            true
         )); // > 31 chars
     }
 }
