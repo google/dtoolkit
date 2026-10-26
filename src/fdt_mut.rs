@@ -25,7 +25,7 @@ use zerocopy::{FromBytes, big_endian};
 
 use crate::ToPropertyValue;
 use crate::error::{BufferError, FdtParseError};
-use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtToken};
+use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtToken};
 
 /// A mutable flattened device tree.
 pub struct FdtMut<B> {
@@ -39,7 +39,18 @@ impl<B: FdtBuffer> FdtMut<B> {
     ///
     /// Returns an [`FdtParseError`] if the data is not a valid device tree.
     pub fn new(data: B) -> Result<Self, FdtParseError> {
-        Fdt::new(data.as_ref())?;
+        Self::with_options(data, FdtOptions::new())
+    }
+
+    /// Creates a new mutable FDT from a buffer using the specified
+    /// [`FdtOptions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`FdtParseError`] if the data is not a valid device tree
+    /// according to `options`.
+    pub fn with_options(data: B, options: FdtOptions) -> Result<Self, FdtParseError> {
+        Fdt::with_options(data.as_ref(), options)?;
         Ok(Self { data })
     }
 
@@ -393,8 +404,22 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// ```
     pub fn from_slice(slice: &'a mut [u8]) -> Result<Self, FdtParseError> {
+        Self::from_slice_with_options(slice, FdtOptions::new())
+    }
+
+    /// Creates a new `FdtMut` from a mutable byte slice using the specified
+    /// [`FdtOptions`] by wrapping it in a [`SliceBuffer`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`FdtParseError`] if `slice` does not contain a valid device
+    /// tree according to `options`.
+    pub fn from_slice_with_options(
+        slice: &'a mut [u8],
+        options: FdtOptions,
+    ) -> Result<Self, FdtParseError> {
         let buffer = SliceBuffer::new(slice)?;
-        Self::new(buffer)
+        Self::with_options(buffer, options)
     }
 
     /// Creates a new `FdtMut` from a mutable byte slice without validation.
@@ -445,36 +470,38 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         Self::from_slice_unchecked(slice)
     }
 
-    /// Creates a new `FdtMut` from the given pointer, verifying that the header
-    /// and `totalsize` fit within `max_len` bytes before reading the rest of
-    /// the blob.
+    /// Creates a new `FdtMut` from the given pointer using the specified
+    /// [`FdtOptions`], verifying that the header and `totalsize` fit within
+    /// `options.max_size` bytes before reading the rest of the blob.
     ///
     /// The resulting [`SliceBuffer`] is sized to `totalsize` bytes (not
-    /// `max_len`); callers with a larger writable buffer that want to use the
-    /// remaining space for in-place expansion should use
+    /// `options.max_size`); callers with a larger writable buffer that want to
+    /// use the remaining space for in-place expansion should use
     /// [`FdtMut::from_slice`].
     ///
     /// # Safety
     ///
-    /// If `max_len >= size_of::<FdtHeader>()` (40 bytes), `data` must be
-    /// valid and accessible for reading at least 8 bytes (`magic` and
+    /// If `options.max_size >= size_of::<FdtHeader>()` (40 bytes), `data` must
+    /// be valid and accessible for reading at least 8 bytes (`magic` and
     /// `totalsize`), and if the header contains a valid FDT magic number and
-    /// `40 <= totalsize <= max_len`, the memory region starting at `data` and
-    /// spanning `totalsize` bytes must be valid and accessible for reading and
-    /// writing for the lifetime `'a`.
+    /// `40 <= totalsize <= options.max_size`, the memory region starting at
+    /// `data` and spanning `totalsize` bytes must be valid and accessible for
+    /// reading and writing for the lifetime `'a`.
     ///
     /// # Errors
     ///
-    /// This function can return the same errors as [`Fdt::from_raw_bounded`].
+    /// This function can return the same errors as
+    /// [`Fdt::from_raw_with_options`].
     ///
     /// # Examples
     ///
     /// ```
+    /// # use dtoolkit::fdt::FdtOptions;
     /// # use dtoolkit::fdt_mut::FdtMut;
     /// # let mut dtb = include_bytes!("../tests/dtb/test.dtb").to_vec();
-    /// let len = dtb.len();
+    /// let options = FdtOptions::new().max_size(dtb.len());
     /// let ptr = dtb.as_mut_ptr();
-    /// let fdt = unsafe { FdtMut::from_raw_bounded(ptr, len).unwrap() };
+    /// let fdt = unsafe { FdtMut::from_raw_with_options(ptr, options).unwrap() };
     /// ```
     #[expect(
         unsafe_code,
@@ -482,16 +509,20 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         embedded applications, where the binary only gets a pointer to DT from the firmware or \
         a bootloader. The user must ensure it trusts the data."
     )]
-    pub unsafe fn from_raw_bounded(data: *mut u8, max_len: usize) -> Result<Self, FdtParseError> {
+    pub unsafe fn from_raw_with_options(
+        data: *mut u8,
+        options: FdtOptions,
+    ) -> Result<Self, FdtParseError> {
         // SAFETY: The caller guarantees that `data` points to a readable FDT
-        // header prefix (when `max_len >= size_of::<FdtHeader>()`) and spans
-        // `totalsize` writable bytes when the FDT is valid and
-        // `40 <= totalsize <= max_len`.
-        let size = unsafe { Fdt::from_raw_bounded(data.cast_const(), max_len)? }
+        // header prefix (when `options.max_size >= size_of::<FdtHeader>()`) and
+        // spans `totalsize` writable bytes when the FDT is valid and
+        // `40 <= totalsize <= options.max_size`.
+        let size = unsafe { Fdt::from_raw_with_options(data.cast_const(), options)? }
             .data()
             .len();
-        // SAFETY: `Fdt::from_raw_bounded` validated the entire `size`-byte FDT
-        // blob and verified `size <= max_len` (and `size <= isize::MAX`).
+        // SAFETY: `Fdt::from_raw_with_options` validated the entire `size`-byte
+        // FDT blob and verified `size <= options.max_size` (and
+        // `size <= isize::MAX`).
         let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
         Ok(Self::from_slice_unchecked(slice))
     }
@@ -527,7 +558,7 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
     pub unsafe fn from_raw(data: *mut u8) -> Result<Self, FdtParseError> {
         // SAFETY: The caller guarantees that `data` points to a readable FDT
         // header and spans `totalsize` writable bytes when the header is valid.
-        unsafe { Self::from_raw_bounded(data, usize::MAX) }
+        unsafe { Self::from_raw_with_options(data, FdtOptions::new()) }
     }
 }
 

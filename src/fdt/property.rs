@@ -13,7 +13,7 @@ use core::mem::size_of;
 
 use zerocopy::FromBytes;
 
-use super::{FDT_TAGSIZE, Fdt, FdtPropertyHeader, FdtToken};
+use super::{FDT_TAGSIZE, Fdt, FdtPropertyHeader, FdtToken, NameValidation};
 use crate::Property;
 
 /// A property of a device tree node.
@@ -136,7 +136,7 @@ impl InnerPropIter {
     #[must_use]
     fn next_property_parsed<'a>(fdt: Fdt<'a>, offset: &mut usize) -> Option<ParsedProperty<'a>> {
         *offset = fdt
-            .next_property_offset(*offset, false)
+            .next_property_offset(*offset, NameValidation::Skip)
             .expect("Fdt should be valid");
         Self::find_property(fdt, offset)
     }
