@@ -143,6 +143,53 @@ impl FdtPropertyHeader {
     }
 }
 
+/// Configuration options for parsing and validating an [`Fdt`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct FdtOptions {
+    /// Enforce the Devicetree Specification's 31-character length limit on node
+    /// and property names.
+    ///
+    /// Defaults to `false`.
+    pub strict_name_length: bool,
+    /// Maximum allowed size (in bytes) of the FDT blob (`totalsize`).
+    ///
+    /// Defaults to `usize::MAX`.
+    pub max_size: usize,
+}
+
+impl Default for FdtOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FdtOptions {
+    /// Creates a new [`FdtOptions`] with default settings.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            strict_name_length: false,
+            max_size: usize::MAX,
+        }
+    }
+
+    /// Sets whether to enforce the 31-character length limit on node and
+    /// property names.
+    #[must_use]
+    pub const fn strict_name_length(mut self, strict: bool) -> Self {
+        self.strict_name_length = strict;
+        self
+    }
+
+    /// Sets the maximum allowed size (in bytes) of the FDT blob.
+    #[must_use]
+    pub const fn max_size(mut self, max_size: usize) -> Self {
+        self.max_size = max_size;
+        self
+    }
+}
+
 /// A flattened device tree.
 #[derive(Clone, Copy)]
 pub struct Fdt<'a> {
@@ -168,6 +215,23 @@ pub(crate) enum FdtToken {
     Prop,
     Nop,
     End,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NameValidation {
+    Skip,
+    Relaxed,
+    StrictLength,
+}
+
+impl From<FdtOptions> for NameValidation {
+    fn from(options: FdtOptions) -> Self {
+        if options.strict_name_length {
+            Self::StrictLength
+        } else {
+            Self::Relaxed
+        }
+    }
 }
 
 impl TryFrom<u32> for FdtToken {
@@ -211,8 +275,38 @@ impl<'a> Fdt<'a> {
     /// let fdt = Fdt::new(dtb).unwrap();
     /// ```
     pub fn new(data: &'a [u8]) -> Result<Self, FdtParseError> {
+        Self::with_options(data, FdtOptions::new())
+    }
+
+    /// Creates a new `Fdt` from the given byte slice using the specified
+    /// [`FdtOptions`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FdtErrorKind::InvalidLength`] if `data` is too short to
+    /// contain a valid FDT header, if `data.len()` exceeds `options.max_size`,
+    /// or if the `totalsize` field in the header does not match the length of
+    /// `data`.
+    ///
+    /// Returns [`FdtErrorKind::InvalidNodeName`] or
+    /// [`FdtErrorKind::InvalidPropertyName`] if a node or property name is
+    /// invalid (including exceeding 31 characters when
+    /// `options.strict_name_length` is `true`).
+    ///
+    /// This function can also return any of the other errors returned by
+    /// [`Fdt::new`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dtoolkit::fdt::{Fdt, FdtOptions};
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
+    /// let options = FdtOptions::new().strict_name_length(true);
+    /// let fdt = Fdt::with_options(dtb, options).unwrap();
+    /// ```
+    pub fn with_options(data: &'a [u8], options: FdtOptions) -> Result<Self, FdtParseError> {
         let fdt = Self::new_unchecked(data);
-        fdt.validate()?;
+        fdt.validate(options)?;
         Ok(fdt)
     }
 
@@ -259,36 +353,38 @@ impl<'a> Fdt<'a> {
         Self::new_unchecked(slice)
     }
 
-    /// Creates a new `Fdt` from the given pointer, verifying that the header
-    /// and `totalsize` fit within `max_len` bytes before reading the rest of
-    /// the blob.
+    /// Creates a new `Fdt` from the given pointer using the specified
+    /// [`FdtOptions`], verifying that the header and `totalsize` fit within
+    /// `options.max_size` bytes before reading the rest of the blob.
     ///
     /// # Safety
     ///
-    /// If `max_len >= size_of::<FdtHeader>()` (40 bytes), `data` must be
-    /// valid and accessible for reading at least 8 bytes (`magic` and
+    /// If `options.max_size >= size_of::<FdtHeader>()` (40 bytes), `data` must
+    /// be valid and accessible for reading at least 8 bytes (`magic` and
     /// `totalsize`), and if the header contains a valid FDT magic number and
-    /// `40 <= totalsize <= max_len`, the memory region starting at `data` and
-    /// spanning `totalsize` bytes must be valid and accessible for reading for
-    /// the lifetime `'a`. There must be no existing mutable references to the
-    /// same data for the lifetime `'a`.
+    /// `40 <= totalsize <= options.max_size`, the memory region starting at
+    /// `data` and spanning `totalsize` bytes must be valid and accessible for
+    /// reading for the lifetime `'a`. There must be no existing mutable
+    /// references to the same data for the lifetime `'a`.
     ///
     /// # Errors
     ///
-    /// Returns [`FdtErrorKind::InvalidLength`] if `max_len` is smaller than an
-    /// FDT header, or if the `totalsize` field in the header is smaller than
-    /// an FDT header, exceeds `max_len`, or exceeds `isize::MAX` bytes.
+    /// Returns [`FdtErrorKind::InvalidLength`] if `options.max_size` is smaller
+    /// than an FDT header, or if the `totalsize` field in the header is smaller
+    /// than an FDT header, exceeds `options.max_size`, or exceeds `isize::MAX`
+    /// bytes.
     ///
     /// This function can also return any of the errors returned by
-    /// [`Fdt::new`].
+    /// [`Fdt::with_options`].
     ///
     /// # Examples
     ///
     /// ```
-    /// # use dtoolkit::fdt::Fdt;
+    /// # use dtoolkit::fdt::{Fdt, FdtOptions};
     /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
     /// let ptr = dtb.as_ptr();
-    /// let fdt = unsafe { Fdt::from_raw_bounded(ptr, dtb.len()).unwrap() };
+    /// let options = FdtOptions::new().max_size(dtb.len());
+    /// let fdt = unsafe { Fdt::from_raw_with_options(ptr, options).unwrap() };
     /// ```
     #[expect(
         unsafe_code,
@@ -296,13 +392,16 @@ impl<'a> Fdt<'a> {
         embedded applications, where the binary only gets a pointer to DT from the firmware or \
         a bootloader. The user must ensure it trusts the data."
     )]
-    pub unsafe fn from_raw_bounded(data: *const u8, max_len: usize) -> Result<Self, FdtParseError> {
-        if max_len < size_of::<FdtHeader>() {
+    pub unsafe fn from_raw_with_options(
+        data: *const u8,
+        options: FdtOptions,
+    ) -> Result<Self, FdtParseError> {
+        if options.max_size < size_of::<FdtHeader>() {
             return Err(FdtParseError::new(FdtErrorKind::InvalidLength, 0));
         }
 
-        // SAFETY: `max_len >= size_of::<FdtHeader>()` (40 bytes), and the
-        // caller guarantees that at least the 8-byte `(magic, totalsize)`
+        // SAFETY: `options.max_size >= size_of::<FdtHeader>()` (40 bytes), and
+        // the caller guarantees that at least the 8-byte `(magic, totalsize)`
         // prefix at `data` is valid for reading.
         let [magic, totalsize] =
             unsafe { ptr::read_unaligned(data.cast::<[big_endian::U32; 2]>()) };
@@ -317,7 +416,7 @@ impl<'a> Fdt<'a> {
         let size = totalsize.get() as usize;
         // `core::slice::from_raw_parts` requires that the total slice size
         // does not exceed `isize::MAX` bytes.
-        let max_valid_len = max_len.min(isize::MAX.cast_unsigned());
+        let max_valid_len = options.max_size.min(isize::MAX.cast_unsigned());
         if !(size_of::<FdtHeader>()..=max_valid_len).contains(&size) {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidLength,
@@ -326,11 +425,11 @@ impl<'a> Fdt<'a> {
         }
 
         // SAFETY: We verified that the header magic is valid and that `size` is
-        // at least `size_of::<FdtHeader>()` and at most `max_len` (and
+        // at least `size_of::<FdtHeader>()` and at most `options.max_size` (and
         // `isize::MAX`). The caller guarantees that `data` is valid for reading
-        // `totalsize` bytes when `40 <= totalsize <= max_len`.
+        // `totalsize` bytes when `40 <= totalsize <= options.max_size`.
         let slice = unsafe { core::slice::from_raw_parts(data, size) };
-        Self::new(slice)
+        Self::with_options(slice, options)
     }
 
     /// Creates a new `Fdt` from the given pointer.
@@ -369,10 +468,10 @@ impl<'a> Fdt<'a> {
     pub unsafe fn from_raw(data: *const u8) -> Result<Self, FdtParseError> {
         // SAFETY: The caller guarantees that `data` points to a readable FDT
         // header and spans `totalsize` bytes when the header is valid.
-        unsafe { Self::from_raw_bounded(data, usize::MAX) }
+        unsafe { Self::from_raw_with_options(data, FdtOptions::new()) }
     }
 
-    fn validate(self) -> Result<(), FdtParseError> {
+    fn validate(self, options: FdtOptions) -> Result<(), FdtParseError> {
         if self.data.len() < size_of::<FdtHeader>() {
             return Err(FdtParseError::new(FdtErrorKind::InvalidLength, 0));
         }
@@ -392,7 +491,8 @@ impl<'a> Fdt<'a> {
             ));
         }
 
-        if header.totalsize() as usize != self.data.len() {
+        let totalsize = header.totalsize() as usize;
+        if totalsize != self.data.len() || totalsize > options.max_size {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidLength,
                 offset_of!(FdtHeader, totalsize),
@@ -412,7 +512,7 @@ impl<'a> Fdt<'a> {
             ));
         }
 
-        let end_offset = self.traverse_node(offset, true)?;
+        let end_offset = self.traverse_node(offset, NameValidation::from(options))?;
 
         // Check FDT_END
         if self.read_token(end_offset)? != FdtToken::End {
@@ -450,14 +550,14 @@ impl<'a> Fdt<'a> {
     pub(crate) fn skip_props(
         self,
         offset: usize,
-        check_strings: bool,
+        name_validation: NameValidation,
     ) -> Result<usize, FdtParseError> {
         let mut offset = offset;
         loop {
             let token = self.read_token(offset)?;
             match token {
                 FdtToken::Prop => {
-                    offset = self.next_property_offset(offset, check_strings)?;
+                    offset = self.next_property_offset(offset, name_validation)?;
                 }
                 FdtToken::Nop => offset += FDT_TAGSIZE,
                 _ => return Ok(offset),
@@ -465,7 +565,11 @@ impl<'a> Fdt<'a> {
         }
     }
 
-    fn traverse_node(self, offset: usize, check_strings: bool) -> Result<usize, FdtParseError> {
+    fn traverse_node(
+        self,
+        offset: usize,
+        name_validation: NameValidation,
+    ) -> Result<usize, FdtParseError> {
         let mut offset = offset;
         let mut depth = 0;
         loop {
@@ -476,7 +580,8 @@ impl<'a> Fdt<'a> {
                     offset += FDT_TAGSIZE;
                     let end_offset = self.find_string_end(offset)?;
                     // Validate name
-                    if check_strings {
+                    if name_validation != NameValidation::Skip {
+                        let strict_len = name_validation == NameValidation::StrictLength;
                         let name = self.string_at_offset(offset, Some(end_offset))?;
                         if depth == 1 {
                             if !name.is_empty() {
@@ -485,12 +590,14 @@ impl<'a> Fdt<'a> {
                                     offset,
                                 ));
                             }
-                        } else if name.is_empty() || !crate::validate::is_valid_node_name(name) {
+                        } else if name.is_empty()
+                            || !crate::validate::is_valid_node_name(name, strict_len)
+                        {
                             return Err(FdtParseError::new(FdtErrorKind::InvalidNodeName, offset));
                         }
                     }
                     offset = Self::align_tag_offset(end_offset);
-                    offset = self.skip_props(offset, check_strings)?;
+                    offset = self.skip_props(offset, name_validation)?;
                 }
                 FdtToken::EndNode => {
                     if depth == 0 {
@@ -839,13 +946,13 @@ impl<'a> Fdt<'a> {
     }
 
     pub(crate) fn next_sibling_offset(self, offset: usize) -> Result<usize, FdtParseError> {
-        self.traverse_node(offset, false)
+        self.traverse_node(offset, NameValidation::Skip)
     }
 
     pub(crate) fn next_property_offset(
         self,
         offset: usize,
-        check_name: bool,
+        name_validation: NameValidation,
     ) -> Result<usize, FdtParseError> {
         let (header, _) = FdtPropertyHeader::ref_from_prefix(self.data_at_offset(offset)?)
             .map_err(|_e| FdtParseError::new(FdtErrorKind::InvalidLength, offset))?;
@@ -853,9 +960,10 @@ impl<'a> Fdt<'a> {
         let len = header.len() as usize;
         let nameoff = header.nameoff() as usize;
 
-        if check_name {
+        if name_validation != NameValidation::Skip {
+            let strict_len = name_validation == NameValidation::StrictLength;
             let name = self.string(nameoff)?;
-            if !crate::validate::is_valid_property_name(name) {
+            if !crate::validate::is_valid_property_name(name, strict_len) {
                 return Err(FdtParseError::new(
                     FdtErrorKind::InvalidPropertyName,
                     offset + FDT_TAGSIZE,
@@ -1002,22 +1110,29 @@ mod tests {
     }
 
     #[test]
-    #[expect(unsafe_code, reason = "Testing unsafe from_raw_bounded")]
-    fn from_raw_bounded_validates_before_slicing() {
-        // SAFETY: `max_len` is smaller than `FdtHeader`, so `from_raw_bounded`
-        // returns an error without dereferencing `data`.
-        let err =
-            unsafe { Fdt::from_raw_bounded(ptr::null(), size_of::<FdtHeader>() - 1) }.unwrap_err();
+    #[expect(unsafe_code, reason = "Testing unsafe from_raw_with_options")]
+    fn from_raw_with_options_validates_before_slicing() {
+        // SAFETY: `max_size` is smaller than `FdtHeader`, so
+        // `from_raw_with_options` returns an error without dereferencing
+        // `data`.
+        let err = unsafe {
+            Fdt::from_raw_with_options(
+                ptr::null(),
+                FdtOptions::new().max_size(size_of::<FdtHeader>() - 1),
+            )
+        }
+        .unwrap_err();
         assert_eq!(err, FdtParseError::new(FdtErrorKind::InvalidLength, 0));
 
         // Corrupt magic with huge totalsize in an 8-byte buffer is rejected
         // before reading 40 bytes or slicing totalsize.
         let mut bad_magic = [0u8; 8];
-        bad_magic[0..4].copy_from_slice(&0xdead_beefu32.to_be_bytes());
-        bad_magic[4..8].copy_from_slice(&u32::MAX.to_be_bytes());
+        bad_magic[0..FDT_TAGSIZE].copy_from_slice(&0xdead_beefu32.to_be_bytes());
+        bad_magic[FDT_TAGSIZE..2 * FDT_TAGSIZE].copy_from_slice(&u32::MAX.to_be_bytes());
         // SAFETY: `bad_magic` has 8 readable bytes, and the invalid magic is
         // rejected before reading past byte 8.
-        let err = unsafe { Fdt::from_raw_bounded(bad_magic.as_ptr(), usize::MAX) }.unwrap_err();
+        let err = unsafe { Fdt::from_raw_with_options(bad_magic.as_ptr(), FdtOptions::default()) }
+            .unwrap_err();
         assert_eq!(
             err,
             FdtParseError::new(FdtErrorKind::InvalidMagic, offset_of!(FdtHeader, magic))
@@ -1030,7 +1145,7 @@ mod tests {
             FdtParseError::new(FdtErrorKind::InvalidMagic, offset_of!(FdtHeader, magic))
         );
 
-        // totalsize smaller than header or exceeding max_len in an 8-byte
+        // totalsize smaller than header or exceeding max_size in an 8-byte
         // buffer is rejected before reading 40 bytes or slicing.
         for bad_size in [
             0u32,
@@ -1043,8 +1158,13 @@ mod tests {
             hdr[FDT_TAGSIZE..2 * FDT_TAGSIZE].copy_from_slice(&bad_size.to_be_bytes());
             // SAFETY: `hdr` has 8 readable bytes and `bad_size` is outside
             // `size_of::<FdtHeader>()..=FDT_HEADER_OK.len()`.
-            let err =
-                unsafe { Fdt::from_raw_bounded(hdr.as_ptr(), FDT_HEADER_OK.len()) }.unwrap_err();
+            let err = unsafe {
+                Fdt::from_raw_with_options(
+                    hdr.as_ptr(),
+                    FdtOptions::new().max_size(FDT_HEADER_OK.len()),
+                )
+            }
+            .unwrap_err();
             assert_eq!(
                 err,
                 FdtParseError::new(
@@ -1056,14 +1176,23 @@ mod tests {
 
         // SAFETY: `FDT_HEADER_OK` is a valid FDT of length
         // `FDT_HEADER_OK.len()`.
-        let fdt =
-            unsafe { Fdt::from_raw_bounded(FDT_HEADER_OK.as_ptr(), FDT_HEADER_OK.len()) }.unwrap();
+        let fdt = unsafe {
+            Fdt::from_raw_with_options(
+                FDT_HEADER_OK.as_ptr(),
+                FdtOptions::new().max_size(FDT_HEADER_OK.len()),
+            )
+        }
+        .unwrap();
         assert_eq!(fdt.data().len(), FDT_HEADER_OK.len());
         // SAFETY: `FDT_HEADER_OK` is a valid FDT of `totalsize ==
-        // FDT_HEADER_OK.len() <= max_len`.
-        let fdt =
-            unsafe { Fdt::from_raw_bounded(FDT_HEADER_OK.as_ptr(), FDT_HEADER_OK.len() + 64) }
-                .unwrap();
+        // FDT_HEADER_OK.len() <= max_size`.
+        let fdt = unsafe {
+            Fdt::from_raw_with_options(
+                FDT_HEADER_OK.as_ptr(),
+                FdtOptions::new().max_size(FDT_HEADER_OK.len() + 64),
+            )
+        }
+        .unwrap();
         assert_eq!(fdt.data().len(), FDT_HEADER_OK.len());
     }
 }

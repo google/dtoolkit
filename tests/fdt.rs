@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use dtoolkit::fdt::{Fdt, FdtNode};
+use dtoolkit::error::FdtErrorKind;
+use dtoolkit::fdt::{Fdt, FdtNode, FdtOptions};
 #[cfg(feature = "write")]
 use dtoolkit::fdt_mut::FdtMut;
 #[cfg(feature = "write")]
@@ -353,9 +354,11 @@ fn round_trip_raw() {
 
 #[test]
 #[cfg(feature = "write")]
-fn round_trip_raw_bounded() {
+fn round_trip_raw_with_options() {
     // SAFETY: dtb is a valid FDT blob
-    round_trip_impl(|dtb| unsafe { Fdt::from_raw_bounded(dtb.as_ptr(), dtb.len()).unwrap() });
+    round_trip_impl(|dtb| unsafe {
+        Fdt::from_raw_with_options(dtb.as_ptr(), FdtOptions::new().max_size(dtb.len())).unwrap()
+    });
 }
 
 #[test]
@@ -386,10 +389,11 @@ fn round_trip_raw_mut() {
 
 #[test]
 #[cfg(feature = "write")]
-fn round_trip_raw_bounded_mut() {
+fn round_trip_raw_with_options_mut() {
     // SAFETY: dtb is a valid FDT blob
     round_trip_impl(|dtb| unsafe {
-        FdtMut::from_raw_bounded(dtb.as_mut_ptr(), dtb.len())
+        let len = dtb.len();
+        FdtMut::from_raw_with_options(dtb.as_mut_ptr(), FdtOptions::new().max_size(len))
             .unwrap()
             .into()
     });
@@ -579,4 +583,55 @@ fn node_at_offset_deep_nesting_preserves_parent_address_space() {
     assert_eq!(regs.len(), 1);
     assert_eq!(regs[0].address::<u32>().unwrap(), 0x1234_5678);
     assert_eq!(regs[0].size::<u32>().unwrap(), 0x100);
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn long_property_and_node_names_accepted_by_default() {
+    let long_prop = "snps,dis-u2-freeclk-exists-quirk";
+    let long_node = "node-name-exceeding-thirty-one-chars@0";
+    let mut tree = DeviceTree::new();
+    let child = DeviceTreeNode::builder(long_node)
+        .unwrap()
+        .property(DeviceTreeProperty::new(long_prop, [0u8; 0]).unwrap())
+        .build();
+    tree.root.add_child(child);
+    let dtb = tree.to_dtb();
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    let node = fdt
+        .find_node("/node-name-exceeding-thirty-one-chars")
+        .unwrap();
+    assert_eq!(node.name(), long_node);
+    assert!(node.property(long_prop).is_some());
+}
+
+#[test]
+#[cfg(feature = "write")]
+fn strict_name_length_rejects_long_property_and_node_names() {
+    let strict = FdtOptions::new().strict_name_length(true);
+
+    let mut prop_tree = DeviceTree::new();
+    prop_tree.root.add_property(
+        DeviceTreeProperty::new("snps,dis-u2-freeclk-exists-quirk", [0u8; 0]).unwrap(),
+    );
+    let prop_dtb = prop_tree.to_dtb();
+    let err = Fdt::with_options(&prop_dtb, strict).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidPropertyName);
+
+    let mut node_tree = DeviceTree::new();
+    node_tree
+        .root
+        .add_child(DeviceTreeNode::new("node-name-exceeding-thirty-one-chars@0").unwrap());
+    let node_dtb = node_tree.to_dtb();
+    let err = Fdt::with_options(&node_dtb, strict).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidNodeName);
+}
+
+#[test]
+fn with_options_max_size_rejects_oversized_slice() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let options = FdtOptions::new().max_size(dtb.len() - 1);
+    let err = Fdt::with_options(dtb, options).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }

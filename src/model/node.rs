@@ -159,7 +159,7 @@ impl DeviceTreeNode {
     /// ```
     pub fn new(name: impl Into<String>) -> Result<Self, ModelError> {
         let name = name.into();
-        if !crate::validate::is_valid_node_name(&name) {
+        if !crate::validate::is_valid_node_name(&name, false) {
             return Err(ModelError::InvalidNodeName(name));
         }
         Ok(Self::new_unchecked(name))

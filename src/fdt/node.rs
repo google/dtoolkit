@@ -10,7 +10,7 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use super::{FDT_TAGSIZE, Fdt, FdtToken};
+use super::{FDT_TAGSIZE, Fdt, FdtToken, NameValidation};
 use crate::Node;
 use crate::fdt::property::{FdtPropIter, FdtProperty, InnerPropIter};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
@@ -171,7 +171,7 @@ impl InnerChildIter {
                 FdtToken::BeginNode => return Some(*offset),
                 FdtToken::Prop => {
                     *offset = fdt
-                        .next_property_offset(*offset, false)
+                        .next_property_offset(*offset, NameValidation::Skip)
                         .expect("Fdt should be valid");
                 }
                 FdtToken::EndNode | FdtToken::End => return None,

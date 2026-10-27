@@ -50,7 +50,7 @@ impl DeviceTreeProperty {
     /// ```
     pub fn new<T: ToPropertyValue>(name: impl Into<String>, value: T) -> Result<Self, ModelError> {
         let name = name.into();
-        if !crate::validate::is_valid_property_name(&name) {
+        if !crate::validate::is_valid_property_name(&name, false) {
             return Err(ModelError::InvalidPropertyName(name));
         }
         Ok(Self::new_unchecked(name, value))

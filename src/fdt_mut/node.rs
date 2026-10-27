@@ -15,7 +15,7 @@ use crate::error::FdtMutError;
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
-use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtProperty, FdtPropertyHeader};
+use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtProperty, FdtPropertyHeader, NameValidation};
 use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
@@ -97,7 +97,9 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         let mut offset = self.offset + FDT_TAGSIZE;
         let name_end = fdt.find_string_end(offset).expect("valid node name");
         offset = Fdt::align_tag_offset(name_end);
-        let insert_offset = fdt.skip_props(offset, false).expect("valid dt");
+        let insert_offset = fdt
+            .skip_props(offset, NameValidation::Skip)
+            .expect("Fdt should be valid");
 
         let val_len = value.property_value_len();
         let padded_val_len = Fdt::align_tag_offset(val_len);
