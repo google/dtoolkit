@@ -1,3 +1,37 @@
+## [0.5.0] - 2026-11-03
+
+### Features
+
+- Validate header in `Fdt::from_raw` before constructing the slice ([#90](https://github.com/google/dtoolkit/pull/90))
+- Add node structure offset accessors and lookup ([#90](https://github.com/google/dtoolkit/pull/90))
+- Add `Fdt::with_options` (and variants) ([#104](https://github.com/google/dtoolkit/pull/104))
+  - This disables the strict node/property name validation by default, meaning DTBs with node/property names exceeding 31 characters are now allowed. Validation can be re-enabled if needed (by using `Fdt::with_options`).
+  - Allow specifying maximum FDT length for `from_raw` before constructing the slice ([#90](https://github.com/google/dtoolkit/pull/90))
+
+### Bug Fixes
+
+- *(fdt_mut)* [**breaking**] Disallow removing root node ([#91](https://github.com/google/dtoolkit/pull/91))
+  - This is breaking because it changes `FdtNodeMut::remove` to return `Result<(), FdtMutError>` instead of `()`.
+- *(fdt_mut)* Use correct slice length on `FdtMut` => `Fdt` conversion ([#100](https://github.com/google/dtoolkit/pull/100))
+
+### Refactor
+
+- [**breaking**] Remove GATs on Node and Property traits ([#85](https://github.com/google/dtoolkit/pull/85))
+  - GATs in these traits were introduced in 0.3 to ensure correct lifetimes returned from the `model` API, but they made the library more painful to use, especially within the `standard` module. They provided too little gain compared to the downsides, so they were removed. There is a refactor planned in the `model` module that unifies the API with `fdt`, meaning GATs would be even less useful. \
+    `Node<'a>` and `Property<'a>` are now parameterized over the underlying data lifetime `'a` and require `Copy` receivers.
+  - *(fdt_mut)* [**breaking**] Replace `FdtNodeMut`'s `Node` impl with inherent methods ([#84](https://github.com/google/dtoolkit/pull/84)). To call `NodeStandard` methods on `FdtNodeMut`, use `node.as_read_only()`.
+  - [**breaking**] Remove `ToCellInt` trait and move `to_int` directly onto `Cells` ([#87](https://github.com/google/dtoolkit/pull/87))
+- *(standard,overlay)* [**breaking**] Remove inherent `FdtNode::{compatible, model}` methods (import `NodeStandard` instead) and change `FragmentTarget<S>` to `FragmentTarget<'a>` ([#88](https://github.com/google/dtoolkit/pull/88))
+- *(standard)* Use `self` instead of `&self` on `Chosen`, `Cpus`, `Cpu`, `Memory`, and `ReservedMemory` methods ([#92](https://github.com/google/dtoolkit/pull/92))
+
+### Documentation
+
+- Remove "Safety" section in `fdt{,_mut}::new_unchecked` ([#83](https://github.com/google/dtoolkit/pull/83))
+
+### Miscellaneous
+
+- Enable codecov.io reports, visible as a badge in README.md and crates.io ([#93](https://github.com/google/dtoolkit/pull/93))
+
 ## [0.4.1] - 2026-09-25
 
 ### Bug Fixes
