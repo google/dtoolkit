@@ -25,7 +25,7 @@ use zerocopy::{FromBytes, big_endian};
 
 use crate::ToPropertyValue;
 use crate::error::{BufferError, FdtParseError};
-use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtToken};
+use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtPropertyHeader, FdtToken};
 
 /// A mutable flattened device tree.
 pub struct FdtMut<B> {
@@ -158,7 +158,7 @@ impl<B: FdtBuffer> FdtMut<B> {
         }
     }
 
-    fn find_existing_string(&self, name: &str) -> Option<u32> {
+    pub(super) fn find_existing_string(&self, name: &str) -> Option<u32> {
         let fdt = self.as_read_only();
         let header = fdt.header();
         let str_block_size = header.size_dt_strings() as usize;
@@ -178,12 +178,33 @@ impl<B: FdtBuffer> FdtMut<B> {
     fn append_raw_string(&mut self, name: &str) -> Result<u32, BufferError> {
         let header = self.as_read_only().header();
         let str_block_offset = header.off_dt_strings() as usize;
-        let str_block_size = header.size_dt_strings() as usize;
+        let nameoff = header.size_dt_strings();
+        let str_block_size = nameoff as usize;
 
         let name_bytes = name.as_bytes();
-        let name_len = name_bytes.len() + 1; // plus null terminator
-        let target = str_block_offset + str_block_size;
-        let required_size = target + name_len;
+        let name_len = name_bytes
+            .len()
+            .checked_add(1) // plus null terminator
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: usize::MAX,
+            })?;
+        let target =
+            str_block_offset
+                .checked_add(str_block_size)
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: usize::MAX,
+                })?;
+        let required_size = target
+            .checked_add(name_len)
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: usize::MAX,
+            })?;
+        let new_size_dt_strings = str_block_size
+            .checked_add(name_len)
+            .and_then(|s| u32::try_from(s).ok())
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: required_size,
+            })?;
 
         self.ensure_totalsize(required_size)?;
 
@@ -191,12 +212,9 @@ impl<B: FdtBuffer> FdtMut<B> {
         self.data.as_mut()[target + name_bytes.len()] = 0;
 
         let header = self.header_mut();
-        header.size_dt_strings.set(
-            u32::try_from(str_block_size).expect("size_dt_strings fits in u32")
-                + u32::try_from(name_len).expect("name_len fits in u32"),
-        );
+        header.size_dt_strings.set(new_size_dt_strings);
 
-        Ok(u32::try_from(str_block_size).expect("str_block_size fits in u32"))
+        Ok(nameoff)
     }
 
     /// Shifts data starting from `offset` by `amount` bytes to make space.
@@ -221,7 +239,34 @@ impl<B: FdtBuffer> FdtMut<B> {
         let old_off_dt_strings = header.off_dt_strings.get();
 
         let old_size = self.data.as_ref().len();
-        let new_size = old_size + amount;
+        let new_size = old_size
+            .checked_add(amount)
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: usize::MAX,
+            })?;
+        let amount_u32 = u32::try_from(amount)
+            .ok()
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: new_size,
+            })?;
+        let new_totalsize =
+            old_totalsize
+                .checked_add(amount_u32)
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: new_size,
+                })?;
+        let new_size_dt_struct =
+            old_size_dt_struct
+                .checked_add(amount_u32)
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: new_size,
+                })?;
+        let new_off_dt_strings =
+            old_off_dt_strings
+                .checked_add(amount_u32)
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: new_size,
+                })?;
 
         self.data.try_resize(new_size)?;
         self.data
@@ -229,10 +274,9 @@ impl<B: FdtBuffer> FdtMut<B> {
             .copy_within(offset..old_size, offset + amount);
 
         let header = self.header_mut();
-        let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
-        header.totalsize.set(old_totalsize + amount_u32);
-        header.size_dt_struct.set(old_size_dt_struct + amount_u32);
-        header.off_dt_strings.set(old_off_dt_strings + amount_u32);
+        header.totalsize.set(new_totalsize);
+        header.size_dt_struct.set(new_size_dt_struct);
+        header.off_dt_strings.set(new_off_dt_strings);
 
         Ok(())
     }
@@ -243,11 +287,15 @@ impl<B: FdtBuffer> FdtMut<B> {
     fn ensure_totalsize(&mut self, required_size: usize) -> Result<(), BufferError> {
         let old_size = self.data.as_ref().len();
         if required_size > old_size {
+            let required_u32 =
+                u32::try_from(required_size)
+                    .ok()
+                    .ok_or(BufferError::FdtLimitExceeded {
+                        requested: required_size,
+                    })?;
             self.data.try_resize(required_size)?;
             let header = self.header_mut();
-            header
-                .totalsize
-                .set(u32::try_from(required_size).expect("totalsize fits in u32"));
+            header.totalsize.set(required_u32);
         }
         Ok(())
     }
@@ -592,7 +640,7 @@ fn token_chunk_len(fdt: Fdt<'_>, offset: usize, token: FdtToken) -> usize {
         FdtToken::BeginNode => {
             let name_start = offset + FDT_TAGSIZE;
             let name_end = fdt.find_string_end(name_start).expect("valid node name");
-            Fdt::align_tag_offset(name_end) - offset
+            Fdt::align_tag_offset(name_end).expect("valid node name") - offset
         }
         FdtToken::Prop => {
             let (val_len_bytes, _) = big_endian::U32::ref_from_prefix(
@@ -601,8 +649,127 @@ fn token_chunk_len(fdt: Fdt<'_>, offset: usize, token: FdtToken) -> usize {
             )
             .expect("valid property length");
             let val_len = val_len_bytes.get() as usize;
-            let prop_end = offset + 3 * FDT_TAGSIZE + val_len;
-            Fdt::align_tag_offset(prop_end) - offset
+            let prop_end = offset
+                .checked_add(size_of::<FdtPropertyHeader>())
+                .and_then(|o| o.checked_add(val_len))
+                .and_then(Fdt::align_tag_offset)
+                .expect("valid property length");
+            prop_end - offset
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Property;
+    use crate::error::FdtMutError;
+
+    struct OversizedValue(usize);
+
+    impl ToPropertyValue for OversizedValue {
+        fn property_value_len(&self) -> usize {
+            self.0
+        }
+
+        fn write_property_value(&self, buffer: &mut [u8]) {
+            buffer.fill(0);
+        }
+    }
+
+    #[test]
+    fn oversized_property_rejected_without_corrupting_fdt() {
+        let dtb = include_bytes!("../tests/dtb/test_props.dtb");
+        let max_u32_len = usize::try_from(u32::MAX).unwrap();
+
+        for bad_len in [
+            // `old_size + shift_amount` wraps below `old_size` on 32-bit.
+            max_u32_len - 2 * size_of::<FdtHeader>(),
+            // `size_of::<FdtPropertyHeader>() + padded_val_len` wraps to `0` on
+            // 32-bit.
+            (max_u32_len - size_of::<FdtPropertyHeader>()) + 1,
+            // Unaligned length `<= u32::MAX` whose 4-byte tag alignment
+            // overflows `u32::MAX` (and 32-bit `usize::MAX`).
+            max_u32_len - (FDT_TAGSIZE - 2),
+            max_u32_len,
+            usize::MAX,
+        ] {
+            let mut buf = [0u8; 1024];
+            buf[..dtb.len()].copy_from_slice(dtb);
+
+            {
+                let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+                let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+                let err = node
+                    .add_property("brand-new-prop", OversizedValue(bad_len))
+                    .unwrap_err();
+                assert!(
+                    matches!(
+                        err,
+                        FdtMutError::Resize(BufferError::FdtLimitExceeded { .. })
+                    ),
+                    "bad_len={bad_len:#x} got {err:?}"
+                );
+
+                let mut prop = node.property_mut("str-prop").unwrap();
+                let err = prop.set_value(OversizedValue(bad_len)).unwrap_err();
+                assert!(
+                    matches!(
+                        err,
+                        FdtMutError::Resize(BufferError::FdtLimitExceeded { .. })
+                    ),
+                    "bad_len={bad_len:#x} got {err:?}"
+                );
+            }
+
+            assert_eq!(&buf[..dtb.len()], dtb);
+            assert!(Fdt::new(&buf[..dtb.len()]).is_ok());
+        }
+
+        // Boundary where `dtb.len() + required_space <= u32::MAX`, but
+        // appending `"brand-new-prop\0"` to `dt_strings` pushes
+        // `totalsize` past `u32::MAX`.
+        let string_overflow_len =
+            max_u32_len - dtb.len() - size_of::<FdtPropertyHeader>() - FDT_TAGSIZE;
+        let mut buf = [0u8; 1024];
+        buf[..dtb.len()].copy_from_slice(dtb);
+        {
+            let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+            let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+            let err = node
+                .add_property("brand-new-prop", OversizedValue(string_overflow_len))
+                .unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    FdtMutError::Resize(BufferError::FdtLimitExceeded { .. })
+                ),
+                "string_overflow_len={string_overflow_len:#x} got {err:?}"
+            );
+        }
+        assert_eq!(&buf[..dtb.len()], dtb);
+        assert!(Fdt::new(&buf[..dtb.len()]).is_ok());
+
+        // Exercise internal growth helpers on `> u32::MAX` / `usize::MAX` and
+        // verify a valid small `OversizedValue` round-trips cleanly.
+        let mut buf = [0u8; 1024];
+        buf[..dtb.len()].copy_from_slice(dtb);
+        let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+        let struct_start = fdt_mut.as_read_only().header().off_dt_struct() as usize;
+        for huge in [max_u32_len.saturating_add(FDT_TAGSIZE), usize::MAX] {
+            assert!(matches!(
+                fdt_mut.shift_dt_struct(struct_start, huge),
+                Err(BufferError::FdtLimitExceeded { .. } | BufferError::OutOfSpace { .. })
+            ));
+            assert!(matches!(
+                fdt_mut.ensure_totalsize(huge),
+                Err(BufferError::FdtLimitExceeded { .. } | BufferError::OutOfSpace { .. })
+            ));
+        }
+        let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+        let added = node
+            .add_property("zero-prop", OversizedValue(FDT_TAGSIZE))
+            .unwrap();
+        assert_eq!(added.as_read_only().value(), &[0; FDT_TAGSIZE]);
     }
 }

@@ -55,14 +55,22 @@ pub struct PropEncodedArrayIterator<'a, const N: usize> {
 
 impl<'a, const N: usize> PropEncodedArrayIterator<'a, N> {
     pub(crate) fn new(value: &'a [u8], fields_cells: [usize; N]) -> Result<Self, PropertyError> {
-        let chunk_cells: usize = fields_cells.iter().sum();
-        let chunk_bytes = chunk_cells * size_of::<u32>();
-        if chunk_cells == 0 || !value.len().is_multiple_of(chunk_bytes) {
+        let chunk_cells = fields_cells
+            .iter()
+            .copied()
+            .try_fold(0usize, usize::checked_add);
+        let Some(chunk_bytes) = chunk_cells
+            .filter(|&cells| cells != 0)
+            .and_then(|cells| cells.checked_mul(size_of::<u32>()))
+            .filter(|&bytes| value.len().is_multiple_of(bytes))
+        else {
             return Err(PropertyError::PropEncodedArraySizeMismatch {
                 size: value.len(),
-                chunk: chunk_cells,
+                chunk: fields_cells
+                    .iter()
+                    .fold(0usize, |acc, &cells| acc.saturating_add(cells)),
             });
-        }
+        };
         Ok(Self {
             chunks: value.chunks_exact(chunk_bytes),
             fields_cells,
@@ -100,6 +108,10 @@ pub trait FromPropertyValue<'a>: Sized {
 /// A trait for types that can be serialized into a device tree property value.
 pub trait ToPropertyValue {
     /// Returns the length in bytes of the serialized property value.
+    ///
+    /// # Panics
+    ///
+    /// May panic if the serialized length in bytes exceeds `usize::MAX`.
     #[must_use]
     fn property_value_len(&self) -> usize;
 
@@ -336,7 +348,9 @@ impl ToPropertyValue for Vec<u32> {
 
 impl ToPropertyValue for &[&str] {
     fn property_value_len(&self) -> usize {
-        self.iter().map(|s| s.len() + 1).sum()
+        self.iter()
+            .try_fold(0usize, |acc, s| acc.checked_add(s.len())?.checked_add(1))
+            .expect("property value length should fit in usize")
     }
 
     fn write_property_value(&self, mut buffer: &mut [u8]) {
@@ -359,16 +373,11 @@ impl<'a> FromPropertyValue<'a> for Vec<&'a str> {
 #[cfg(feature = "alloc")]
 impl ToPropertyValue for Vec<&str> {
     fn property_value_len(&self) -> usize {
-        self.iter().map(|s| s.len() + 1).sum()
+        self.as_slice().property_value_len()
     }
 
-    fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for s in self {
-            let len = s.len();
-            buffer[..len].copy_from_slice(s.as_bytes());
-            buffer[len] = 0;
-            buffer = &mut buffer[len + 1..];
-        }
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        self.as_slice().write_property_value(buffer);
     }
 }
 
@@ -406,6 +415,32 @@ mod tests {
         assert_eq!(
             PropEncodedArrayIterator::new(&[1, 2, 3, 4], [0, 0, 0]).unwrap_err(),
             PropertyError::PropEncodedArraySizeMismatch { size: 4, chunk: 0 }
+        );
+    }
+
+    #[test]
+    fn prop_encoded_array_cells_overflow() {
+        let quarter_plus_one = (usize::MAX / size_of::<u32>()) + 1;
+        assert_eq!(
+            PropEncodedArrayIterator::new(&[], [quarter_plus_one, 0]).unwrap_err(),
+            PropertyError::PropEncodedArraySizeMismatch {
+                size: 0,
+                chunk: quarter_plus_one,
+            }
+        );
+        assert_eq!(
+            PropEncodedArrayIterator::new(&[1, 2, 3, 4], [quarter_plus_one + 1, 0]).unwrap_err(),
+            PropertyError::PropEncodedArraySizeMismatch {
+                size: 4,
+                chunk: quarter_plus_one + 1,
+            }
+        );
+        assert_eq!(
+            PropEncodedArrayIterator::new(&[1, 2, 3, 4], [usize::MAX, 1]).unwrap_err(),
+            PropertyError::PropEncodedArraySizeMismatch {
+                size: 4,
+                chunk: usize::MAX,
+            }
         );
     }
 
@@ -556,5 +591,23 @@ mod tests {
         let decoded_vec_str: Vec<&str> =
             FromPropertyValue::from_property_value(&vec_str_buf).unwrap();
         assert_eq!(decoded_vec_str, vec_str);
+    }
+
+    #[cfg(all(feature = "alloc", target_pointer_width = "32", not(miri)))]
+    #[test]
+    #[should_panic(expected = "property value length should fit in usize")]
+    fn str_slice_property_value_len_overflow_panics() {
+        let chunk = "a".repeat((1 << 20) - 1);
+        let list = alloc::vec![chunk.as_str(); 4096];
+        let _ = list.as_slice().property_value_len();
+    }
+
+    #[cfg(all(feature = "alloc", target_pointer_width = "32", not(miri)))]
+    #[test]
+    #[should_panic(expected = "property value length should fit in usize")]
+    fn vec_str_property_value_len_overflow_panics() {
+        let chunk = "a".repeat((1 << 20) - 1);
+        let list = alloc::vec![chunk.as_str(); 4096];
+        let _ = list.property_value_len();
     }
 }

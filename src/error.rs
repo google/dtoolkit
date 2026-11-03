@@ -51,7 +51,7 @@ pub struct FdtParseError {
 }
 
 impl FdtParseError {
-    pub(crate) fn new(kind: FdtErrorKind, offset: usize) -> Self {
+    pub(crate) const fn new(kind: FdtErrorKind, offset: usize) -> Self {
         Self { offset, kind }
     }
 }
