@@ -144,6 +144,41 @@ pub use crate::values::{
     FdtStringListIterator, FromPropertyValue, PropEncodedArrayIterator, ToPropertyValue,
 };
 
+/// A device tree.
+pub trait Tree<'a>: Copy {
+    /// The type used for nodes of the device tree.
+    type Node: Node<'a>;
+
+    /// Returns the root node of the device tree.
+    #[must_use]
+    fn root(self) -> Self::Node;
+
+    /// Finds a node by its path.
+    ///
+    /// If a name in the given path contains a _unit-address_ (the part after
+    /// the `@` sign) then both the _node-name_ and _unit-address_ must
+    /// match. If it doesn't have a _unit-address_, then nodes with any
+    /// _unit-address_ or none will be allowed.
+    ///
+    /// For example, searching for `/cpus/cpu` would match either `/cpus/cpu`,
+    /// `/cpus/cpu@0` or `/cpus/cpu@1`, while `/cpus/cpu@1` would match only the
+    /// latter.
+    #[must_use]
+    fn find_node(self, path: &str) -> Option<Self::Node> {
+        if !path.starts_with('/') {
+            return None;
+        }
+        let mut current_node = self.root();
+        if path == "/" {
+            return Some(current_node);
+        }
+        for component in path.split('/').filter(|s| !s.is_empty()) {
+            current_node = current_node.child(component)?;
+        }
+        Some(current_node)
+    }
+}
+
 /// A device tree node.
 pub trait Node<'a>: Copy {
     /// The type used for properties of the node.

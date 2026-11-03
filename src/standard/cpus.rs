@@ -10,26 +10,9 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::{PropertyError, StandardError};
-use crate::fdt::{Fdt, FdtNode};
 use crate::standard::NodeStandard;
 use crate::values::FdtStringListIterator;
 use crate::{Cells, Node, Property};
-
-impl<'a> Fdt<'a> {
-    /// Returns the `/cpus` node.
-    ///
-    /// This should always be included in a valid device tree.
-    ///
-    /// # Errors
-    ///
-    /// Returns a parse error if there was a problem reading the FDT structure
-    /// to find the node, or [`StandardError::CpusMissing`] if the CPUs node is
-    /// missing.
-    pub fn cpus(self) -> Result<Cpus<FdtNode<'a>>, StandardError> {
-        let node = self.find_node("/cpus").ok_or(StandardError::CpusMissing)?;
-        Ok(Cpus { node })
-    }
-}
 
 /// Typed wrapper for a `/cpus` node.
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +35,10 @@ impl<N: Display> Display for Cpus<N> {
 }
 
 impl<'a, N: Node<'a>> Cpus<N> {
+    pub(super) const fn new(node: N) -> Self {
+        Self { node }
+    }
+
     /// Returns an iterator over the `/cpus/cpu@*` nodes.
     pub fn cpus(self) -> impl Iterator<Item = Cpu<N>> + use<'a, N> {
         self.node.children().filter_map(|child| {
