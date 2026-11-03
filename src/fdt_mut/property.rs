@@ -11,7 +11,7 @@ use core::fmt::{Display, Formatter};
 
 use zerocopy::{FromBytes, big_endian};
 
-use crate::error::FdtMutError;
+use crate::error::{BufferError, FdtMutError};
 use crate::fdt::property::InnerPropIter;
 use crate::fdt::{FDT_TAGSIZE, Fdt, FdtProperty};
 use crate::fdt_mut::FdtMut;
@@ -39,16 +39,15 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     ///
     /// # Errors
     ///
-    /// Returns an [`FdtMutError::Resize`] if growing the buffer is required and
-    /// it fails.
+    /// Returns [`FdtMutError::Resize`] if growing the buffer is required and it
+    /// fails, or if the new value's length or resulting FDT size exceeds
+    /// `u32::MAX`.
     ///
     /// # Panics
     ///
-    /// Panics if the new value's length cannot fit in a `u32`.
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
+    /// Panics if the [`FdtMut`] structure was constructed using
+    /// [`FdtMut::new_unchecked`], [`FdtMut::from_slice_unchecked`], or
+    /// [`FdtMut::from_raw_unchecked`] and the FDT is not valid.
     ///
     /// # Examples
     ///
@@ -65,8 +64,15 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// ```
     pub fn set_value<T: ToPropertyValue>(&mut self, new_value: T) -> Result<(), FdtMutError> {
         let new_len = new_value.property_value_len();
+        let new_len_u32 = u32::try_from(new_len)
+            .map_err(|_e| BufferError::FdtLimitExceeded { requested: new_len })?;
         let old_padded = Fdt::align_tag_offset(self.len).expect("Fdt should be valid");
-        let new_padded = Fdt::align_tag_offset(new_len).expect("padded length should fit in usize");
+        let new_padded = Fdt::align_tag_offset(new_len).ok_or(BufferError::FdtLimitExceeded {
+            requested: usize::MAX,
+        })?;
+        u32::try_from(new_padded).map_err(|_e| BufferError::FdtLimitExceeded {
+            requested: new_padded,
+        })?;
 
         if new_padded > old_padded {
             let needed_bytes = new_padded - old_padded;
@@ -88,7 +94,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
             &mut self.data.data_mut()[self.prop_offset + FDT_TAGSIZE..],
         )
         .expect("Fdt should be valid");
-        len_bytes.set(new_len.try_into().expect("length should fit in u32"));
+        len_bytes.set(new_len_u32);
 
         self.data
             .write_property_value_with_padding(&new_value, new_padded, self.value_offset);
@@ -163,7 +169,11 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// ```
     pub fn remove(self) {
         let start = self.prop_offset;
-        let end = Fdt::align_tag_offset(self.value_offset + self.len).expect("Fdt should be valid");
+        let end = self
+            .value_offset
+            .checked_add(self.len)
+            .and_then(Fdt::align_tag_offset)
+            .expect("Fdt should be valid");
 
         self.data.replace_with_nops(start, end);
     }

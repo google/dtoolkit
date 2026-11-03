@@ -11,7 +11,7 @@ use core::fmt::{Display, Formatter};
 
 use zerocopy::IntoBytes;
 
-use crate::error::FdtMutError;
+use crate::error::{BufferError, FdtMutError};
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
@@ -81,17 +81,54 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ///
     /// # Errors
     ///
-    /// Returns an error if resizing the buffer fails.
+    /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
+    /// property length or resulting FDT size exceeds `u32::MAX`.
     ///
     /// # Panics
     ///
-    /// Panics if the node name or existing structure is invalid, or if lengths
-    /// exceed `u32::MAX`.
+    /// Panics if the [`FdtMut`] structure was constructed using an
+    /// `*_unchecked` constructor and the existing FDT is not valid.
     pub fn add_property<T: ToPropertyValue>(
         &mut self,
         name: &str,
         value: T,
     ) -> Result<FdtPropertyMut<'_, B>, FdtMutError> {
+        let val_len = value.property_value_len();
+        let val_len_u32 = u32::try_from(val_len)
+            .map_err(|_e| BufferError::FdtLimitExceeded { requested: val_len })?;
+        let padded_val_len =
+            Fdt::align_tag_offset(val_len).ok_or(BufferError::FdtLimitExceeded {
+                requested: usize::MAX,
+            })?;
+        let required_space = padded_val_len
+            .checked_add(size_of::<FdtPropertyHeader>())
+            .ok_or(BufferError::FdtLimitExceeded {
+                requested: usize::MAX,
+            })?;
+        let old_size = self.data.data.as_ref().len();
+        let post_string_size = if self.data.find_existing_string(name).is_some() {
+            old_size
+        } else {
+            let header = self.data.as_read_only().header();
+            let str_end = (header.off_dt_strings() as usize)
+                .checked_add(header.size_dt_strings() as usize)
+                .and_then(|end| end.checked_add(name.len()))
+                .and_then(|end| end.checked_add(1))
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: usize::MAX,
+                })?;
+            old_size.max(str_end)
+        };
+        let final_size =
+            post_string_size
+                .checked_add(required_space)
+                .ok_or(BufferError::FdtLimitExceeded {
+                    requested: usize::MAX,
+                })?;
+        u32::try_from(final_size).map_err(|_e| BufferError::FdtLimitExceeded {
+            requested: final_size,
+        })?;
+
         let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
         let mut offset = self.offset + FDT_TAGSIZE;
@@ -101,16 +138,11 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
             .skip_props(offset, NameValidation::Skip)
             .expect("Fdt should be valid");
 
-        let val_len = value.property_value_len();
-        let padded_val_len =
-            Fdt::align_tag_offset(val_len).expect("padded length should fit in usize");
-        let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
-
         self.data.shift_dt_struct(insert_offset, required_space)?;
 
         let data = self.data.data_mut();
         let header = FdtPropertyHeader::new(
-            u32::try_from(val_len).expect("len fits in u32"),
+            val_len_u32,
             u32::try_from(nameoff).expect("nameoff fits in u32"),
         );
         data[insert_offset..insert_offset + size_of::<FdtPropertyHeader>()]
