@@ -58,6 +58,10 @@ impl<'a> Node<'a> for FdtNode<'a> {
             parent_address_space: self.address_space(),
         }
     }
+
+    fn parent_address_space(self) -> AddressSpaceProperties {
+        self.parent_address_space
+    }
 }
 
 impl<'a> FdtNode<'a> {
