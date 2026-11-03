@@ -105,7 +105,7 @@ impl DeviceTree {
 
         // name + null terminator + padding
         let name_len = node.name().len() + 1;
-        size += Fdt::align_tag_offset(name_len);
+        size += Fdt::align_tag_offset(name_len).expect("padded name length fits in usize");
 
         for prop in node.properties() {
             size += Self::calculate_prop_size(string_map, prop);
@@ -126,7 +126,8 @@ impl DeviceTree {
         string_map.insert(prop.name());
 
         // value + padding
-        size += Fdt::align_tag_offset(prop.value().len());
+        size += Fdt::align_tag_offset(prop.value().len())
+            .expect("padded property length fits in usize");
         size
     }
 
@@ -173,7 +174,7 @@ impl DeviceTree {
 
     fn align(vec: &mut Vec<u8>) {
         let len = vec.len();
-        let new_len = Fdt::align_tag_offset(len);
+        let new_len = Fdt::align_tag_offset(len).expect("padded dtb length fits in usize");
         vec.resize(new_len, 0);
     }
 }

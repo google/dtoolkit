@@ -65,8 +65,8 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// ```
     pub fn set_value<T: ToPropertyValue>(&mut self, new_value: T) -> Result<(), FdtMutError> {
         let new_len = new_value.property_value_len();
-        let old_padded = Fdt::align_tag_offset(self.len);
-        let new_padded = Fdt::align_tag_offset(new_len);
+        let old_padded = Fdt::align_tag_offset(self.len).expect("Fdt should be valid");
+        let new_padded = Fdt::align_tag_offset(new_len).expect("padded length should fit in usize");
 
         if new_padded > old_padded {
             let needed_bytes = new_padded - old_padded;
@@ -142,6 +142,12 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// `NOP` tags, rendering it invisible to Device Tree iterators
     /// without requiring data to be shifted.
     ///
+    /// # Panics
+    ///
+    /// Panics if the [`FdtMut`] structure was constructed using
+    /// [`FdtMut::new_unchecked`], [`FdtMut::from_slice_unchecked`], or
+    /// [`FdtMut::from_raw_unchecked`] and the FDT is not valid.
+    ///
     /// # Examples
     ///
     /// ```
@@ -157,7 +163,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// ```
     pub fn remove(self) {
         let start = self.prop_offset;
-        let end = Fdt::align_tag_offset(self.value_offset + self.len);
+        let end = Fdt::align_tag_offset(self.value_offset + self.len).expect("Fdt should be valid");
 
         self.data.replace_with_nops(start, end);
     }

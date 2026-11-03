@@ -96,13 +96,14 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         let fdt = self.as_read_only().fdt;
         let mut offset = self.offset + FDT_TAGSIZE;
         let name_end = fdt.find_string_end(offset).expect("valid node name");
-        offset = Fdt::align_tag_offset(name_end);
+        offset = Fdt::align_tag_offset(name_end).expect("valid node name");
         let insert_offset = fdt
             .skip_props(offset, NameValidation::Skip)
             .expect("Fdt should be valid");
 
         let val_len = value.property_value_len();
-        let padded_val_len = Fdt::align_tag_offset(val_len);
+        let padded_val_len =
+            Fdt::align_tag_offset(val_len).expect("padded length should fit in usize");
         let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
 
         self.data.shift_dt_struct(insert_offset, required_space)?;

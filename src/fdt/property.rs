@@ -123,7 +123,7 @@ impl InnerPropIter {
                 let mut off = *offset;
                 off += FDT_TAGSIZE; // Skip FDT_BEGIN_NODE
                 off = fdt.find_string_end(off).expect("Fdt should be valid");
-                off = Fdt::align_tag_offset(off);
+                off = Fdt::align_tag_offset(off).expect("Fdt should be valid");
 
                 let result = Self::find_property(fdt, &mut off);
                 *self = Self::Running { offset: off };

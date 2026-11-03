@@ -592,7 +592,7 @@ fn token_chunk_len(fdt: Fdt<'_>, offset: usize, token: FdtToken) -> usize {
         FdtToken::BeginNode => {
             let name_start = offset + FDT_TAGSIZE;
             let name_end = fdt.find_string_end(name_start).expect("valid node name");
-            Fdt::align_tag_offset(name_end) - offset
+            Fdt::align_tag_offset(name_end).expect("valid node name") - offset
         }
         FdtToken::Prop => {
             let (val_len_bytes, _) = big_endian::U32::ref_from_prefix(
@@ -602,7 +602,7 @@ fn token_chunk_len(fdt: Fdt<'_>, offset: usize, token: FdtToken) -> usize {
             .expect("valid property length");
             let val_len = val_len_bytes.get() as usize;
             let prop_end = offset + 3 * FDT_TAGSIZE + val_len;
-            Fdt::align_tag_offset(prop_end) - offset
+            Fdt::align_tag_offset(prop_end).expect("valid property length") - offset
         }
     }
 }
