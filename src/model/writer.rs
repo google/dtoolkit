@@ -58,17 +58,29 @@ impl DeviceTree {
     #[must_use]
     fn generate_header(&self, string_map: &mut StringMap) -> FdtHeader {
         // entries + terminator
-        let mem_reservations_size =
-            (self.memory_reservations.len() + 1) * size_of::<MemoryReservation>();
+        let mem_reservations_size = self
+            .memory_reservations
+            .len()
+            .checked_add(1)
+            .and_then(|n| n.checked_mul(size_of::<MemoryReservation>()))
+            .expect("mem_reservations_size exceeds usize");
         // +FDT_TAGSIZE for FDT_END
-        let dt_struct_size = Self::calculate_node_size(string_map, &self.root) + FDT_TAGSIZE;
+        let dt_struct_size = Self::calculate_node_size(string_map, &self.root)
+            .checked_add(FDT_TAGSIZE)
+            .expect("size_dt_struct exceeds usize");
         let dt_strings_size = string_map.next_offset as usize;
 
         let header_size = size_of::<FdtHeader>();
         let off_mem_rsvmap = header_size;
-        let off_dt_struct = off_mem_rsvmap + mem_reservations_size;
-        let off_dt_strings = off_dt_struct + dt_struct_size;
-        let totalsize = off_dt_strings + dt_strings_size;
+        let off_dt_struct = off_mem_rsvmap
+            .checked_add(mem_reservations_size)
+            .expect("off_dt_struct exceeds usize");
+        let off_dt_strings = off_dt_struct
+            .checked_add(dt_struct_size)
+            .expect("off_dt_strings exceeds usize");
+        let totalsize = off_dt_strings
+            .checked_add(dt_strings_size)
+            .expect("totalsize exceeds usize");
 
         let size_dt_strings = totalsize - off_dt_strings;
         let size_dt_struct = off_dt_strings - off_dt_struct;
@@ -100,35 +112,43 @@ impl DeviceTree {
     }
 
     fn calculate_node_size(string_map: &mut StringMap, node: &DeviceTreeNode) -> usize {
-        let mut size = 0;
-        size += FDT_TAGSIZE; // FDT_BEGIN_NODE
-
         // name + null terminator + padding
-        let name_len = node.name().len() + 1;
-        size += Fdt::align_tag_offset(name_len).expect("padded name length fits in usize");
+        let name_len = node
+            .name()
+            .len()
+            .checked_add(1)
+            .and_then(Fdt::align_tag_offset)
+            .expect("padded name length fits in usize");
+        // FDT_BEGIN_NODE + padded name
+        let mut size = FDT_TAGSIZE
+            .checked_add(name_len)
+            .expect("node size fits in usize");
 
         for prop in node.properties() {
-            size += Self::calculate_prop_size(string_map, prop);
+            size = size
+                .checked_add(Self::calculate_prop_size(string_map, prop))
+                .expect("node size fits in usize");
         }
 
         for child in node.children() {
-            size += Self::calculate_node_size(string_map, child);
+            size = size
+                .checked_add(Self::calculate_node_size(string_map, child))
+                .expect("node size fits in usize");
         }
 
-        size += FDT_TAGSIZE; // FDT_END_NODE
-        size
+        // + FDT_END_NODE
+        size.checked_add(FDT_TAGSIZE)
+            .expect("node size fits in usize")
     }
 
     fn calculate_prop_size(string_map: &mut StringMap, prop: &DeviceTreeProperty) -> usize {
-        let mut size = size_of::<FdtPropertyHeader>();
-
         // ensure the name is in the map
         string_map.insert(prop.name());
 
-        // value + padding
-        size += Fdt::align_tag_offset(prop.value().len())
-            .expect("padded property length fits in usize");
-        size
+        // header + value + padding
+        Fdt::align_tag_offset(prop.value().len())
+            .and_then(|padded| padded.checked_add(size_of::<FdtPropertyHeader>()))
+            .expect("padded property length fits in usize")
     }
 
     fn write_memory_reservations(&self, dtb: &mut Vec<u8>) {
@@ -197,7 +217,10 @@ impl StringMap {
         if !self.string_map.contains_key(key) {
             let offset = self.next_offset;
             self.string_map.insert(key.to_owned(), offset);
-            self.next_offset = u32::try_from(self.next_offset as usize + key.len() + 1)
+            self.next_offset = (self.next_offset as usize)
+                .checked_add(key.len())
+                .and_then(|end| end.checked_add(1))
+                .and_then(|end| u32::try_from(end).ok())
                 .expect("string block length exceeds u32");
         }
     }
