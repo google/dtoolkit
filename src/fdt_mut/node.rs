@@ -20,6 +20,7 @@ use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::util::impl_read_only_node_methods;
 use crate::{Node, Property, ToPropertyValue};
 
 /// A mutable device tree node.
@@ -280,41 +281,12 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         self.as_read_only().offset()
     }
 
-    /// Returns the name of this node.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        self.as_read_only().name()
-    }
-
-    /// Returns the name of this node without the unit address, if any.
-    #[must_use]
-    pub fn name_without_address(&self) -> &str {
-        self.as_read_only().name_without_address()
-    }
-
-    /// Returns the property with the given name, if any.
-    #[must_use]
-    pub fn property(&self, name: &str) -> Option<FdtProperty<'_>> {
-        self.as_read_only().property(name)
-    }
-
-    /// Returns an iterator over the properties of this node.
-    #[must_use]
-    pub fn properties(&self) -> FdtPropIter<'_> {
-        self.as_read_only().properties()
-    }
-
-    /// Returns a child node by its name.
-    #[must_use]
-    pub fn child(&self, name: &str) -> Option<FdtNode<'_>> {
-        self.as_read_only().child(name)
-    }
-
-    /// Returns an iterator over the children of this node.
-    #[must_use]
-    pub fn children(&self) -> FdtChildIter<'_> {
-        self.as_read_only().children()
-    }
+    impl_read_only_node_methods!(
+        node = FdtNode<'_>,
+        property = FdtProperty<'_>,
+        properties = FdtPropIter<'_>,
+        children = FdtChildIter<'_>,
+    );
 }
 
 impl<B: FdtBuffer> Display for FdtNodeMut<'_, B> {
