@@ -16,6 +16,7 @@
 //!
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
+pub(crate) mod event;
 pub(crate) mod node;
 pub(crate) mod property;
 
@@ -31,6 +32,7 @@ use zerocopy::byteorder::big_endian;
 #[allow(clippy::wildcard_imports)]
 use zerocopy_derive::*;
 
+pub use self::event::{FdtEvent, FdtEventIter};
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
 use crate::Node;
@@ -891,6 +893,68 @@ impl<'a> Fdt<'a> {
                 .last()?;
             current = child;
         }
+    }
+
+    /// Returns an iterator over the events in the structure block of the
+    /// device tree: the start of a node, a property, and the end of a node.
+    ///
+    /// This walks the device tree in a single pass, in depth-first order,
+    /// following the flat layout of the structure block. A node's events are
+    /// its [`FdtEvent::BeginNode`], one [`FdtEvent::Property`] for each of its
+    /// properties, the events of each of its children, and its
+    /// [`FdtEvent::EndNode`]. The first event is the start of the root node,
+    /// and the last one is its end.
+    ///
+    /// The events don't carry an [`FdtNode`], because an `FdtNode` needs the
+    /// `#address-cells` and `#size-cells` properties of its parent, which a
+    /// single pass without memory allocation can't provide. The `offset` of
+    /// [`FdtEvent::BeginNode`] can be passed to [`Fdt::node_at_offset`] to
+    /// get the node (in linear time).
+    ///
+    /// # Performance
+    ///
+    /// Iterating over all the events runs in time linear in the size of the
+    /// structure block and doesn't allocate memory. In contrast, visiting
+    /// every node through [`Node::children`] recursively takes time quadratic
+    /// in the depth of the tree, because finding the next sibling of a node
+    /// requires walking through the entire subtree of that node.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Property;
+    /// use dtoolkit::fdt::{Fdt, FdtEvent};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    ///
+    /// let mut depth = 0;
+    /// let mut nodes = Vec::new();
+    /// let mut properties = Vec::new();
+    /// for event in fdt.events() {
+    ///     match event {
+    ///         FdtEvent::BeginNode { name, .. } => {
+    ///             nodes.push((depth, name));
+    ///             depth += 1;
+    ///         }
+    ///         FdtEvent::Property(property) => properties.push(property.name()),
+    ///         FdtEvent::EndNode => depth -= 1,
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(nodes, [(0, ""), (1, "a"), (2, "b"), (3, "c"), (1, "d")]);
+    /// assert_eq!(properties, ["prop"]);
+    /// assert_eq!(depth, 0);
+    /// ```
+    #[must_use]
+    pub fn events(self) -> FdtEventIter<'a> {
+        FdtEventIter::new(self)
     }
 
     pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {

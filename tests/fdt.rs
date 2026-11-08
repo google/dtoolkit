@@ -7,7 +7,7 @@
 // except according to those terms.
 
 use dtoolkit::error::FdtErrorKind;
-use dtoolkit::fdt::{Fdt, FdtNode, FdtOptions};
+use dtoolkit::fdt::{Fdt, FdtEvent, FdtNode, FdtOptions};
 #[cfg(feature = "write")]
 use dtoolkit::fdt_mut::FdtMut;
 #[cfg(feature = "write")]
@@ -634,4 +634,260 @@ fn with_options_max_size_rejects_oversized_slice() {
     let options = FdtOptions::new().max_size(dtb.len() - 1);
     let err = Fdt::with_options(dtb, options).unwrap_err();
     assert_eq!(err.kind, FdtErrorKind::InvalidLength);
+}
+
+/// Returns the events of `node` and its descendants, found by a recursive
+/// traversal through `properties()` and `children()`.
+fn collect_events_recursive<'a>(node: FdtNode<'a>, out: &mut Vec<FdtEvent<'a>>) {
+    out.push(FdtEvent::BeginNode {
+        name: node.name(),
+        offset: node.offset(),
+    });
+    out.extend(node.properties().map(FdtEvent::Property));
+    for child in node.children() {
+        collect_events_recursive(child, out);
+    }
+    out.push(FdtEvent::EndNode);
+}
+
+#[test]
+fn events_match_recursive_traversal() {
+    for (dtb, _dts, name) in ALL_DT_FILES {
+        let fdt = Fdt::new(dtb).unwrap();
+        let mut expected = Vec::new();
+        collect_events_recursive(fdt.root(), &mut expected);
+
+        let events: Vec<_> = fdt.events().collect();
+        assert_eq!(events, expected, "{name}");
+
+        for event in events {
+            if let FdtEvent::BeginNode {
+                name: node_name,
+                offset,
+            } = event
+            {
+                let node = fdt.node_at_offset(offset).unwrap();
+                assert_eq!(node.name(), node_name, "{name}");
+            }
+        }
+    }
+}
+
+#[test]
+fn events_on_traversal_dtb() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let mut events = fdt.events();
+
+    let mut expect_begin = |expected: &str| match events.next() {
+        Some(FdtEvent::BeginNode { name, offset }) => {
+            assert_eq!(name, expected);
+            offset
+        }
+        other => panic!("expected the start of {expected:?}, got {other:?}"),
+    };
+    assert_eq!(expect_begin(""), 0);
+    let a = expect_begin("a");
+    let b = expect_begin("b");
+    let c = expect_begin("c");
+    assert_eq!(a, fdt.find_node("/a").unwrap().offset());
+    assert_eq!(b, fdt.find_node("/a/b").unwrap().offset());
+    assert_eq!(c, fdt.find_node("/a/b/c").unwrap().offset());
+
+    let Some(FdtEvent::Property(prop)) = events.next() else {
+        panic!("expected a property");
+    };
+    assert_eq!(prop.name(), "prop");
+    assert_eq!(prop.value_as::<u32>().unwrap(), 1234);
+
+    for _ in 0..3 {
+        assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    }
+    assert!(matches!(
+        events.next(),
+        Some(FdtEvent::BeginNode { name: "d", .. })
+    ));
+    assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    assert_eq!(events.next(), None);
+    assert_eq!(events.next(), None);
+}
+
+/// Builds a version 17 FDT blob from a structure block and a strings block.
+fn build_dtb(structure: &[u8], strings: &[u8]) -> Vec<u8> {
+    // The header is followed by an empty memory reservation block (just the
+    // terminator), then by the structure block and the strings block.
+    let header_size = 40;
+    let off_mem_rsvmap = header_size;
+    let off_dt_struct = off_mem_rsvmap + 16;
+    let off_dt_strings = off_dt_struct + structure.len();
+    let totalsize = off_dt_strings + strings.len();
+
+    let mut dtb = Vec::with_capacity(totalsize);
+    for value in [
+        0xd00d_feed,
+        totalsize,
+        off_dt_struct,
+        off_dt_strings,
+        off_mem_rsvmap,
+        17,
+        16,
+        0,
+        strings.len(),
+        structure.len(),
+    ] {
+        dtb.extend_from_slice(
+            &u32::try_from(value)
+                .expect("DTB header fields should fit in u32")
+                .to_be_bytes(),
+        );
+    }
+    dtb.extend_from_slice(&[0; 16]);
+    dtb.extend_from_slice(structure);
+    dtb.extend_from_slice(strings);
+    dtb
+}
+
+const FDT_BEGIN_NODE: u32 = 0x1;
+const FDT_END_NODE: u32 = 0x2;
+const FDT_PROP: u32 = 0x3;
+const FDT_NOP: u32 = 0x4;
+const FDT_END: u32 = 0x9;
+
+fn push_token(structure: &mut Vec<u8>, token: u32) {
+    structure.extend_from_slice(&token.to_be_bytes());
+}
+
+fn push_begin_node(structure: &mut Vec<u8>, name: &str) {
+    push_token(structure, FDT_BEGIN_NODE);
+    structure.extend_from_slice(name.as_bytes());
+    structure.push(0);
+    structure.resize(structure.len().next_multiple_of(4), 0);
+}
+
+/// Builds a DTB with `depth` nested nodes named `a` below the root.
+fn build_chain_dtb(depth: usize) -> Vec<u8> {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    for _ in 0..depth {
+        push_begin_node(&mut structure, "a");
+    }
+    for _ in 0..=depth {
+        push_token(&mut structure, FDT_END_NODE);
+    }
+    push_token(&mut structure, FDT_END);
+    build_dtb(&structure, &[])
+}
+
+/// Builds a DTB with `count` childless nodes named `a` directly below the root.
+fn build_flat_dtb(count: usize) -> Vec<u8> {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    for _ in 0..count {
+        push_begin_node(&mut structure, "a");
+        push_token(&mut structure, FDT_END_NODE);
+    }
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    build_dtb(&structure, &[])
+}
+
+/// Number of nodes in the generated DTBs used by the large `events_*` tests.
+///
+/// Visiting a 100,000-deep chain through `children()` takes minutes, while
+/// `events()` takes milliseconds. Miri is much slower, so it uses a smaller
+/// tree.
+const LARGE_TREE_NODES: usize = if cfg!(miri) { 1_000 } else { 100_000 };
+
+/// Walks `fdt.events()` and returns the number of nodes and the maximum depth
+/// (where the root is at depth 1).
+fn count_nodes_and_depth(fdt: Fdt<'_>) -> (usize, usize) {
+    let mut nodes = 0;
+    let mut depth = 0;
+    let mut max_depth = 0;
+    let mut last_offset = None;
+    for event in fdt.events() {
+        match event {
+            FdtEvent::BeginNode { name, offset } => {
+                assert!(last_offset < Some(offset));
+                last_offset = Some(offset);
+                assert_eq!(name, if nodes == 0 { "" } else { "a" });
+                nodes += 1;
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            }
+            FdtEvent::Property(_) => panic!("unexpected property"),
+            FdtEvent::EndNode => depth -= 1,
+        }
+    }
+    assert_eq!(depth, 0);
+    (nodes, max_depth)
+}
+
+#[test]
+fn events_deep_chain() {
+    let dtb = build_chain_dtb(LARGE_TREE_NODES);
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert_eq!(
+        count_nodes_and_depth(fdt),
+        (LARGE_TREE_NODES + 1, LARGE_TREE_NODES + 1)
+    );
+}
+
+#[test]
+fn events_flat_tree() {
+    let dtb = build_flat_dtb(LARGE_TREE_NODES);
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert_eq!(count_nodes_and_depth(fdt), (LARGE_TREE_NODES + 1, 2));
+    assert_eq!(fdt.root().children().count(), LARGE_TREE_NODES);
+}
+
+#[test]
+fn events_match_recursive_traversal_on_generated_trees() {
+    for dtb in [build_chain_dtb(100), build_flat_dtb(100)] {
+        let fdt = Fdt::new(&dtb).unwrap();
+        let mut expected = Vec::new();
+        collect_events_recursive(fdt.root(), &mut expected);
+        assert_eq!(fdt.events().collect::<Vec<_>>(), expected);
+    }
+}
+
+#[test]
+fn events_skip_nops() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_NOP);
+    push_token(&mut structure, FDT_PROP);
+    push_token(&mut structure, 4); // len
+    push_token(&mut structure, 0); // nameoff
+    structure.extend_from_slice(&42u32.to_be_bytes());
+    push_token(&mut structure, FDT_NOP);
+    push_begin_node(&mut structure, "child");
+    push_token(&mut structure, FDT_NOP);
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_NOP);
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let dtb = build_dtb(&structure, b"prop\0");
+    let fdt = Fdt::new(&dtb).unwrap();
+
+    let events: Vec<_> = fdt.events().collect();
+    let [
+        FdtEvent::BeginNode {
+            name: "",
+            offset: 0,
+        },
+        FdtEvent::Property(prop),
+        FdtEvent::BeginNode {
+            name: "child",
+            offset: 32,
+        },
+        FdtEvent::EndNode,
+        FdtEvent::EndNode,
+    ] = events[..]
+    else {
+        panic!("unexpected events: {events:?}");
+    };
+    assert_eq!(prop.name(), "prop");
+    assert_eq!(prop.value_as::<u32>().unwrap(), 42);
 }
