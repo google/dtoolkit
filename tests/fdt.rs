@@ -827,7 +827,10 @@ fn events_flat_tree() {
 
 #[test]
 fn events_match_recursive_traversal_on_generated_trees() {
-    for dtb in [build_chain_dtb(100), build_flat_dtb(100)] {
+    // The recursive traversal takes time quadratic in the depth of the chain,
+    // so Miri uses smaller trees.
+    let nodes = if cfg!(miri) { 32 } else { 100 };
+    for dtb in [build_chain_dtb(nodes), build_flat_dtb(nodes)] {
         let fdt = Fdt::new(&dtb).unwrap();
         let mut expected = Vec::new();
         collect_events_recursive(fdt.root(), &mut expected);
