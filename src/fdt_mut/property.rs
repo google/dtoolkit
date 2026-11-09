@@ -39,16 +39,15 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     ///
     /// # Errors
     ///
-    /// Returns an [`FdtMutError::Resize`] if growing the buffer is required and
-    /// it fails.
+    /// Returns [`FdtMutError::Resize`] if growing the buffer is required and it
+    /// fails, or if the new value's length or resulting FDT size exceeds
+    /// `u32::MAX`.
     ///
     /// # Panics
     ///
-    /// Panics if the new value's length cannot fit in a `u32`.
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
+    /// Panics if the [`FdtMut`] structure was constructed using
+    /// [`FdtMut::new_unchecked`], [`FdtMut::from_slice_unchecked`], or
+    /// [`FdtMut::from_raw_unchecked`] and the FDT is not valid.
     ///
     /// # Examples
     ///
@@ -66,15 +65,17 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     pub fn set_value<T: ToPropertyValue>(&mut self, new_value: T) -> Result<(), FdtMutError> {
         let new_len = new_value.property_value_len();
         let old_padded = Fdt::align_tag_offset(self.len);
-        let new_padded = Fdt::align_tag_offset(new_len);
+        let new_padded_u64 = (new_len as u64)
+            .checked_next_multiple_of(FDT_TAGSIZE as u64)
+            .unwrap_or(u64::MAX);
 
-        if new_padded > old_padded {
-            let needed_bytes = new_padded - old_padded;
+        if new_padded_u64 > old_padded as u64 {
+            let needed_bytes = new_padded_u64 - old_padded as u64;
             let available_nops =
                 self.count_available_nops(self.value_offset + old_padded, needed_bytes);
 
-            if available_nops < needed_bytes {
-                let shift_amount = needed_bytes - available_nops;
+            if (available_nops as u64) < needed_bytes {
+                let shift_amount = needed_bytes - available_nops as u64;
                 let shift_start = self.value_offset + old_padded + available_nops;
 
                 self.data
@@ -82,6 +83,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
                     .map_err(FdtMutError::Resize)?;
             }
         }
+        let new_padded = Fdt::align_tag_offset(new_len);
 
         // Update the length in the FDT property header
         let (len_bytes, _) = <big_endian::U32>::mut_from_prefix(
@@ -105,11 +107,11 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
         Ok(())
     }
 
-    fn count_available_nops(&self, start_offset: usize, max_needed: usize) -> usize {
+    fn count_available_nops(&self, start_offset: usize, max_needed: u64) -> usize {
         let mut offset = start_offset;
         let mut count = 0;
         let fdt = self.data.as_read_only();
-        while count < max_needed {
+        while (count as u64) < max_needed {
             if let Ok(crate::fdt::FdtToken::Nop) = fdt.read_token(offset) {
                 count += FDT_TAGSIZE;
                 offset += FDT_TAGSIZE;

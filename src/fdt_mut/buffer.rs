@@ -144,8 +144,9 @@ impl FdtBuffer for SliceBuffer<'_> {
         }
 
         let header = self.header_mut();
-        let len_u32 = u32::try_from(new_len)
-            .map_err(|_e| BufferError::FdtLimitExceeded { requested: new_len })?;
+        let len_u32 = u32::try_from(new_len).map_err(|_e| BufferError::FdtLimitExceeded {
+            requested: new_len as u64,
+        })?;
         header.totalsize.set(len_u32);
 
         Ok(())
