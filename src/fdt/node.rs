@@ -12,6 +12,7 @@ use core::fmt::{self, Display, Formatter};
 
 use super::{FDT_TAGSIZE, Fdt, FdtToken, NameValidation};
 use crate::Node;
+use crate::fdt::event::FdtEventIter;
 use crate::fdt::property::{FdtPropIter, FdtProperty, InnerPropIter};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
 
@@ -98,6 +99,66 @@ impl<'a> FdtNode<'a> {
     #[must_use]
     pub fn offset(self) -> usize {
         self.offset - self.fdt.header().off_dt_struct() as usize
+    }
+
+    /// Returns an iterator over the events in the structure block of the
+    /// device tree that belong to this node: the start of a node, a property,
+    /// and the end of a node.
+    ///
+    /// This walks the subtree of this node in a single pass, in depth-first
+    /// order, following the flat layout of the structure block. A node's
+    /// events are its [`FdtEvent::BeginNode`], one [`FdtEvent::Property`] for
+    /// each of its properties, the events of each of its children, and its
+    /// [`FdtEvent::EndNode`]. The first event is the start of this node, and
+    /// the last one is its end.
+    ///
+    /// The events do not carry an [`FdtNode`], because an `FdtNode` needs the
+    /// `#address-cells` and `#size-cells` properties of its parent, which a
+    /// single pass without memory allocation cannot provide. The `offset` of
+    /// [`FdtEvent::BeginNode`] can be passed to [`Fdt::node_at_offset`] to
+    /// get the node (in linear time).
+    ///
+    /// # Performance
+    ///
+    /// Iterating over all the events runs in time linear in the size of the
+    /// subtree in the structure block and does not allocate memory. In
+    /// contrast, visiting every node through [`Node::children`] recursively
+    /// takes time quadratic in the depth of the tree, because finding the
+    /// next sibling of a node requires walking through the entire subtree of
+    /// that node.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid, for example if an `FDT_END` token comes before the end of this
+    /// node.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt::{Fdt, FdtEvent};
+    ///
+    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/a/b").unwrap();
+    ///
+    /// let names: Vec<_> = node
+    ///     .events()
+    ///     .filter_map(|event| match event {
+    ///         FdtEvent::BeginNode { name, .. } => Some(name),
+    ///         _ => None,
+    ///     })
+    ///     .collect();
+    /// assert_eq!(names, ["b", "c"]);
+    /// ```
+    ///
+    /// [`FdtEvent::BeginNode`]: super::FdtEvent::BeginNode
+    /// [`FdtEvent::Property`]: super::FdtEvent::Property
+    /// [`FdtEvent::EndNode`]: super::FdtEvent::EndNode
+    #[must_use]
+    pub fn events(self) -> FdtEventIter<'a> {
+        FdtEventIter::new(self)
     }
 
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {

@@ -898,26 +898,9 @@ impl<'a> Fdt<'a> {
     /// Returns an iterator over the events in the structure block of the
     /// device tree: the start of a node, a property, and the end of a node.
     ///
-    /// This walks the device tree in a single pass, in depth-first order,
-    /// following the flat layout of the structure block. A node's events are
-    /// its [`FdtEvent::BeginNode`], one [`FdtEvent::Property`] for each of its
-    /// properties, the events of each of its children, and its
-    /// [`FdtEvent::EndNode`]. The first event is the start of the root node,
-    /// and the last one is its end.
-    ///
-    /// The events don't carry an [`FdtNode`], because an `FdtNode` needs the
-    /// `#address-cells` and `#size-cells` properties of its parent, which a
-    /// single pass without memory allocation can't provide. The `offset` of
-    /// [`FdtEvent::BeginNode`] can be passed to [`Fdt::node_at_offset`] to
-    /// get the node (in linear time).
-    ///
-    /// # Performance
-    ///
-    /// Iterating over all the events runs in time linear in the size of the
-    /// structure block and doesn't allocate memory. In contrast, visiting
-    /// every node through [`Node::children`] recursively takes time quadratic
-    /// in the depth of the tree, because finding the next sibling of a node
-    /// requires walking through the entire subtree of that node.
+    /// This is the same as `self.root().events()`; see [`FdtNode::events`]
+    /// for details. The first event is the start of the root node, and the
+    /// last one is its end.
     ///
     /// # Panics
     ///
@@ -954,7 +937,7 @@ impl<'a> Fdt<'a> {
     /// ```
     #[must_use]
     pub fn events(self) -> FdtEventIter<'a> {
-        FdtEventIter::new(self)
+        self.root().events()
     }
 
     pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {

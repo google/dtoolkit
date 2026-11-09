@@ -675,9 +675,60 @@ fn events_match_recursive_traversal() {
             {
                 let node = fdt.node_at_offset(offset).unwrap();
                 assert_eq!(node.name(), node_name, "{name}");
+
+                let mut expected = Vec::new();
+                collect_events_recursive(node, &mut expected);
+                assert_eq!(node.events().collect::<Vec<_>>(), expected, "{name}");
             }
         }
     }
+}
+
+#[test]
+fn node_events_stop_at_the_end_of_the_node() {
+    let dtb = include_bytes!("dtb/test_traversal.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let a = fdt.find_node("/a").unwrap();
+    let mut events = a.events();
+
+    for expected in ["a", "b", "c"] {
+        assert!(matches!(
+            events.next(),
+            Some(FdtEvent::BeginNode { name, .. }) if name == expected
+        ));
+    }
+    assert!(matches!(events.next(), Some(FdtEvent::Property(_))));
+    for _ in 0..3 {
+        assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    }
+    // The sibling `/d` belongs to the root, not to `/a`.
+    assert_eq!(events.next(), None);
+    assert_eq!(events.next(), None);
+}
+
+/// Builds a DTB whose structure block has an `FDT_END` token inside a child
+/// of the root node.
+fn build_dtb_with_end_inside_node() -> Vec<u8> {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_begin_node(&mut structure, "child");
+    push_token(&mut structure, FDT_END);
+    build_dtb(&structure, &[])
+}
+
+#[test]
+fn end_inside_node_is_rejected() {
+    let dtb = build_dtb_with_end_inside_node();
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::BadToken(FDT_END));
+}
+
+#[test]
+#[should_panic(expected = "Fdt should be valid")]
+fn events_panic_on_end_inside_node() {
+    let dtb = build_dtb_with_end_inside_node();
+    let fdt = Fdt::new_unchecked(&dtb);
+    for _ in fdt.events() {}
 }
 
 #[test]

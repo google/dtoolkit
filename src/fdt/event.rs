@@ -9,10 +9,10 @@
 //! A flat, single-pass view of the structure block of a device tree.
 
 use super::property::InnerPropIter;
-use super::{FDT_TAGSIZE, Fdt, FdtProperty, FdtToken};
+use super::{FDT_TAGSIZE, Fdt, FdtNode, FdtProperty, FdtToken};
 
 /// An item of the structure block of a device tree, as returned by
-/// [`Fdt::events`].
+/// [`FdtNode::events`] and [`Fdt::events`].
 ///
 /// The events follow the order of the tokens in the structure block: each
 /// node starts with [`FdtEvent::BeginNode`], followed by its properties, then
@@ -27,10 +27,10 @@ pub enum FdtEvent<'a> {
         name: &'a str,
         /// The byte offset of the node's `FDT_BEGIN_NODE` tag relative to the
         /// start of the `dt_struct` block, as returned by
-        /// [`FdtNode::offset`](super::FdtNode::offset).
+        /// [`FdtNode::offset`].
         ///
         /// It can be passed to [`Fdt::node_at_offset`] to get the
-        /// corresponding [`FdtNode`](super::FdtNode).
+        /// corresponding [`FdtNode`].
         offset: usize,
     },
     /// A property of the node that was most recently started (an `FDT_PROP`
@@ -41,21 +41,25 @@ pub enum FdtEvent<'a> {
     EndNode,
 }
 
-/// An iterator over the events in the structure block of a device tree.
+/// An iterator over the events of a device tree node and its descendants.
 ///
-/// See [`Fdt::events`] for details.
+/// See [`FdtNode::events`] for details.
 #[derive(Debug, Clone)]
 pub struct FdtEventIter<'a> {
     pub(crate) fdt: Fdt<'a>,
-    /// The offset of the next token to read, relative to the start of the FDT.
-    pub(crate) offset: usize,
+    /// The offset of the next token to read, relative to the start of the FDT,
+    /// or `None` once the node the iterator started at has ended.
+    pub(crate) offset: Option<usize>,
+    /// The number of nodes that have started and not yet ended.
+    pub(crate) depth: usize,
 }
 
 impl<'a> FdtEventIter<'a> {
-    pub(crate) fn new(fdt: Fdt<'a>) -> Self {
+    pub(crate) fn new(node: FdtNode<'a>) -> Self {
         Self {
-            fdt,
-            offset: fdt.header().off_dt_struct() as usize,
+            fdt: node.fdt,
+            offset: Some(node.offset),
+            depth: 0,
         }
     }
 }
@@ -64,42 +68,44 @@ impl<'a> Iterator for FdtEventIter<'a> {
     type Item = FdtEvent<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let mut offset = self.offset?;
         loop {
-            let token = self
-                .fdt
-                .read_token(self.offset)
-                .expect("Fdt should be valid");
+            let token = self.fdt.read_token(offset).expect("Fdt should be valid");
             match token {
                 FdtToken::BeginNode => {
-                    let node_offset = self.offset;
-                    let name_offset = node_offset + FDT_TAGSIZE;
+                    let name_offset = offset + FDT_TAGSIZE;
                     let name = self
                         .fdt
                         .string_at_offset(name_offset, None)
                         .expect("Fdt should be valid");
+                    self.depth += 1;
                     // Skip the name and its NUL terminator.
-                    self.offset = Fdt::align_tag_offset(name_offset + name.len() + 1);
+                    self.offset = Some(Fdt::align_tag_offset(name_offset + name.len() + 1));
                     return Some(FdtEvent::BeginNode {
                         name,
-                        offset: node_offset - self.fdt.header().off_dt_struct() as usize,
+                        offset: offset - self.fdt.header().off_dt_struct() as usize,
                     });
                 }
                 FdtToken::Prop => {
-                    let parsed = InnerPropIter::parse_property(self.fdt, self.offset);
-                    self.offset = Fdt::align_tag_offset(parsed.value_offset + parsed.len);
+                    let parsed = InnerPropIter::parse_property(self.fdt, offset);
+                    self.offset = Some(Fdt::align_tag_offset(parsed.value_offset + parsed.len));
                     return Some(FdtEvent::Property(FdtProperty {
                         name: parsed.name,
                         value: parsed.value,
                     }));
                 }
                 FdtToken::EndNode => {
-                    self.offset += FDT_TAGSIZE;
+                    // The iterator starts at an `FDT_BEGIN_NODE` token and
+                    // stops once the depth is back to zero, so the depth is
+                    // never zero here.
+                    self.depth -= 1;
+                    self.offset = (self.depth > 0).then_some(offset + FDT_TAGSIZE);
                     return Some(FdtEvent::EndNode);
                 }
-                FdtToken::Nop => self.offset += FDT_TAGSIZE,
-                // The offset is not advanced past `FDT_END`, so every
-                // subsequent call returns `None` as well.
-                FdtToken::End => return None,
+                FdtToken::Nop => offset += FDT_TAGSIZE,
+                // `FDT_END` may only follow the end of the root node, and the
+                // iterator stops before reading it.
+                FdtToken::End => panic!("Fdt should be valid"),
             }
         }
     }
