@@ -61,6 +61,8 @@ fuzz_target!(|data: &[u8]| {
             }
         }
 
+        fdt.events().for_each(drop);
+
         walk(&fdt.root());
     }
 });
