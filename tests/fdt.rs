@@ -774,9 +774,13 @@ fn events_on_traversal_dtb() {
 /// Number of nodes in the generated DTBs used by the large `events_*` tests.
 ///
 /// Visiting a 100,000-deep chain through `children()` takes minutes, while
-/// `events()` takes milliseconds. Miri is much slower, so it uses a smaller
-/// tree.
-const LARGE_TREE_NODES: usize = if cfg!(miri) { 1_000 } else { 100_000 };
+/// `events()` takes milliseconds.
+///
+/// Miri is much slower, and what it looks for (undefined behaviour) does not
+/// depend on the number of nodes: every node goes through the same code. It
+/// uses a few hundred nodes, which is still far deeper and wider than real
+/// device trees.
+const LARGE_TREE_NODES: usize = if cfg!(miri) { 256 } else { 100_000 };
 
 /// Walks `fdt.events()` and returns the number of nodes and the maximum depth
 /// (where the root is at depth 1).
