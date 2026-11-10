@@ -87,6 +87,9 @@ impl<'a> Iterator for FdtEventIter<'a> {
                     });
                 }
                 FdtToken::Prop => {
+                    // A property outside a node only happens on an unchecked
+                    // FDT.
+                    assert!(self.depth > 0, "Fdt should be valid");
                     let parsed = InnerPropIter::parse_property(self.fdt, offset);
                     self.offset = Some(Fdt::align_tag_offset(parsed.value_offset + parsed.len));
                     return Some(FdtEvent::Property(FdtProperty {

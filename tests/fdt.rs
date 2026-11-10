@@ -756,6 +756,35 @@ fn events_panic_on_end_node_first() {
     for _ in fdt.events() {}
 }
 
+/// Builds a DTB whose structure block has an `FDT_PROP` token before the root
+/// node.
+fn build_dtb_with_property_before_root() -> Vec<u8> {
+    let mut structure = Vec::new();
+    push_token(&mut structure, FDT_PROP);
+    push_token(&mut structure, 4); // len
+    push_token(&mut structure, 0); // nameoff
+    structure.extend_from_slice(&1u32.to_be_bytes());
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    build_dtb(&structure, b"prop\0")
+}
+
+#[test]
+fn property_before_root_is_rejected() {
+    let dtb = build_dtb_with_property_before_root();
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::BadToken(FDT_BEGIN_NODE));
+}
+
+#[test]
+#[should_panic(expected = "Fdt should be valid")]
+fn events_panic_on_property_before_root() {
+    let dtb = build_dtb_with_property_before_root();
+    let fdt = Fdt::new_unchecked(&dtb);
+    for _ in fdt.events() {}
+}
+
 #[test]
 fn events_on_traversal_dtb() {
     let dtb = include_bytes!("dtb/test_traversal.dtb");
