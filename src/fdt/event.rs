@@ -46,20 +46,33 @@ pub enum FdtEvent<'a> {
 /// See [`FdtNode::events`] for details.
 #[derive(Debug, Clone)]
 pub struct FdtEventIter<'a> {
-    pub(crate) fdt: Fdt<'a>,
-    /// The offset of the next token to read, relative to the start of the FDT,
-    /// or `None` once the node the iterator started at has ended.
-    pub(crate) offset: Option<usize>,
-    /// The number of nodes that have started and not yet ended.
-    pub(crate) depth: usize,
+    inner: InnerEventIter<'a>,
+}
+
+#[derive(Debug, Clone)]
+enum InnerEventIter<'a> {
+    /// The node the iterator started at has not ended yet.
+    Running {
+        fdt: Fdt<'a>,
+        /// The offset of the next token to read, relative to the start of the
+        /// FDT.
+        offset: usize,
+        /// The number of nodes that have started and not yet ended. It is zero
+        /// only before the first node starts.
+        depth: usize,
+    },
+    /// The node the iterator started at has ended.
+    Stopped,
 }
 
 impl<'a> FdtEventIter<'a> {
     pub(crate) fn new(node: FdtNode<'a>) -> Self {
         Self {
-            fdt: node.fdt,
-            offset: Some(node.offset),
-            depth: 0,
+            inner: InnerEventIter::Running {
+                fdt: node.fdt,
+                offset: node.offset,
+                depth: 0,
+            },
         }
     }
 }
@@ -68,30 +81,33 @@ impl<'a> Iterator for FdtEventIter<'a> {
     type Item = FdtEvent<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut offset = self.offset?;
+        let InnerEventIter::Running { fdt, offset, depth } = &mut self.inner else {
+            return None;
+        };
+        let fdt = *fdt;
         loop {
-            let token = self.fdt.read_token(offset).expect("Fdt should be valid");
+            let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
                 FdtToken::BeginNode => {
-                    let name_offset = offset + FDT_TAGSIZE;
-                    let name = self
-                        .fdt
+                    let tag_offset = *offset;
+                    let name_offset = tag_offset + FDT_TAGSIZE;
+                    let name = fdt
                         .string_at_offset(name_offset, None)
                         .expect("Fdt should be valid");
-                    self.depth += 1;
+                    *depth += 1;
                     // Skip the name and its NUL terminator.
-                    self.offset = Some(Fdt::align_tag_offset(name_offset + name.len() + 1));
+                    *offset = Fdt::align_tag_offset(name_offset + name.len() + 1);
                     return Some(FdtEvent::BeginNode {
                         name,
-                        offset: offset - self.fdt.header().off_dt_struct() as usize,
+                        offset: tag_offset - fdt.header().off_dt_struct() as usize,
                     });
                 }
                 FdtToken::Prop => {
                     // A property outside a node only happens on an unchecked
                     // FDT.
-                    assert!(self.depth > 0, "Fdt should be valid");
-                    let parsed = InnerPropIter::parse_property(self.fdt, offset);
-                    self.offset = Some(Fdt::align_tag_offset(parsed.value_offset + parsed.len));
+                    assert!(*depth > 0, "Fdt should be valid");
+                    let parsed = InnerPropIter::parse_property(fdt, *offset);
+                    *offset = Fdt::align_tag_offset(parsed.value_offset + parsed.len);
                     return Some(FdtEvent::Property(FdtProperty {
                         name: parsed.name,
                         value: parsed.value,
@@ -99,11 +115,15 @@ impl<'a> Iterator for FdtEventIter<'a> {
                 }
                 FdtToken::EndNode => {
                     // An end before a start only happens on an unchecked FDT.
-                    self.depth = self.depth.checked_sub(1).expect("Fdt should be valid");
-                    self.offset = (self.depth > 0).then_some(offset + FDT_TAGSIZE);
+                    *depth = depth.checked_sub(1).expect("Fdt should be valid");
+                    if *depth == 0 {
+                        self.inner = InnerEventIter::Stopped;
+                    } else {
+                        *offset += FDT_TAGSIZE;
+                    }
                     return Some(FdtEvent::EndNode);
                 }
-                FdtToken::Nop => offset += FDT_TAGSIZE,
+                FdtToken::Nop => *offset += FDT_TAGSIZE,
                 // `FDT_END` may only follow the end of the root node, and the
                 // iterator stops before reading it.
                 FdtToken::End => panic!("Fdt should be valid"),
