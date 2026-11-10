@@ -32,13 +32,21 @@ pub enum FdtEvent<'a> {
         /// It can be passed to [`Fdt::node_at_offset`] to get the
         /// corresponding [`FdtNode`].
         offset: usize,
+        /// The depth of the node below the node the iterator started at: 0 for
+        /// that node, 1 for its children, and so on. For [`Fdt::events`], it is
+        /// the depth below the root node.
+        depth: usize,
     },
     /// A property of the node that was most recently started (an `FDT_PROP`
     /// token).
     Property(FdtProperty<'a>),
     /// The end of the node that was most recently started and not yet ended
     /// (an `FDT_END_NODE` token).
-    EndNode,
+    EndNode {
+        /// The depth of the node that ends, the same as in its
+        /// [`FdtEvent::BeginNode`].
+        depth: usize,
+    },
 }
 
 /// An iterator over the events of a device tree node and its descendants.
@@ -94,12 +102,14 @@ impl<'a> Iterator for FdtEventIter<'a> {
                     let name = fdt
                         .string_at_offset(name_offset, None)
                         .expect("Fdt should be valid");
+                    let node_depth = *depth;
                     *depth += 1;
                     // Skip the name and its NUL terminator.
                     *offset = Fdt::align_tag_offset(name_offset + name.len() + 1);
                     return Some(FdtEvent::BeginNode {
                         name,
                         offset: tag_offset - fdt.header().off_dt_struct() as usize,
+                        depth: node_depth,
                     });
                 }
                 FdtToken::Prop => {
@@ -116,12 +126,13 @@ impl<'a> Iterator for FdtEventIter<'a> {
                 FdtToken::EndNode => {
                     // An end before a start only happens on an unchecked FDT.
                     *depth = depth.checked_sub(1).expect("Fdt should be valid");
-                    if *depth == 0 {
+                    let node_depth = *depth;
+                    if node_depth == 0 {
                         self.inner = InnerEventIter::Stopped;
                     } else {
                         *offset += FDT_TAGSIZE;
                     }
-                    return Some(FdtEvent::EndNode);
+                    return Some(FdtEvent::EndNode { depth: node_depth });
                 }
                 FdtToken::Nop => *offset += FDT_TAGSIZE,
                 // `FDT_END` may only follow the end of the root node, and the

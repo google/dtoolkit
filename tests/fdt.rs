@@ -644,17 +644,19 @@ fn with_options_max_size_rejects_oversized_slice() {
 }
 
 /// Returns the events of `node` and its descendants, found by a recursive
-/// traversal through `properties()` and `children()`.
-fn collect_events_recursive<'a>(node: FdtNode<'a>, out: &mut Vec<FdtEvent<'a>>) {
+/// traversal through `properties()` and `children()`, where `node` is at
+/// `depth`.
+fn collect_events_recursive<'a>(node: FdtNode<'a>, depth: usize, out: &mut Vec<FdtEvent<'a>>) {
     out.push(FdtEvent::BeginNode {
         name: node.name(),
         offset: node.offset(),
+        depth,
     });
     out.extend(node.properties().map(FdtEvent::Property));
     for child in node.children() {
-        collect_events_recursive(child, out);
+        collect_events_recursive(child, depth + 1, out);
     }
-    out.push(FdtEvent::EndNode);
+    out.push(FdtEvent::EndNode { depth });
 }
 
 #[test]
@@ -662,7 +664,7 @@ fn events_match_recursive_traversal() {
     for (dtb, _dts, name) in ALL_DT_FILES {
         let fdt = Fdt::new(dtb).unwrap();
         let mut expected = Vec::new();
-        collect_events_recursive(fdt.root(), &mut expected);
+        collect_events_recursive(fdt.root(), 0, &mut expected);
 
         let events: Vec<_> = fdt.events().collect();
         assert_eq!(events, expected, "{name}");
@@ -671,13 +673,14 @@ fn events_match_recursive_traversal() {
             if let FdtEvent::BeginNode {
                 name: node_name,
                 offset,
+                ..
             } = event
             {
                 let node = fdt.node_at_offset(offset).unwrap();
                 assert_eq!(node.name(), node_name, "{name}");
 
                 let mut expected = Vec::new();
-                collect_events_recursive(node, &mut expected);
+                collect_events_recursive(node, 0, &mut expected);
                 assert_eq!(node.events().collect::<Vec<_>>(), expected, "{name}");
             }
         }
@@ -691,15 +694,16 @@ fn node_events_stop_at_the_end_of_the_node() {
     let a = fdt.find_node("/a").unwrap();
     let mut events = a.events();
 
-    for expected in ["a", "b", "c"] {
+    for (expected_depth, expected_name) in [(0, "a"), (1, "b"), (2, "c")] {
         assert!(matches!(
             events.next(),
-            Some(FdtEvent::BeginNode { name, .. }) if name == expected
+            Some(FdtEvent::BeginNode { name, depth, .. })
+                if name == expected_name && depth == expected_depth
         ));
     }
     assert!(matches!(events.next(), Some(FdtEvent::Property(_))));
-    for _ in 0..3 {
-        assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    for depth in [2, 1, 0] {
+        assert_eq!(events.next(), Some(FdtEvent::EndNode { depth }));
     }
     // The sibling `/d` belongs to the root, not to `/a`.
     assert_eq!(events.next(), None);
@@ -791,17 +795,22 @@ fn events_on_traversal_dtb() {
     let fdt = Fdt::new(dtb).unwrap();
     let mut events = fdt.events();
 
-    let mut expect_begin = |expected: &str| match events.next() {
-        Some(FdtEvent::BeginNode { name, offset }) => {
+    let mut expect_begin = |expected: &str, expected_depth: usize| match events.next() {
+        Some(FdtEvent::BeginNode {
+            name,
+            offset,
+            depth,
+        }) => {
             assert_eq!(name, expected);
+            assert_eq!(depth, expected_depth);
             offset
         }
         other => panic!("expected the start of {expected:?}, got {other:?}"),
     };
-    assert_eq!(expect_begin(""), 0);
-    let a = expect_begin("a");
-    let b = expect_begin("b");
-    let c = expect_begin("c");
+    assert_eq!(expect_begin("", 0), 0);
+    let a = expect_begin("a", 1);
+    let b = expect_begin("b", 2);
+    let c = expect_begin("c", 3);
     assert_eq!(a, fdt.find_node("/a").unwrap().offset());
     assert_eq!(b, fdt.find_node("/a/b").unwrap().offset());
     assert_eq!(c, fdt.find_node("/a/b/c").unwrap().offset());
@@ -812,15 +821,19 @@ fn events_on_traversal_dtb() {
     assert_eq!(prop.name(), "prop");
     assert_eq!(prop.value_as::<u32>().unwrap(), 1234);
 
-    for _ in 0..3 {
-        assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    for depth in [3, 2, 1] {
+        assert_eq!(events.next(), Some(FdtEvent::EndNode { depth }));
     }
     assert!(matches!(
         events.next(),
-        Some(FdtEvent::BeginNode { name: "d", .. })
+        Some(FdtEvent::BeginNode {
+            name: "d",
+            depth: 1,
+            ..
+        })
     ));
-    assert_eq!(events.next(), Some(FdtEvent::EndNode));
-    assert_eq!(events.next(), Some(FdtEvent::EndNode));
+    assert_eq!(events.next(), Some(FdtEvent::EndNode { depth: 1 }));
+    assert_eq!(events.next(), Some(FdtEvent::EndNode { depth: 0 }));
     assert_eq!(events.next(), None);
     assert_eq!(events.next(), None);
 }
@@ -836,8 +849,9 @@ fn events_on_traversal_dtb() {
 /// device trees.
 const LARGE_TREE_NODES: usize = if cfg!(miri) { 256 } else { 100_000 };
 
-/// Walks `fdt.events()` and returns the number of nodes and the maximum depth
-/// (where the root is at depth 1).
+/// Walks `fdt.events()`, checks the depth that each event carries against a
+/// count of the nodes that have started and not yet ended, and returns the
+/// number of nodes and the maximum of that count (1 for the root alone).
 fn count_nodes_and_depth(fdt: Fdt<'_>) -> (usize, usize) {
     let mut nodes = 0;
     let mut depth = 0;
@@ -845,16 +859,24 @@ fn count_nodes_and_depth(fdt: Fdt<'_>) -> (usize, usize) {
     let mut last_offset = None;
     for event in fdt.events() {
         match event {
-            FdtEvent::BeginNode { name, offset } => {
+            FdtEvent::BeginNode {
+                name,
+                offset,
+                depth: event_depth,
+            } => {
                 assert!(last_offset < Some(offset));
                 last_offset = Some(offset);
                 assert_eq!(name, if nodes == 0 { "" } else { "a" });
+                assert_eq!(event_depth, depth);
                 nodes += 1;
                 depth += 1;
                 max_depth = max_depth.max(depth);
             }
             FdtEvent::Property(_) => panic!("unexpected property"),
-            FdtEvent::EndNode => depth -= 1,
+            FdtEvent::EndNode { depth: event_depth } => {
+                depth -= 1;
+                assert_eq!(event_depth, depth);
+            }
         }
     }
     assert_eq!(depth, 0);
@@ -887,7 +909,7 @@ fn events_match_recursive_traversal_on_generated_trees() {
     for dtb in [build_chain_dtb(nodes), build_flat_dtb(nodes)] {
         let fdt = Fdt::new(&dtb).unwrap();
         let mut expected = Vec::new();
-        collect_events_recursive(fdt.root(), &mut expected);
+        collect_events_recursive(fdt.root(), 0, &mut expected);
         assert_eq!(fdt.events().collect::<Vec<_>>(), expected);
     }
 }
@@ -916,14 +938,16 @@ fn events_skip_nops() {
         FdtEvent::BeginNode {
             name: "",
             offset: 0,
+            depth: 0,
         },
         FdtEvent::Property(prop),
         FdtEvent::BeginNode {
             name: "child",
             offset: 32,
+            depth: 1,
         },
-        FdtEvent::EndNode,
-        FdtEvent::EndNode,
+        FdtEvent::EndNode { depth: 1 },
+        FdtEvent::EndNode { depth: 0 },
     ] = events[..]
     else {
         panic!("unexpected events: {events:?}");

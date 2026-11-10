@@ -917,23 +917,18 @@ impl<'a> Fdt<'a> {
     /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     ///
-    /// let mut depth = 0;
     /// let mut nodes = Vec::new();
     /// let mut properties = Vec::new();
     /// for event in fdt.events() {
     ///     match event {
-    ///         FdtEvent::BeginNode { name, .. } => {
-    ///             nodes.push((depth, name));
-    ///             depth += 1;
-    ///         }
+    ///         FdtEvent::BeginNode { name, depth, .. } => nodes.push((depth, name)),
     ///         FdtEvent::Property(property) => properties.push(property.name()),
-    ///         FdtEvent::EndNode => depth -= 1,
+    ///         FdtEvent::EndNode { .. } => {}
     ///     }
     /// }
     ///
     /// assert_eq!(nodes, [(0, ""), (1, "a"), (2, "b"), (3, "c"), (1, "d")]);
     /// assert_eq!(properties, ["prop"]);
-    /// assert_eq!(depth, 0);
     /// ```
     #[must_use]
     pub fn events(self) -> FdtEventIter<'a> {

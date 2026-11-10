@@ -110,7 +110,8 @@ impl<'a> FdtNode<'a> {
     /// events are its [`FdtEvent::BeginNode`], one [`FdtEvent::Property`] for
     /// each of its properties, the events of each of its children, and its
     /// [`FdtEvent::EndNode`]. The first event is the start of this node, and
-    /// the last one is its end.
+    /// the last one is its end. Each `BeginNode` and `EndNode` carries the
+    /// depth of its node below this node, which is 0 for this node itself.
     ///
     /// The events do not carry an [`FdtNode`], because an `FdtNode` needs the
     /// `#address-cells` and `#size-cells` properties of its parent, which a
@@ -143,14 +144,14 @@ impl<'a> FdtNode<'a> {
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let node = fdt.find_node("/a/b").unwrap();
     ///
-    /// let names: Vec<_> = node
+    /// let nodes: Vec<_> = node
     ///     .events()
     ///     .filter_map(|event| match event {
-    ///         FdtEvent::BeginNode { name, .. } => Some(name),
+    ///         FdtEvent::BeginNode { name, depth, .. } => Some((depth, name)),
     ///         _ => None,
     ///     })
     ///     .collect();
-    /// assert_eq!(names, ["b", "c"]);
+    /// assert_eq!(nodes, [(0, "b"), (1, "c")]);
     /// ```
     ///
     /// [`FdtEvent::BeginNode`]: super::FdtEvent::BeginNode
