@@ -18,8 +18,8 @@ use dtoolkit::{Node, Property};
 mod common;
 
 use common::{
-    FDT_END, FDT_END_NODE, FDT_NOP, FDT_PROP, build_chain_dtb, build_dtb, build_flat_dtb,
-    push_begin_node, push_token,
+    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_NOP, FDT_PROP, build_chain_dtb, build_dtb,
+    build_flat_dtb, push_begin_node, push_token,
 };
 
 #[test]
@@ -727,6 +727,31 @@ fn end_inside_node_is_rejected() {
 #[should_panic(expected = "Fdt should be valid")]
 fn events_panic_on_end_inside_node() {
     let dtb = build_dtb_with_end_inside_node();
+    let fdt = Fdt::new_unchecked(&dtb);
+    for _ in fdt.events() {}
+}
+
+/// Builds a DTB whose structure block starts with an `FDT_END_NODE` token.
+fn build_dtb_with_end_node_first() -> Vec<u8> {
+    let mut structure = Vec::new();
+    push_token(&mut structure, FDT_END_NODE);
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    build_dtb(&structure, &[])
+}
+
+#[test]
+fn end_node_first_is_rejected() {
+    let dtb = build_dtb_with_end_node_first();
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::BadToken(FDT_BEGIN_NODE));
+}
+
+#[test]
+#[should_panic(expected = "Fdt should be valid")]
+fn events_panic_on_end_node_first() {
+    let dtb = build_dtb_with_end_node_first();
     let fdt = Fdt::new_unchecked(&dtb);
     for _ in fdt.events() {}
 }

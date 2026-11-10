@@ -95,10 +95,8 @@ impl<'a> Iterator for FdtEventIter<'a> {
                     }));
                 }
                 FdtToken::EndNode => {
-                    // The iterator starts at an `FDT_BEGIN_NODE` token and
-                    // stops once the depth is back to zero, so the depth is
-                    // never zero here.
-                    self.depth -= 1;
+                    // An end before a start only happens on an unchecked FDT.
+                    self.depth = self.depth.checked_sub(1).expect("Fdt should be valid");
                     self.offset = (self.depth > 0).then_some(offset + FDT_TAGSIZE);
                     return Some(FdtEvent::EndNode);
                 }
