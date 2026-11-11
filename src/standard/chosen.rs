@@ -10,17 +10,7 @@ use core::fmt::{self, Display, Formatter};
 use core::ops::Deref;
 
 use crate::error::PropertyError;
-use crate::fdt::{Fdt, FdtNode};
 use crate::{Node, Property};
-
-impl<'a> Fdt<'a> {
-    /// Returns the `/chosen` node, if it exists.
-    #[must_use]
-    pub fn chosen(self) -> Option<Chosen<FdtNode<'a>>> {
-        let node = self.find_node("/chosen")?;
-        Some(Chosen { node })
-    }
-}
 
 /// Typed wrapper for a `/chosen` node.
 #[derive(Debug, Clone, Copy)]
@@ -43,6 +33,10 @@ impl<N: Display> Display for Chosen<N> {
 }
 
 impl<'a, N: Node<'a>> Chosen<N> {
+    pub(super) const fn new(node: N) -> Self {
+        Self { node }
+    }
+
     /// Returns the value of the standard `bootargs` property.
     ///
     /// # Errors
