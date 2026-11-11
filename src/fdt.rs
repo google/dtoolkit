@@ -16,6 +16,7 @@
 //!
 //! [Flattened Device Tree (FDT)]: https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html
 
+pub(crate) mod event;
 pub(crate) mod node;
 pub(crate) mod property;
 
@@ -31,6 +32,7 @@ use zerocopy::byteorder::big_endian;
 #[allow(clippy::wildcard_imports)]
 use zerocopy_derive::*;
 
+pub use self::event::{FdtEvent, FdtEventIter};
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
 use crate::Node;
@@ -891,6 +893,46 @@ impl<'a> Fdt<'a> {
                 .last()?;
             current = child;
         }
+    }
+
+    /// Returns an iterator over the events in the structure block of the
+    /// device tree: the start of a node, a property, and the end of a node.
+    ///
+    /// This is the same as `self.root().events()`; see [`FdtNode::events`]
+    /// for details. The first event is the start of the root node, and the
+    /// last one is its end.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`Fdt`] structure was constructed using
+    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
+    /// valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Property;
+    /// use dtoolkit::fdt::{Fdt, FdtEvent};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    ///
+    /// let mut nodes = Vec::new();
+    /// let mut properties = Vec::new();
+    /// for event in fdt.events() {
+    ///     match event {
+    ///         FdtEvent::BeginNode { name, depth, .. } => nodes.push((depth, name)),
+    ///         FdtEvent::Property(property) => properties.push(property.name()),
+    ///         FdtEvent::EndNode { .. } => {}
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(nodes, [(0, ""), (1, "a"), (2, "b"), (3, "c"), (1, "d")]);
+    /// assert_eq!(properties, ["prop"]);
+    /// ```
+    #[must_use]
+    pub fn events(self) -> FdtEventIter<'a> {
+        self.root().events()
     }
 
     pub(crate) fn read_token(self, offset: usize) -> Result<FdtToken, FdtParseError> {

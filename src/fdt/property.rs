@@ -154,7 +154,7 @@ impl InnerPropIter {
     }
 
     #[must_use]
-    fn parse_property(fdt: Fdt, offset: usize) -> ParsedProperty {
+    pub(crate) fn parse_property(fdt: Fdt, offset: usize) -> ParsedProperty {
         let (header, _) =
             FdtPropertyHeader::ref_from_prefix(&fdt.data[offset..]).expect("Fdt should be valid");
         let len = header.len() as usize;
