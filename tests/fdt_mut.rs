@@ -679,3 +679,17 @@ fn from_slice_buffer_into_fdt_uses_totalsize() {
     let fdt = Fdt::from(fdt_mut);
     assert_eq!(fdt.data().len(), dtb.len());
 }
+
+#[test]
+fn from_slice_rejects_struct_block_shorter_than_contents() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut data = dtb.to_vec();
+
+    // Shrink `size_dt_struct` to cover the root node's FDT_BEGIN_NODE and
+    // name only; the rest of the structure block is still walked by the
+    // parser, but editing the tree would use the shrunken size.
+    data[36..40].copy_from_slice(&8u32.to_be_bytes());
+
+    let err = FdtMut::from_slice(&mut data).unwrap_err();
+    assert!(matches!(err.kind, FdtErrorKind::InvalidHeader(_)));
+}

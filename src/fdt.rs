@@ -522,6 +522,17 @@ impl<'a> Fdt<'a> {
             ));
         }
 
+        // The walk above is bounded by the blob, not by `size_dt_struct`.
+        // Check that FDT_END lies within the structure block declared by the
+        // header, as `FdtMut` relies on `size_dt_struct` and `off_dt_strings`
+        // to bound the structure block.
+        if end_offset + FDT_TAGSIZE > offset + header.size_dt_struct() as usize {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidHeader("struct block does not contain FDT_END"),
+                offset_of!(FdtHeader, size_dt_struct),
+            ));
+        }
+
         Ok(())
     }
 
@@ -1071,6 +1082,73 @@ mod tests {
         header[23] = 0x10;
         let result = Fdt::new(&header);
         assert!(matches!(result, Err(e) if matches!(e.kind, FdtErrorKind::UnsupportedVersion(16))));
+    }
+
+    /// A root node with one child, `a`. The structure block is 28 bytes.
+    const FDT_CHILD_OK: &[u8] = &[
+        0xd0, 0x0d, 0xfe, 0xed, // magic
+        0x00, 0x00, 0x00, 0x54, // totalsize = 84
+        0x00, 0x00, 0x00, 0x38, // off_dt_struct = 56
+        0x00, 0x00, 0x00, 0x54, // off_dt_strings = 84
+        0x00, 0x00, 0x00, 0x28, // off_mem_rsvmap = 40
+        0x00, 0x00, 0x00, 0x11, // version = 17
+        0x00, 0x00, 0x00, 0x10, // last_comp_version = 16
+        0x00, 0x00, 0x00, 0x00, // boot_cpuid_phys = 0
+        0x00, 0x00, 0x00, 0x00, // size_dt_strings = 0
+        0x00, 0x00, 0x00, 0x1c, // size_dt_struct = 28
+        0x00, 0x00, 0x00, 0x00, // memory reservation
+        0x00, 0x00, 0x00, 0x00, // ...
+        0x00, 0x00, 0x00, 0x00, // ...
+        0x00, 0x00, 0x00, 0x00, // ...
+        0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+        0x00, 0x00, 0x00, 0x00, // ""
+        0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+        b'a', 0x00, 0x00, 0x00, // "a"
+        0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+        0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+        0x00, 0x00, 0x00, 0x09, // FDT_END
+    ];
+
+    #[test]
+    fn struct_block_must_contain_fdt_end() {
+        assert!(Fdt::new(FDT_CHILD_OK).is_ok());
+
+        // `size_dt_struct` covers only part of the structure block that the
+        // walk to FDT_END covers. In the last case the strings block begins
+        // inside the structure block, which the header checks allow because
+        // `off_dt_struct + size_dt_struct <= off_dt_strings` still holds.
+        for (size_dt_struct, off_dt_strings) in [(8, 84), (4, 84), (8, 64)] {
+            let mut data = FDT_CHILD_OK.to_vec();
+            data[12..16].copy_from_slice(&u32::to_be_bytes(off_dt_strings));
+            data[36..40].copy_from_slice(&u32::to_be_bytes(size_dt_struct));
+            let err = Fdt::new(&data).unwrap_err();
+            assert_eq!(
+                err,
+                FdtParseError::new(
+                    FdtErrorKind::InvalidHeader("struct block does not contain FDT_END"),
+                    offset_of!(FdtHeader, size_dt_struct)
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn struct_block_may_extend_past_fdt_end() {
+        // Both NOPs and padding after FDT_END are accepted as long as they lie
+        // within `size_dt_struct`.
+        for trailer in [[FDT_NOP, FDT_NOP], [0, 0]] {
+            let mut data = FDT_CHILD_OK.to_vec();
+            for token in trailer {
+                data.extend_from_slice(&token.to_be_bytes());
+            }
+            // The (empty) strings block follows the structure block, so both
+            // `totalsize` and `off_dt_strings` are the new length.
+            let totalsize = u32::try_from(data.len()).unwrap();
+            data[4..8].copy_from_slice(&totalsize.to_be_bytes());
+            data[12..16].copy_from_slice(&totalsize.to_be_bytes());
+            data[36..40].copy_from_slice(&(totalsize - 56).to_be_bytes());
+            assert!(Fdt::new(&data).is_ok());
+        }
     }
 
     #[test]
