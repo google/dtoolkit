@@ -14,6 +14,8 @@ use twox_hash::xxhash64;
 
 use super::property::DeviceTreeProperty;
 use crate::error::ModelError;
+use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::util::impl_read_only_node_methods;
 use crate::{Node, Property};
 
 /// A mutable, in-memory representation of a device tree node.
@@ -37,13 +39,20 @@ impl Default for DeviceTreeNode {
     }
 }
 
-impl<'a> Node<'a> for &'a DeviceTreeNode {
+/// A read-only view of a [`DeviceTreeNode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DeviceTreeNodeRef<'a> {
+    pub(crate) node: &'a DeviceTreeNode,
+    pub(crate) parent_address_space: AddressSpaceProperties,
+}
+
+impl<'a> Node<'a> for DeviceTreeNodeRef<'a> {
     type Property = &'a DeviceTreeProperty;
     type Properties = private::DeviceTreePropertyRefIter<'a>;
     type Children = private::DeviceTreeChildIter<'a>;
 
     fn name(self) -> &'a str {
-        &self.name
+        &self.node.name
     }
 
     /// Finds a property by its name and returns a reference to it.
@@ -64,16 +73,16 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
     /// assert_eq!(prop.value(), &[1, 2, 3, 4]);
     /// ```
     fn property(self, name: &str) -> Option<&'a DeviceTreeProperty> {
-        self.properties.get(name)
+        self.node.properties.get(name)
     }
 
     fn properties(self) -> private::DeviceTreePropertyRefIter<'a> {
         private::DeviceTreePropertyRefIter {
-            inner: self.properties.values(),
+            inner: self.node.properties.values(),
         }
     }
 
-    /// Finds a child by its name and returns a reference to it.
+    /// Finds a child by its name and returns a read-only view of it.
     ///
     /// # Performance
     ///
@@ -91,9 +100,12 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
     /// let child = node.child("child");
     /// assert!(child.is_some());
     /// ```
-    fn child(self, name: &str) -> Option<&'a DeviceTreeNode> {
+    fn child(self, name: &str) -> Option<Self> {
         if name.contains('@') {
-            self.children.get(name)
+            self.node.children.get(name).map(|node| Self {
+                node,
+                parent_address_space: self.address_space(),
+            })
         } else {
             self.children()
                 .find(|child| child.name_without_address() == name)
@@ -102,7 +114,8 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
 
     fn children(self) -> private::DeviceTreeChildIter<'a> {
         private::DeviceTreeChildIter {
-            inner: self.children.values(),
+            inner: self.node.children.values(),
+            parent_address_space: self.address_space(),
         }
     }
 }
@@ -110,7 +123,8 @@ impl<'a> Node<'a> for &'a DeviceTreeNode {
 mod private {
     use alloc::string::String;
 
-    use crate::model::{DeviceTreeNode, DeviceTreeProperty};
+    use crate::model::{DeviceTreeNode, DeviceTreeNodeRef, DeviceTreeProperty};
+    use crate::standard::AddressSpaceProperties;
 
     /// An iterator over the properties of a device tree node (by reference).
     #[derive(Debug, Clone)]
@@ -130,13 +144,18 @@ mod private {
     #[derive(Debug, Clone)]
     pub struct DeviceTreeChildIter<'a> {
         pub inner: indexmap::map::Values<'a, String, DeviceTreeNode>,
+        pub(crate) parent_address_space: AddressSpaceProperties,
     }
 
     impl<'a> Iterator for DeviceTreeChildIter<'a> {
-        type Item = &'a DeviceTreeNode;
+        type Item = DeviceTreeNodeRef<'a>;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.inner.next()
+            let node = self.inner.next()?;
+            Some(DeviceTreeNodeRef {
+                node,
+                parent_address_space: self.parent_address_space,
+            })
         }
     }
 }
@@ -353,6 +372,42 @@ impl DeviceTreeNode {
     pub fn remove_child(&mut self, name: &str) -> Option<DeviceTreeNode> {
         self.children.shift_remove(name)
     }
+
+    /// Returns a read-only view of this node.
+    ///
+    /// Note that because [`DeviceTreeNode`] does not store a reference to its
+    /// parent node, the returned view uses
+    /// [`AddressSpaceProperties::default()`] as its parent address space.
+    /// To preserve the parent address space from an ancestor, traverse from
+    /// [`DeviceTree::root`](crate::model::DeviceTree::root),
+    /// [`DeviceTree::find_node`](crate::model::DeviceTree::find_node), or a
+    /// parent node's [`child`](Self::child) / [`children`](Self::children)
+    /// methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::model::{DeviceTreeNode, DeviceTreeProperty};
+    /// use dtoolkit::standard::NodeStandard;
+    ///
+    /// let mut node = DeviceTreeNode::new("uart@1000").unwrap();
+    /// node.add_property(DeviceTreeProperty::new("compatible", "ns16550a").unwrap());
+    /// assert!(node.as_read_only().is_compatible("ns16550a"));
+    /// ```
+    #[must_use]
+    pub fn as_read_only(&self) -> DeviceTreeNodeRef<'_> {
+        DeviceTreeNodeRef {
+            node: self,
+            parent_address_space: AddressSpaceProperties::default(),
+        }
+    }
+
+    impl_read_only_node_methods!(
+        node = DeviceTreeNodeRef<'_>,
+        property = &DeviceTreeProperty,
+        properties = private::DeviceTreePropertyRefIter<'_>,
+        children = private::DeviceTreeChildIter<'_>,
+    );
 }
 
 impl DeviceTreeNode {
