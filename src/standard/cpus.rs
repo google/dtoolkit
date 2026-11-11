@@ -11,6 +11,7 @@ use core::ops::Deref;
 
 use crate::error::{PropertyError, StandardError};
 use crate::fdt::{Fdt, FdtNode};
+use crate::standard::NodeStandard;
 use crate::values::FdtStringListIterator;
 use crate::{Cells, Node, Property};
 
@@ -106,9 +107,7 @@ impl<'a, N: Node<'a>> Cpu<N> {
             .map(Property::value_as)
             .transpose()
     }
-}
 
-impl<'a> Cpu<FdtNode<'a>> {
     /// Returns an iterator over the IDs of the CPU, from the standard `reg`
     /// property.
     ///
@@ -117,7 +116,7 @@ impl<'a> Cpu<FdtNode<'a>> {
     /// Returns an error if a property's name or value cannot be read, or the
     /// `reg` property is missing, or the size of the value isn't a multiple of
     /// the expected number of address and size cells.
-    pub fn ids(self) -> Result<impl Iterator<Item = Cells<'a>> + 'a, StandardError> {
+    pub fn ids(self) -> Result<impl Iterator<Item = Cells<'a>> + use<'a, N>, StandardError> {
         Ok(self
             .node
             .reg()?

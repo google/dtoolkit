@@ -22,7 +22,6 @@ pub use self::ranges::Range;
 pub use self::reg::Reg;
 pub use self::status::Status;
 use crate::error::{PropertyError, StandardError};
-use crate::fdt::FdtNode;
 use crate::{Node, Property};
 
 pub(crate) const DEFAULT_ADDRESS_CELLS: u32 = 2;
@@ -157,20 +156,17 @@ pub trait NodeStandard<'a>: Node<'a> {
     fn dma_coherent(self) -> bool {
         self.property("dma-coherent").is_some()
     }
-}
 
-impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
-
-impl<'a> FdtNode<'a> {
     /// Returns the value of the standard `reg` property.
     ///
     /// # Errors
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of address and size cells.
-    pub fn reg(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + 'a>, PropertyError> {
-        let address_cells = self.parent_address_space.address_cells as usize;
-        let size_cells = self.parent_address_space.size_cells as usize;
+    fn reg(self) -> Result<Option<impl Iterator<Item = Reg<'a>> + use<'a, Self>>, PropertyError> {
+        let parent_address_space = self.parent_address_space();
+        let address_cells = parent_address_space.address_cells as usize;
+        let size_cells = parent_address_space.size_cells as usize;
         if let Some(property) = self.property("reg") {
             Ok(Some(
                 property
@@ -188,13 +184,15 @@ impl<'a> FdtNode<'a> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of cells.
-    pub fn ranges(self) -> Result<Option<impl Iterator<Item = Range<'a>> + 'a>, PropertyError> {
+    fn ranges(
+        self,
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a, Self>>, PropertyError> {
         if let Some(property) = self.property("ranges") {
             Ok(Some(
                 property
                     .as_prop_encoded_array([
                         self.address_cells().unwrap_or(DEFAULT_ADDRESS_CELLS) as usize,
-                        self.parent_address_space.address_cells as usize,
+                        self.parent_address_space().address_cells as usize,
                         self.size_cells().unwrap_or(DEFAULT_SIZE_CELLS) as usize,
                     ])?
                     .map(Range::from_cells),
@@ -210,13 +208,15 @@ impl<'a> FdtNode<'a> {
     ///
     /// Returns an error if the size of the value isn't a multiple of the
     /// expected number of cells.
-    pub fn dma_ranges(self) -> Result<Option<impl Iterator<Item = Range<'a>> + 'a>, PropertyError> {
+    fn dma_ranges(
+        self,
+    ) -> Result<Option<impl Iterator<Item = Range<'a>> + use<'a, Self>>, PropertyError> {
         if let Some(property) = self.property("dma-ranges") {
             Ok(Some(
                 property
                     .as_prop_encoded_array([
                         self.address_cells().unwrap_or(DEFAULT_ADDRESS_CELLS) as usize,
-                        self.parent_address_space.address_cells as usize,
+                        self.parent_address_space().address_cells as usize,
                         self.size_cells().unwrap_or(DEFAULT_SIZE_CELLS) as usize,
                     ])?
                     .map(Range::from_cells),
@@ -226,6 +226,8 @@ impl<'a> FdtNode<'a> {
         }
     }
 }
+
+impl<'a, T: Node<'a>> NodeStandard<'a> for T {}
 
 /// The `#address-cells` and `#size-cells` properties of a node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
