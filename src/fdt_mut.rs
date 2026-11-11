@@ -159,17 +159,21 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 
     fn find_existing_string(&self, name: &str) -> Option<u32> {
-        let fdt = self.as_read_only();
-        let header = fdt.header();
+        let header = self.as_read_only().header();
+        let str_block_offset = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
+        let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
 
+        // Validation only covers the strings that properties reference, so the
+        // block may contain bytes that are not a valid string. Comparing raw
+        // bytes means such bytes never match `name` and never panic. A trailing
+        // piece without a null terminator is skipped.
         let mut curr_offset = 0;
-        while curr_offset < str_block_size {
-            let s = fdt.string(curr_offset).expect("FdtMut should be valid");
-            if s == name {
+        for s in str_block.split_inclusive(|&b| b == 0) {
+            if s.strip_suffix(&[0]) == Some(name.as_bytes()) {
                 return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
             }
-            curr_offset += s.len() + 1; // plus null terminator
+            curr_offset += s.len();
         }
 
         None
