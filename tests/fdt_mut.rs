@@ -581,6 +581,78 @@ fn add_string_deduplication() {
     );
 }
 
+/// Builds a version 17 DTB consisting of the header, one empty memory
+/// reservation entry, `structure` and `strings`. The buffer is padded with
+/// `spare` zero bytes so the tree can grow in place.
+fn build_dtb(structure: &[u32], strings: &[u8], spare: usize) -> Vec<u8> {
+    let structure: Vec<u8> = structure.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let off_dt_struct = 40 + 16;
+    let off_dt_strings = off_dt_struct + structure.len();
+    let totalsize = off_dt_strings + strings.len();
+
+    let mut dtb = Vec::new();
+    for word in [
+        0xd00d_feed,
+        totalsize,
+        off_dt_struct,
+        off_dt_strings,
+        40, // off_mem_rsvmap
+        17, // version
+        16, // last_comp_version
+        0,  // boot_cpuid_phys
+        strings.len(),
+        structure.len(),
+    ] {
+        let word = u32::try_from(word).expect("header field fits in u32");
+        dtb.extend_from_slice(&word.to_be_bytes());
+    }
+    dtb.extend_from_slice(&[0; 16]);
+    dtb.extend_from_slice(&structure);
+    dtb.extend_from_slice(strings);
+    dtb.resize(dtb.len() + spare, 0);
+    dtb
+}
+
+/// Adds a property to the root node of a tree whose strings block is
+/// `strings`, and returns how many bytes the tree grew by.
+fn add_property_with_strings(strings: &[u8]) -> usize {
+    // FDT_BEGIN_NODE with an empty name, FDT_END_NODE, FDT_END
+    let mut dtb = build_dtb(&[1, 0, 2, 9], strings, 64);
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).expect("the DTB should be valid");
+    let initial_size = fdt_mut.as_read_only().data().len();
+
+    fdt_mut
+        .root_mut()
+        .add_property("x", 0x1234_5678u32)
+        .expect("the buffer should have enough spare capacity");
+
+    let fdt = fdt_mut.as_read_only();
+    let prop = fdt
+        .root()
+        .property("x")
+        .expect("the added property should be present");
+    assert_eq!(
+        prop.value_as::<u32>().expect("the value should be a u32"),
+        0x1234_5678
+    );
+    fdt.data().len() - initial_size
+}
+
+#[test]
+fn add_property_with_unreferenced_bytes_in_strings_block() {
+    // Validation does not check strings that no property references, so the
+    // lookup for an existing string must not fail on them. A new property adds
+    // 16 bytes to the structure block (FDT_TAGSIZE * 3 + value length) and, if
+    // its name is not found, 2 bytes ("x\0") to the strings block.
+
+    // not null-terminated
+    assert_eq!(add_property_with_strings(&[0xff]), 16 + 2);
+    // null-terminated, but not valid UTF-8
+    assert_eq!(add_property_with_strings(&[0xff, 0x00]), 16 + 2);
+    // the name already exists before the invalid bytes and should be reused
+    assert_eq!(add_property_with_strings(b"x\0\xff"), 16);
+}
+
 #[test]
 fn property_mut_methods() {
     let dtb = include_bytes!("dtb/test_props.dtb");
