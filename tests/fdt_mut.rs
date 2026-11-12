@@ -13,6 +13,10 @@ use dtoolkit::{Node, Property};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
+mod common;
+
+use common::{build_dtb, push_token};
+
 #[test]
 fn modify_property_in_place() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -579,6 +583,51 @@ fn add_string_deduplication() {
         final_size,
         "total size must grow to align with dtb block + string length"
     );
+}
+
+/// Adds a property to the root node of a tree whose strings block is
+/// `strings`, and returns how many bytes the tree grew by.
+fn add_property_with_strings(strings: &[u8]) -> usize {
+    // FDT_BEGIN_NODE with an empty name, FDT_END_NODE, FDT_END
+    let mut structure = Vec::new();
+    for word in [1u32, 0u32, 2u32, 9u32] {
+        push_token(&mut structure, word);
+    }
+    let mut dtb = build_dtb(&structure, strings);
+    dtb.resize(dtb.len() + 64, 0);
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).expect("the DTB should be valid");
+    let initial_size = fdt_mut.as_read_only().data().len();
+
+    fdt_mut
+        .root_mut()
+        .add_property("x", 0x1234_5678u32)
+        .expect("the buffer should have enough spare capacity");
+
+    let fdt = fdt_mut.as_read_only();
+    let prop = fdt
+        .root()
+        .property("x")
+        .expect("the added property should be present");
+    assert_eq!(
+        prop.value_as::<u32>().expect("the value should be a u32"),
+        0x1234_5678
+    );
+    fdt.data().len() - initial_size
+}
+
+#[test]
+fn add_property_with_unreferenced_bytes_in_strings_block() {
+    // Validation does not check strings that no property references, so the
+    // lookup for an existing string must not fail on them. A new property adds
+    // 16 bytes to the structure block (FDT_TAGSIZE * 3 + value length) and, if
+    // its name is not found, 2 bytes ("x\0") to the strings block.
+
+    // not null-terminated
+    assert_eq!(add_property_with_strings(&[0xff]), 16 + 2);
+    // null-terminated, but not valid UTF-8
+    assert_eq!(add_property_with_strings(&[0xff, 0x00]), 16 + 2);
+    // the name already exists before the invalid bytes and should be reused
+    assert_eq!(add_property_with_strings(b"x\0\xff"), 16);
 }
 
 #[test]
