@@ -13,6 +13,10 @@ use dtoolkit::{Node, Property};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
+mod common;
+
+use common::{build_dtb, push_token};
+
 #[test]
 fn modify_property_in_place() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -581,43 +585,16 @@ fn add_string_deduplication() {
     );
 }
 
-/// Builds a version 17 DTB consisting of the header, one empty memory
-/// reservation entry, `structure` and `strings`. The buffer is padded with
-/// `spare` zero bytes so the tree can grow in place.
-fn build_dtb(structure: &[u32], strings: &[u8], spare: usize) -> Vec<u8> {
-    let structure: Vec<u8> = structure.iter().flat_map(|w| w.to_be_bytes()).collect();
-    let off_dt_struct = 40 + 16;
-    let off_dt_strings = off_dt_struct + structure.len();
-    let totalsize = off_dt_strings + strings.len();
-
-    let mut dtb = Vec::new();
-    for word in [
-        0xd00d_feed,
-        totalsize,
-        off_dt_struct,
-        off_dt_strings,
-        40, // off_mem_rsvmap
-        17, // version
-        16, // last_comp_version
-        0,  // boot_cpuid_phys
-        strings.len(),
-        structure.len(),
-    ] {
-        let word = u32::try_from(word).expect("header field fits in u32");
-        dtb.extend_from_slice(&word.to_be_bytes());
-    }
-    dtb.extend_from_slice(&[0; 16]);
-    dtb.extend_from_slice(&structure);
-    dtb.extend_from_slice(strings);
-    dtb.resize(dtb.len() + spare, 0);
-    dtb
-}
-
 /// Adds a property to the root node of a tree whose strings block is
 /// `strings`, and returns how many bytes the tree grew by.
 fn add_property_with_strings(strings: &[u8]) -> usize {
     // FDT_BEGIN_NODE with an empty name, FDT_END_NODE, FDT_END
-    let mut dtb = build_dtb(&[1, 0, 2, 9], strings, 64);
+    let mut structure = Vec::new();
+    for word in [1u32, 0u32, 2u32, 9u32] {
+        push_token(&mut structure, word);
+    }
+    let mut dtb = build_dtb(&structure, strings);
+    dtb.resize(dtb.len() + 64, 0);
     let mut fdt_mut = FdtMut::from_slice(&mut dtb).expect("the DTB should be valid");
     let initial_size = fdt_mut.as_read_only().data().len();
 

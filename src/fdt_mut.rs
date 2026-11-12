@@ -165,12 +165,13 @@ impl<B: FdtBuffer> FdtMut<B> {
         let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
 
         // Validation only covers the strings that properties reference, so the
-        // block may contain bytes that are not a valid string. Comparing raw
-        // bytes means such bytes never match `name` and never panic. A trailing
-        // piece without a null terminator is skipped.
+        // block may contain bytes that are not a valid, NUL-terminated UTF-8
+        // string. Comparing raw bytes avoids decoding UTF-8 (which may not be
+        // validated); a piece that is not a valid string can never equal `name`.
+        // A trailing piece without a NUL terminator is skipped.
         let mut curr_offset = 0;
-        for s in str_block.split_inclusive(|&b| b == 0) {
-            if s.strip_suffix(&[0]) == Some(name.as_bytes()) {
+        for s in str_block.split_inclusive(|&b| b == b'\0') {
+            if s.strip_suffix(b"\0") == Some(name.as_bytes()) {
                 return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
             }
             curr_offset += s.len();
