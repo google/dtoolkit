@@ -81,12 +81,13 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ///
     /// # Errors
     ///
-    /// Returns an error if resizing the buffer fails.
+    /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
+    /// property length or resulting FDT size exceeds `u32::MAX`.
     ///
     /// # Panics
     ///
-    /// Panics if the node name or existing structure is invalid, or if lengths
-    /// exceed `u32::MAX`.
+    /// Panics if the [`FdtMut`] structure was constructed using an
+    /// `*_unchecked` constructor and the existing FDT is not valid.
     pub fn add_property<T: ToPropertyValue>(
         &mut self,
         name: &str,
@@ -102,10 +103,14 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
             .expect("Fdt should be valid");
 
         let val_len = value.property_value_len();
-        let padded_val_len = Fdt::align_tag_offset(val_len);
-        let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
+        let padded_val_len_u64 = (val_len as u64)
+            .checked_next_multiple_of(FDT_TAGSIZE as u64)
+            .unwrap_or(u64::MAX);
+        let required_space =
+            padded_val_len_u64.saturating_add(size_of::<FdtPropertyHeader>() as u64);
 
         self.data.shift_dt_struct(insert_offset, required_space)?;
+        let padded_val_len = Fdt::align_tag_offset(val_len);
 
         let data = self.data.data_mut();
         let header = FdtPropertyHeader::new(
