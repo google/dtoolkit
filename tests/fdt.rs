@@ -248,7 +248,7 @@ fn memory() {
     let dtb = include_bytes!("dtb/test_pretty_print.dtb");
     let fdt = Fdt::new(dtb).unwrap();
 
-    let memory = fdt.memory().unwrap();
+    let memory = fdt.memory().unwrap().next().unwrap();
     let reg = memory.reg().unwrap().unwrap().collect::<Vec<_>>();
     assert_eq!(reg.len(), 1);
     assert_eq!(reg[0].address::<u32>().unwrap(), 0x8000_0000);
@@ -266,6 +266,43 @@ fn memory() {
             size: 0x1000,
         }]
     );
+}
+
+#[test]
+fn memory_multiple() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    for address in [0x8000_0000_u64, 0x1_0000_0000_u64] {
+        push_begin_node(&mut structure, &format!("memory@{address:x}"));
+        push_token(&mut structure, FDT_PROP);
+        push_token(&mut structure, 12); // 2 address cells and 1 size cell
+        push_token(&mut structure, 0); // "reg"
+        structure.extend_from_slice(&address.to_be_bytes());
+        structure.extend_from_slice(&0x1000_u32.to_be_bytes());
+        push_token(&mut structure, FDT_END_NODE);
+    }
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let dtb = build_dtb(&structure, b"reg\0");
+    let fdt = Fdt::new(&dtb).unwrap();
+
+    let memories = fdt.memory().unwrap().collect::<Vec<_>>();
+    let names: Vec<_> = memories.iter().map(|&memory| memory.name()).collect();
+    assert_eq!(names, ["memory@80000000", "memory@100000000"]);
+    let addresses: Vec<_> = memories
+        .iter()
+        .map(|&memory| {
+            memory
+                .reg()
+                .unwrap()
+                .unwrap()
+                .next()
+                .unwrap()
+                .address::<u64>()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(addresses, [0x8000_0000, 0x1_0000_0000]);
 }
 
 #[test]
@@ -480,7 +517,7 @@ fn standard_node_outlives_wrapper() {
     let dtb_mem = include_bytes!("dtb/test_pretty_print.dtb");
     let fdt_mem = Fdt::new(dtb_mem).unwrap();
     let area = {
-        let memory = fdt_mem.memory().unwrap();
+        let memory = fdt_mem.memory().unwrap().next().unwrap();
         memory
             .initial_mapped_area()
             .unwrap()
