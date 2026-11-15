@@ -62,9 +62,13 @@ impl FdtProperty<'_> {
                 .value_as::<crate::values::FdtStringListIterator>()
                 .map_err(|_| fmt::Error)?;
             if let Some(first) = strings.next() {
-                write!(f, " = \"{first}\"")?;
+                f.write_str(" = \"")?;
+                write_escaped_string(f, first)?;
+                f.write_str("\"")?;
                 for s in strings {
-                    write!(f, ", \"{s}\"")?;
+                    f.write_str(", \"")?;
+                    write_escaped_string(f, s)?;
+                    f.write_str("\"")?;
                 }
                 writeln!(f, ";")?;
                 return Ok(());
@@ -98,6 +102,21 @@ impl FdtProperty<'_> {
     }
 }
 
+fn write_escaped_string(f: &mut Formatter, value: &str) -> fmt::Result {
+    for ch in value.chars() {
+        match ch {
+            '\\' => f.write_str("\\\\")?,
+            '"' => f.write_str("\\\"")?,
+            ch => write!(f, "{ch}")?,
+        }
+    }
+    Ok(())
+}
+
+/// Formats this property as valid DTS source.
+///
+/// The exact formatting may change between minor releases, but the output is
+/// always valid DTS, including escaping quotes and backslashes in string values.
 impl Display for FdtProperty<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.fmt(f, 0)
@@ -193,5 +212,23 @@ impl<'a> Iterator for FdtPropIter<'a> {
             name: parsed.name,
             value: parsed.value,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FdtProperty;
+
+    #[test]
+    fn display_escapes_quotes_and_backslashes_in_strings() {
+        let property = FdtProperty {
+            name: "compatible",
+            value: b"vendor\\board\"rev2\0fallback\\name\0",
+        };
+
+        assert_eq!(
+            property.to_string(),
+            "compatible = \"vendor\\\\board\\\"rev2\", \"fallback\\\\name\";\n"
+        );
     }
 }
