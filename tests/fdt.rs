@@ -643,6 +643,29 @@ fn with_options_max_size_rejects_oversized_slice() {
     assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }
 
+#[test]
+fn memory_reservation_must_not_cross_into_structure_block() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let mut dtb = build_dtb(&structure, &[]);
+
+    // Make the first reservation non-terminating, then leave only half of a
+    // reservation record before the structure block begins.
+    dtb[40..48].copy_from_slice(&1_u64.to_be_bytes());
+    dtb.splice(56..56, [0; 8]);
+    let totalsize = u32::try_from(dtb.len()).expect("test DTB should fit in a u32");
+    dtb[4..8].copy_from_slice(&totalsize.to_be_bytes());
+    dtb[8..12].copy_from_slice(&64_u32.to_be_bytes());
+    let structure_size =
+        u32::try_from(structure.len()).expect("test structure should fit in a u32");
+    dtb[12..16].copy_from_slice(&(64_u32 + structure_size).to_be_bytes());
+
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MemReserveNotTerminated);
+}
+
 /// Returns the events of `node` and its descendants, found by a recursive
 /// traversal through `properties()` and `children()`, where `node` is at
 /// `depth`.

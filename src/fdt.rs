@@ -530,8 +530,12 @@ impl<'a> Fdt<'a> {
     fn validate_mem_reservations(self) -> Result<(), FdtParseError> {
         let header = self.header();
         let mut offset = header.off_mem_rsvmap() as usize;
+        let end_offset = header.off_dt_struct() as usize;
         loop {
-            if offset >= header.off_dt_struct() as usize {
+            if offset
+                .checked_add(size_of::<MemoryReservation>())
+                .is_none_or(|end| end > end_offset)
+            {
                 return Err(FdtParseError::new(
                     FdtErrorKind::MemReserveNotTerminated,
                     offset,
