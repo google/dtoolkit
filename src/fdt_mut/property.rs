@@ -163,6 +163,10 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     }
 }
 
+/// Formats the property as a line of DTS source, e.g. `model = "foo";`.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be a valid DTS property.
 impl<B: FdtBuffer> Display for FdtPropertyMut<'_, B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.as_read_only())

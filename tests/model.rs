@@ -183,3 +183,31 @@ fn device_tree_format() {
 "
     );
 }
+
+#[test]
+fn device_tree_format_escapes_quotes_and_backslashes() {
+    let mut tree = DeviceTree::new();
+    tree.root
+        .add_property(DeviceTreeProperty::new("quote", b"foo\"bar\0").unwrap());
+    tree.root
+        .add_property(DeviceTreeProperty::new("backslash", b"a\\b\0").unwrap());
+    tree.root
+        .add_property(DeviceTreeProperty::new("trailing-backslash", b"abc\\\0").unwrap());
+    tree.root
+        .add_property(DeviceTreeProperty::new("str-list", b"\"\0\\\0x\\\"y\0").unwrap());
+
+    let fds = tree.to_string();
+
+    assert_eq!(
+        fds,
+        r#"/dts-v1/;
+
+/ {
+    quote = "foo\"bar";
+    backslash = "a\\b";
+    trailing-backslash = "abc\\";
+    str-list = "\"", "\\", "x\\\"y";
+};
+"#
+    );
+}
