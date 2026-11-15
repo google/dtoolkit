@@ -127,6 +127,31 @@ fn find_node_mut() {
 }
 
 #[test]
+fn find_node_mut_without_unit_address() {
+    let mut tree = DeviceTree::new();
+    tree.root.add_child(
+        DeviceTreeNode::builder("soc")
+            .unwrap()
+            .child(DeviceTreeNode::builder("serial@1000").unwrap().build())
+            .build(),
+    );
+
+    // `find_node_mut` should match nodes the same way as `find_node`: a path
+    // component without a unit address matches a node with any unit address.
+    assert_eq!(tree.find_node("/soc/serial").unwrap().name(), "serial@1000");
+    assert_eq!(
+        tree.find_node_mut("/soc/serial@1000").unwrap().name(),
+        "serial@1000"
+    );
+    assert_eq!(
+        tree.find_node_mut("/soc/serial").unwrap().name(),
+        "serial@1000"
+    );
+    assert!(tree.find_node_mut("/soc/serial@2000").is_none());
+    assert!(tree.find_node_mut("/soc/seria").is_none());
+}
+
+#[test]
 fn find_node() {
     let mut tree = DeviceTree::new();
     tree.root.add_child(

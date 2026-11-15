@@ -154,7 +154,13 @@ impl DeviceTree {
             return Some(current_node);
         }
         for component in path.split('/').filter(|s| !s.is_empty()) {
-            current_node = current_node.child_mut(component)?;
+            current_node = if component.contains('@') {
+                current_node.child_mut(component)?
+            } else {
+                current_node
+                    .children_mut()
+                    .find(|child| (&**child).name_without_address() == component)?
+            };
         }
         Some(current_node)
     }
