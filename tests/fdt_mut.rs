@@ -13,6 +13,11 @@ use dtoolkit::{Node, Property};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
+#[allow(dead_code)]
+mod common;
+
+use common::{FDT_END, FDT_END_NODE, build_dtb, push_begin_node, push_token};
+
 #[test]
 fn modify_property_in_place() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -579,6 +584,19 @@ fn add_string_deduplication() {
         final_size,
         "total size must grow to align with dtb block + string length"
     );
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn add_property_with_unreferenced_invalid_string() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let dtb = build_dtb(&structure, &[0xff]);
+
+    let mut fdt_mut = FdtMut::new(dtb).unwrap();
+    fdt_mut.root_mut().add_property("x", 1_u32).unwrap();
 }
 
 #[test]
