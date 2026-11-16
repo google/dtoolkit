@@ -164,11 +164,9 @@ impl<B: FdtBuffer> FdtMut<B> {
         let str_block_size = header.size_dt_strings() as usize;
         let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
 
-        // Validation only covers the strings that properties reference, so the
-        // block may contain bytes that are not a valid, NUL-terminated UTF-8
-        // string. Comparing raw bytes avoids decoding UTF-8 (which may not be
-        // validated); a piece that is not a valid string can never equal `name`.
-        // A trailing piece without a NUL terminator is skipped.
+        // Comparing raw bytes to avoid decoding UTF-8 (validation only covers
+        // strings referenced by properties, so the string block may contain
+        // strings that are not valid UTF-8).
         let mut curr_offset = 0;
         for s in str_block.split_inclusive(|&b| b == b'\0') {
             if s.strip_suffix(b"\0") == Some(name.as_bytes()) {
