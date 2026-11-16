@@ -9,7 +9,7 @@
 use dtoolkit::error::{BufferError, FdtErrorKind, FdtMutError};
 use dtoolkit::fdt::{Fdt, FdtOptions};
 use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
-use dtoolkit::{Node, Property};
+use dtoolkit::{Node, Property, ToPropertyValue};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
@@ -678,4 +678,82 @@ fn from_slice_buffer_into_fdt_uses_totalsize() {
     let fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
     let fdt = Fdt::from(fdt_mut);
     assert_eq!(fdt.data().len(), dtb.len());
+}
+
+struct OversizedValue(usize);
+
+impl ToPropertyValue for OversizedValue {
+    fn property_value_len(&self) -> usize {
+        self.0
+    }
+
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        buffer.fill(0);
+    }
+}
+
+#[test]
+fn oversized_property_rejected_without_corrupting_fdt() {
+    const TEST_BUF_CAPACITY: usize = 1024;
+    const FDT_TAG_SIZE: usize = size_of::<u32>();
+    // Each FDT property header consists of `(FDT_PROP, len, nameoff)`.
+    const FDT_PROP_HEADER_SIZE: usize = size_of::<[u32; 3]>();
+
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let max_u32_len = usize::try_from(u32::MAX).unwrap();
+    let max_aligned_u32_len = max_u32_len & !(FDT_TAG_SIZE - 1);
+
+    for bad_len in [
+        // `old_size + shift_amount` wraps below `old_size` on 32-bit `usize`.
+        max_u32_len - dtb.len(),
+        // `FDT_PROP_HEADER_SIZE + padded_val_len` wraps to `0` on 32-bit
+        // `usize`.
+        (max_u32_len - FDT_PROP_HEADER_SIZE) + 1,
+        // Unaligned length `<= u32::MAX` whose tag alignment exceeds
+        // `u32::MAX`.
+        max_aligned_u32_len + 1,
+        max_u32_len,
+        usize::MAX,
+    ] {
+        let mut buf = [0u8; TEST_BUF_CAPACITY];
+        buf[..dtb.len()].copy_from_slice(dtb);
+
+        let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+        let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+        let err = node
+            .add_property("brand-new-prop", OversizedValue(bad_len))
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                FdtMutError::Resize(BufferError::FdtLimitExceeded { requested })
+                    if requested > u64::from(u32::MAX)
+            ),
+            "bad_len={bad_len:#x} got {err:?}"
+        );
+
+        let mut prop = node.property_mut("str-prop").unwrap();
+        let err = prop.set_value(OversizedValue(bad_len)).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                FdtMutError::Resize(BufferError::FdtLimitExceeded { requested })
+                    if requested > u64::from(u32::MAX)
+            ),
+            "bad_len={bad_len:#x} got {err:?}"
+        );
+
+        let fdt_bytes = Fdt::from(fdt_mut).data();
+        assert!(Fdt::new(fdt_bytes).is_ok());
+    }
+
+    // Verify a valid small `OversizedValue` writes cleanly too.
+    let mut buf = [0u8; TEST_BUF_CAPACITY];
+    buf[..dtb.len()].copy_from_slice(dtb);
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    let added = node
+        .add_property("zero-prop", OversizedValue(FDT_TAG_SIZE))
+        .unwrap();
+    assert_eq!(added.as_read_only().value(), &[0; FDT_TAG_SIZE]);
 }

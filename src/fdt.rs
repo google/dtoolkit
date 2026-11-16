@@ -678,19 +678,19 @@ impl<'a> Fdt<'a> {
 
         let size_dt_struct = header.size_dt_struct() as usize;
         let size_dt_strings = header.size_dt_strings() as usize;
-        if off_dt_struct.saturating_add(size_dt_struct) > data.len() {
+        if size_dt_struct > data.len() - off_dt_struct {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("struct block overflows"),
                 offset_of!(FdtHeader, size_dt_struct),
             ));
         }
-        if off_dt_strings.saturating_add(size_dt_strings) > data.len() {
+        if size_dt_strings > data.len() - off_dt_strings {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings block overflows"),
                 offset_of!(FdtHeader, size_dt_strings),
             ));
         }
-        if off_dt_struct.saturating_add(size_dt_struct) > off_dt_strings {
+        if off_dt_struct + size_dt_struct > off_dt_strings {
             return Err(FdtParseError::new(
                 FdtErrorKind::InvalidHeader("strings block not after struct block"),
                 offset_of!(FdtHeader, off_dt_strings),
@@ -947,12 +947,15 @@ impl<'a> Fdt<'a> {
         let header = self.header();
         let str_block_start = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
+        if string_block_offset >= str_block_size {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidLength,
+                str_block_start.saturating_add(string_block_offset),
+            ));
+        }
+
         let str_block_end = str_block_start + str_block_size;
         let str_start = str_block_start + string_block_offset;
-
-        if str_start >= str_block_end {
-            return Err(FdtParseError::new(FdtErrorKind::InvalidLength, str_start));
-        }
 
         self.string_at_offset(str_start, Some(str_block_end))
     }
@@ -1014,12 +1017,11 @@ impl<'a> Fdt<'a> {
         }
 
         let prop_offset = offset + size_of::<FdtPropertyHeader>();
-        let end_offset = prop_offset + len;
-        if end_offset > self.data.len() {
+        if len > self.data.len() - prop_offset {
             return Err(FdtParseError::new(FdtErrorKind::InvalidLength, prop_offset));
         }
 
-        Ok(Self::align_tag_offset(end_offset))
+        Ok(Self::align_tag_offset(prop_offset + len))
     }
 
     pub(crate) fn data_at_offset(&self, offset: usize) -> Result<&[u8], FdtParseError> {
@@ -1029,6 +1031,7 @@ impl<'a> Fdt<'a> {
     }
 
     pub(crate) fn align_tag_offset(offset: usize) -> usize {
+        debug_assert!(offset <= isize::MAX.cast_unsigned());
         offset.next_multiple_of(FDT_TAGSIZE)
     }
 }
@@ -1149,6 +1152,80 @@ mod tests {
         let result = Fdt::new(&data);
         let err = result.unwrap_err();
         assert_eq!(err, FdtParseError::new(FdtErrorKind::InvalidOffset, 80));
+    }
+
+    #[test]
+    fn property_len_u32_wrap_rejected() {
+        #[rustfmt::skip]
+        let data: [u8; 84] = [
+            // Header (0..40)
+            0xd0, 0x0d, 0xfe, 0xed, // magic
+            0x00, 0x00, 0x00, 84,   // totalsize = 84
+            0x00, 0x00, 0x00, 56,   // off_dt_struct = 56
+            0x00, 0x00, 0x00, 80,   // off_dt_strings = 80
+            0x00, 0x00, 0x00, 40,   // off_mem_rsvmap = 40
+            0x00, 0x00, 0x00, 17,   // version = 17
+            0x00, 0x00, 0x00, 16,   // last_comp_version = 16
+            0x00, 0x00, 0x00, 0,    // boot_cpuid_phys = 0
+            0x00, 0x00, 0x00, 4,    // size_dt_strings = 4
+            0x00, 0x00, 0x00, 24,   // size_dt_struct = 24
+            // Memreserve (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // Structure block (56..80)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE (56..60)
+            0x00, 0x00, 0x00, 0x00, // "" (60..64)
+            0x00, 0x00, 0x00, 0x03, // FDT_PROP (64..68)
+            0xff, 0xff, 0xff, 0xfc, // len = 0xffff_fffc (68..72)
+            0x00, 0x00, 0x00, 0x02, // nameoff = 2 == FDT_END_NODE (72..76)
+            0x00, 0x00, 0x00, 0x09, // FDT_END (76..80)
+            // Strings block (80..84)
+            b'x', 0x00, b'a', 0x00,
+        ];
+
+        let prop_tag_offset =
+            size_of::<FdtHeader>() + size_of::<MemoryReservation>() + 2 * FDT_TAGSIZE;
+        assert_eq!(
+            Fdt::new(&data).unwrap_err(),
+            FdtParseError::new(
+                FdtErrorKind::InvalidLength,
+                prop_tag_offset + size_of::<FdtPropertyHeader>(),
+            )
+        );
+    }
+
+    #[test]
+    fn property_nameoff_u32_wrap_rejected() {
+        #[rustfmt::skip]
+        let data: [u8; 88] = [
+            // Header (0..40)
+            0xd0, 0x0d, 0xfe, 0xed, // magic
+            0x00, 0x00, 0x00, 88,   // totalsize = 88
+            0x00, 0x00, 0x00, 56,   // off_dt_struct = 56
+            0x00, 0x00, 0x00, 84,   // off_dt_strings = 84
+            0x00, 0x00, 0x00, 40,   // off_mem_rsvmap = 40
+            0x00, 0x00, 0x00, 17,   // version = 17
+            0x00, 0x00, 0x00, 16,   // last_comp_version = 16
+            0x00, 0x00, 0x00, 0,    // boot_cpuid_phys = 0
+            0x00, 0x00, 0x00, 4,    // size_dt_strings = 4
+            0x00, 0x00, 0x00, 28,   // size_dt_struct = 28
+            // Memreserve (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // Structure block (56..84)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE (56..60)
+            0x00, b'a', 0x00, 0x00, // "" + "a\0" in padding at offset 61 (60..64)
+            0x00, 0x00, 0x00, 0x03, // FDT_PROP (64..68)
+            0x00, 0x00, 0x00, 0x00, // len = 0 (68..72)
+            0xff, 0xff, 0xff, 0xe9, // nameoff = 0xffff_ffe9 (84 + nameoff wraps to 61 on 32-bit)
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE (76..80)
+            0x00, 0x00, 0x00, 0x09, // FDT_END (80..84)
+            // Strings block (84..88)
+            b'b', 0x00, 0x00, 0x00,
+        ];
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(err.kind, FdtErrorKind::InvalidLength);
     }
 
     #[test]

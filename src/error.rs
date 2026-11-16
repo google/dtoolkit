@@ -149,7 +149,7 @@ pub enum BufferError {
     #[error("requested size {requested} exceeds u32::MAX")]
     FdtLimitExceeded {
         /// The requested size.
-        requested: usize,
+        requested: u64,
     },
 
     /// A memory allocation error occurred when reserving buffer capacity.
