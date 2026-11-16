@@ -13,9 +13,11 @@ use dtoolkit::{Node, Property, ToPropertyValue};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
+// The helpers are shared with `tests/fdt.rs`; this crate uses only some.
+#[allow(dead_code)]
 mod common;
 
-use common::{build_dtb, push_token};
+use common::{FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, build_dtb, push_token};
 
 #[test]
 fn modify_property_in_place() {
@@ -588,9 +590,9 @@ fn add_string_deduplication() {
 /// Adds a property to the root node of a tree whose strings block is
 /// `strings`, and returns how many bytes the tree grew by.
 fn add_property_with_strings(strings: &[u8]) -> usize {
-    // FDT_BEGIN_NODE with an empty name, FDT_END_NODE, FDT_END
+    // A root node with an empty name and no properties.
     let mut structure = Vec::new();
-    for word in [1u32, 0u32, 2u32, 9u32] {
+    for word in [FDT_BEGIN_NODE, 0, FDT_END_NODE, FDT_END] {
         push_token(&mut structure, word);
     }
     let mut dtb = build_dtb(&structure, strings);
