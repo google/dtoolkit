@@ -667,7 +667,8 @@ fn memory_reservation_must_not_cross_into_structure_block() {
 }
 
 fn build_memreserve_test_dtb(off_dt_struct: u32, body: &[u8]) -> Vec<u8> {
-    let totalsize = 40 + body.len() as u32;
+    let body_size = u32::try_from(body.len()).expect("test body should fit in a u32");
+    let totalsize = 40 + body_size;
     let mut dtb = Vec::with_capacity(totalsize as usize);
     for value in [
         0xd00d_feed,
