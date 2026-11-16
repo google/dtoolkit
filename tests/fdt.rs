@@ -643,6 +643,32 @@ fn with_options_max_size_rejects_oversized_slice() {
     assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }
 
+#[test]
+fn structure_walk_must_end_within_declared_structure_block() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let mut dtb = build_dtb(&structure, &[]);
+    // The root node begins at the structure block start, but the declared
+    // block ends before the FDT_END token.
+    dtb[36..40].copy_from_slice(&8_u32.to_be_bytes());
+
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::InvalidLength);
+}
+
+#[test]
+fn structure_walk_ending_at_declared_block_boundary_is_valid() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let dtb = build_dtb(&structure, &[]);
+
+    assert!(Fdt::new(&dtb).is_ok());
+}
+
 /// Returns the events of `node` and its descendants, found by a recursive
 /// traversal through `properties()` and `children()`, where `node` is at
 /// `depth`.

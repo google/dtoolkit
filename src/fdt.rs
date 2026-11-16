@@ -524,6 +524,15 @@ impl<'a> Fdt<'a> {
             ));
         }
 
+        let structure_end =
+            (header.off_dt_struct() as usize).saturating_add(header.size_dt_struct() as usize);
+        if end_offset
+            .checked_add(FDT_TAGSIZE)
+            .is_none_or(|end| end > structure_end)
+        {
+            return Err(FdtParseError::new(FdtErrorKind::InvalidLength, end_offset));
+        }
+
         Ok(())
     }
 
