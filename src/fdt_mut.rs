@@ -162,14 +162,19 @@ impl<B: FdtBuffer> FdtMut<B> {
         let fdt = self.as_read_only();
         let header = fdt.header();
         let str_block_size = header.size_dt_strings() as usize;
+        let str_block_start = header.off_dt_strings() as usize;
+        let strings = &fdt.data()[str_block_start..str_block_start + str_block_size];
 
         let mut curr_offset = 0;
         while curr_offset < str_block_size {
-            let s = fdt.string(curr_offset).expect("FdtMut should be valid");
-            if s == name {
+            let Some(end_offset) = strings[curr_offset..].iter().position(|&byte| byte == 0) else {
+                break;
+            };
+            let end_offset = curr_offset + end_offset;
+            if &strings[curr_offset..end_offset] == name.as_bytes() {
                 return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
             }
-            curr_offset += s.len() + 1; // plus null terminator
+            curr_offset = end_offset + 1; // plus null terminator
         }
 
         None
