@@ -45,7 +45,8 @@ impl<'a> Property<'a> for FdtProperty<'a> {
 
 impl FdtProperty<'_> {
     pub(crate) fn fmt(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
-        write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
+        super::node::FdtNode::write_indent(f, indent)?;
+        write!(f, "{}", self.name)?;
 
         if self.value.is_empty() {
             writeln!(f, ";")?;

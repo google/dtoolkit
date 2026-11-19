@@ -162,12 +162,23 @@ impl<'a> FdtNode<'a> {
         FdtEventIter::new(self)
     }
 
+    pub(crate) fn write_indent<W: fmt::Write>(f: &mut W, indent: usize) -> fmt::Result {
+        const SPACES: &str = "                                                                ";
+
+        for _ in 0..indent / SPACES.len() {
+            f.write_str(SPACES)?;
+        }
+        f.write_str(&SPACES[..indent % SPACES.len()])
+    }
+
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         let name = self.name();
         if name.is_empty() {
-            writeln!(f, "{:indent$}/ {{", "", indent = indent)?;
+            Self::write_indent(f, indent)?;
+            writeln!(f, "/ {{")?;
         } else {
-            writeln!(f, "{:indent$}{} {{", "", name, indent = indent)?;
+            Self::write_indent(f, indent)?;
+            writeln!(f, "{name} {{")?;
         }
 
         let mut has_properties = false;
@@ -186,13 +197,26 @@ impl<'a> FdtNode<'a> {
             child.fmt_recursive(f, indent + 4)?;
         }
 
-        writeln!(f, "{:indent$}}};", "", indent = indent)
+        Self::write_indent(f, indent)?;
+        writeln!(f, "}};")
     }
 }
 
 impl Display for FdtNode<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.fmt_recursive(f, 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FdtNode;
+
+    #[test]
+    fn large_indentation_does_not_panic() {
+        let mut output = String::new();
+        FdtNode::write_indent(&mut output, usize::from(u16::MAX) + 1).unwrap();
+        assert_eq!(output.len(), usize::from(u16::MAX) + 1);
     }
 }
 
