@@ -84,7 +84,7 @@ fn memory() {
     let dtb = include_bytes!("dtb/test_pretty_print.dtb");
     let fdt = Fdt::new(dtb).unwrap();
 
-    let memory = fdt.memory().unwrap();
+    let memory = fdt.memory().unwrap().next().unwrap();
     assert_eq!(memory.name(), "memory@80000000");
     assert!(memory.hotpluggable());
     assert!(format!("{memory}").starts_with("memory@80000000 {"));
