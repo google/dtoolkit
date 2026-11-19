@@ -985,3 +985,43 @@ fn events_skip_nops() {
     assert_eq!(prop.name(), "prop");
     assert_eq!(prop.value_as::<u32>().unwrap(), 42);
 }
+
+#[test]
+fn struct_block_shorter_than_contents_is_rejected() {
+    // A root node with one child, `a`. The structure block is 28 bytes and
+    // the header fields below declare exactly that.
+    assert!(Fdt::new(&build_chain_dtb(1)).is_ok());
+
+    // `size_dt_struct` covers only part of the structure block that the walk
+    // to FDT_END covers. In the last case the strings block begins inside the
+    // structure block, which the header checks allow because
+    // `off_dt_struct + size_dt_struct <= off_dt_strings` still holds.
+    for (size_dt_struct, off_dt_strings) in [(8, 84), (4, 84), (8, 64)] {
+        let mut dtb = build_chain_dtb(1);
+        dtb[12..16].copy_from_slice(&u32::to_be_bytes(off_dt_strings));
+        dtb[36..40].copy_from_slice(&u32::to_be_bytes(size_dt_struct));
+        let err = Fdt::new(&dtb).unwrap_err();
+        assert_eq!(
+            err.kind,
+            FdtErrorKind::InvalidHeader("struct block does not contain FDT_END")
+        );
+    }
+}
+
+#[test]
+fn struct_block_may_extend_past_fdt_end() {
+    // Both NOPs and padding after FDT_END are accepted as long as they lie
+    // within `size_dt_struct`, which `build_dtb` sets to the structure's
+    // length.
+    for trailer in [[FDT_NOP, FDT_NOP], [0, 0]] {
+        let mut structure = Vec::new();
+        push_begin_node(&mut structure, "");
+        push_token(&mut structure, FDT_END_NODE);
+        push_token(&mut structure, FDT_END);
+        for token in trailer {
+            push_token(&mut structure, token);
+        }
+        let dtb = build_dtb(&structure, &[]);
+        assert!(Fdt::new(&dtb).is_ok());
+    }
+}
