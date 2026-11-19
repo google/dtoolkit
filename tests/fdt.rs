@@ -673,6 +673,109 @@ fn with_options_max_size_rejects_oversized_slice() {
     assert_eq!(err.kind, FdtErrorKind::InvalidLength);
 }
 
+#[test]
+fn memory_reservation_must_not_cross_into_structure_block() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let mut dtb = build_dtb(&structure, &[]);
+
+    // Make the first reservation non-terminating, then leave only half of a
+    // reservation record before the structure block begins.
+    dtb[40..48].copy_from_slice(&1_u64.to_be_bytes());
+    dtb.splice(56..56, [0; 8]);
+    let totalsize = u32::try_from(dtb.len()).expect("test DTB should fit in a u32");
+    dtb[4..8].copy_from_slice(&totalsize.to_be_bytes());
+    dtb[8..12].copy_from_slice(&64_u32.to_be_bytes());
+    let structure_size =
+        u32::try_from(structure.len()).expect("test structure should fit in a u32");
+    dtb[12..16].copy_from_slice(&(64_u32 + structure_size).to_be_bytes());
+
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MemReserveNotTerminated);
+}
+
+fn build_memreserve_test_dtb(off_dt_struct: u32, body: &[u8]) -> Vec<u8> {
+    let body_size = u32::try_from(body.len()).expect("test body should fit in a u32");
+    let totalsize = 40 + body_size;
+    let mut dtb = Vec::with_capacity(totalsize as usize);
+    for value in [
+        0xd00d_feed,
+        totalsize,
+        off_dt_struct,
+        totalsize,
+        40,
+        17,
+        16,
+        0,
+        0,
+        totalsize - off_dt_struct,
+    ] {
+        dtb.extend_from_slice(&value.to_be_bytes());
+    }
+    dtb.extend_from_slice(body);
+    dtb
+}
+
+#[test]
+fn memory_reservation_terminator_spilling_into_structure_block_is_rejected() {
+    let body = [
+        // The reservation map starts at 40. The structure block starts at 48,
+        // so this terminator would extend eight bytes into it.
+        0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+        0, 0, 0, 0, 0, 0, 0, 0, // size = 0 (terminator)
+        0, 0, 0, 1, // FDT_BEGIN_NODE
+        0, 0, 0, 0, // empty node name
+        0, 0, 0, 2, // FDT_END_NODE
+        0, 0, 0, 9, // FDT_END
+    ];
+    let dtb = build_memreserve_test_dtb(48, &body);
+
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MemReserveNotTerminated);
+    assert!(format!("{err:?}").contains("offset: 40"));
+}
+
+#[test]
+fn memory_reservation_terminator_after_entry_spilling_into_structure_block_is_rejected() {
+    let body = [
+        // A valid reservation entry.
+        0, 0, 0, 0, 0x80, 0, 0, 0, // address = 0x8000_0000
+        0, 0, 0, 0, 0, 0x10, 0, 0, // size = 0x10_0000
+        // The terminator starts at 56, but the structure block starts at 64.
+        0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+        0, 0, 0, 0, 0, 0, 0, 0, // size = 0 (terminator)
+        0, 0, 0, 1, // FDT_BEGIN_NODE
+        0, 0, 0, 0, // empty node name
+        0, 0, 0, 2, // FDT_END_NODE
+        0, 0, 0, 9, // FDT_END
+    ];
+    let dtb = build_memreserve_test_dtb(64, &body);
+
+    let err = Fdt::new(&dtb).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MemReserveNotTerminated);
+    assert!(format!("{err:?}").contains("offset: 56"));
+}
+
+#[test]
+fn memory_reservation_terminator_ending_at_structure_block_is_valid() {
+    let body = [
+        0, 0, 0, 0, 0x80, 0, 0, 0, // address = 0x8000_0000
+        0, 0, 0, 0, 0, 0x10, 0, 0, // size = 0x10_0000
+        0, 0, 0, 0, 0, 0, 0, 0, // address = 0
+        0, 0, 0, 0, 0, 0, 0, 0, // size = 0 (terminator)
+        0, 0, 0, 1, // FDT_BEGIN_NODE
+        0, 0, 0, 0, // empty node name
+        0, 0, 0, 2, // FDT_END_NODE
+        0, 0, 0, 9, // FDT_END
+    ];
+    let dtb = build_memreserve_test_dtb(72, &body);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert_eq!(fdt.memory_reservations().count(), 1);
+}
+
 /// Returns the events of `node` and its descendants, found by a recursive
 /// traversal through `properties()` and `children()`, where `node` is at
 /// `depth`.
