@@ -1,0 +1,8 @@
+/dts-v1/;
+
+/ {
+    quote = "foo\"bar";
+    backslash = "a\\b";
+    trailing-backslash = "abc\\";
+    str-list = "\"", "\\", "x\\\"y";
+};

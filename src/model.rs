@@ -172,6 +172,10 @@ impl Default for DeviceTree {
     }
 }
 
+/// Formats the device tree as DTS source.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be valid DTS.
 impl Display for DeviceTree {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Fdt::new(&self.to_dtb())

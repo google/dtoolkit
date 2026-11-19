@@ -8,7 +8,7 @@
 
 //! A read-only API for inspecting a device tree property.
 
-use core::fmt::{self, Display, Formatter};
+use core::fmt::{self, Display, Formatter, Write};
 use core::mem::size_of;
 
 use zerocopy::FromBytes;
@@ -62,9 +62,9 @@ impl FdtProperty<'_> {
                 .value_as::<crate::values::FdtStringListIterator>()
                 .map_err(|_| fmt::Error)?;
             if let Some(first) = strings.next() {
-                write!(f, " = \"{first}\"")?;
+                write!(f, " = \"{}\"", EscapedStr(first))?;
                 for s in strings {
-                    write!(f, ", \"{s}\"")?;
+                    write!(f, ", \"{}\"", EscapedStr(s))?;
                 }
                 writeln!(f, ";")?;
                 return Ok(());
@@ -98,9 +98,29 @@ impl FdtProperty<'_> {
     }
 }
 
+/// Formats the property as a line of DTS source, e.g. `model = "foo";`.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be a valid DTS property.
 impl Display for FdtProperty<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         self.fmt(f, 0)
+    }
+}
+
+/// Displays a string with `"` and `\` escaped, so it can be put inside a DTS
+/// string literal.
+struct EscapedStr<'a>(&'a str);
+
+impl Display for EscapedStr<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        for ch in self.0.chars() {
+            if matches!(ch, '"' | '\\') {
+                f.write_char('\\')?;
+            }
+            f.write_char(ch)?;
+        }
+        Ok(())
     }
 }
 

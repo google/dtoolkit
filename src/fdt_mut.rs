@@ -580,6 +580,10 @@ impl<B: FdtBuffer> Debug for FdtMut<B> {
     }
 }
 
+/// Formats the device tree as DTS source.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be valid DTS.
 impl<B: FdtBuffer> Display for FdtMut<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.as_read_only())

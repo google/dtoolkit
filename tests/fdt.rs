@@ -319,6 +319,7 @@ macro_rules! load_dtb_dts_pair {
 const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
     load_dtb_dts_pair!("test_children_nested"),
     load_dtb_dts_pair!("test_children"),
+    load_dtb_dts_pair!("test_escapes"),
     load_dtb_dts_pair!("test_memreserve"),
     load_dtb_dts_pair!("test_pretty_print"),
     load_dtb_dts_pair!("test_props"),
@@ -338,6 +339,35 @@ fn pretty_print() {
             .replace("\r\n", "\n");
         assert_eq!(s, expected, "Mismatch for {name}");
     }
+}
+
+#[test]
+fn property_display_escapes_quotes_and_backslashes() {
+    let dtb = include_bytes!("dtb/test_escapes.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let root = fdt.root();
+
+    let prop = root.property("quote").unwrap();
+    assert_eq!(prop.value(), b"foo\"bar\0");
+    assert_eq!(prop.to_string(), concat!(r#"quote = "foo\"bar";"#, "\n"));
+
+    let prop = root.property("backslash").unwrap();
+    assert_eq!(prop.value(), b"a\\b\0");
+    assert_eq!(prop.to_string(), concat!(r#"backslash = "a\\b";"#, "\n"));
+
+    let prop = root.property("trailing-backslash").unwrap();
+    assert_eq!(prop.value(), b"abc\\\0");
+    assert_eq!(
+        prop.to_string(),
+        concat!(r#"trailing-backslash = "abc\\";"#, "\n")
+    );
+
+    let prop = root.property("str-list").unwrap();
+    assert_eq!(prop.value(), b"\"\0\\\0x\\\"y\0");
+    assert_eq!(
+        prop.to_string(),
+        concat!(r#"str-list = "\"", "\\", "x\\\"y";"#, "\n")
+    );
 }
 
 #[test]
