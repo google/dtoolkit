@@ -756,7 +756,7 @@ fn oversized_property_rejected_without_corrupting_fdt() {
 
     for bad_len in [
         // `old_size + shift_amount` wraps below `old_size` on 32-bit `usize`.
-        max_u32_len - dtb.len(),
+        max_aligned_u32_len - FDT_PROP_HEADER_SIZE,
         // `FDT_PROP_HEADER_SIZE + padded_val_len` wraps to `0` on 32-bit
         // `usize`.
         (max_u32_len - FDT_PROP_HEADER_SIZE) + 1,
@@ -795,6 +795,7 @@ fn oversized_property_rejected_without_corrupting_fdt() {
         );
 
         let fdt_bytes = Fdt::from(fdt_mut).data();
+        assert_eq!(fdt_bytes, dtb);
         assert!(Fdt::new(fdt_bytes).is_ok());
     }
 
@@ -901,4 +902,66 @@ fn add_property_rejects_duplicate() {
             .unwrap(),
         "replacement"
     );
+}
+
+#[test]
+fn add_property_out_of_space_leaves_blob_unchanged() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    // enough space for the name alone, not for the full property
+    let mut buf = vec![0xaau8; dtb.len() + 20];
+    buf[..dtb.len()].copy_from_slice(dtb);
+    let original_buf = buf.clone();
+
+    {
+        let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+        let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+        let err = node.add_property("brand-new-prop", 0x1234u32).unwrap_err();
+        assert!(matches!(
+            err,
+            FdtMutError::Resize(BufferError::OutOfSpace { .. })
+        ));
+        assert_eq!(fdt_mut.as_read_only().data(), dtb);
+    }
+
+    assert_eq!(buf, original_buf);
+}
+
+#[test]
+fn add_property_resizes_once() {
+    struct CountingBuffer<B> {
+        inner: B,
+        resize_calls: usize,
+    }
+    impl<B: AsRef<[u8]>> AsRef<[u8]> for CountingBuffer<B> {
+        fn as_ref(&self) -> &[u8] {
+            self.inner.as_ref()
+        }
+    }
+    impl<B: AsMut<[u8]>> AsMut<[u8]> for CountingBuffer<B> {
+        fn as_mut(&mut self) -> &mut [u8] {
+            self.inner.as_mut()
+        }
+    }
+    impl<B: FdtBuffer> FdtBuffer for CountingBuffer<B> {
+        fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
+            self.resize_calls += 1;
+            self.inner.try_resize(new_len)
+        }
+    }
+
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut raw = vec![0u8; dtb.len() * 2];
+    raw[..dtb.len()].copy_from_slice(dtb);
+    let mut buf = CountingBuffer {
+        inner: SliceBuffer::new(&mut raw).unwrap(),
+        resize_calls: 0,
+    };
+    let mut fdt_mut = FdtMut::new(&mut buf).unwrap();
+    fdt_mut
+        .find_node_mut("/test-props")
+        .unwrap()
+        .add_property("brand-new-prop", 0x1234u32)
+        .unwrap();
+    assert!(Fdt::new(fdt_mut.as_read_only().data()).is_ok());
+    assert_eq!(buf.resize_calls, 1);
 }

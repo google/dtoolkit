@@ -106,7 +106,6 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         if self.property(name).is_some() {
             return Err(FdtMutError::DuplicateProperty);
         }
-        let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
         let mut offset = self.offset + FDT_TAGSIZE;
         let name_end = fdt.find_string_end(offset).expect("valid node name");
@@ -122,14 +121,14 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         let required_space =
             padded_val_len_u64.saturating_add(size_of::<FdtPropertyHeader>() as u64);
 
-        self.data.shift_dt_struct(insert_offset, required_space)?;
+        let nameoff = self
+            .data
+            .insert_dt_struct_and_string(insert_offset, required_space, name)?;
         let padded_val_len = Fdt::align_tag_offset(val_len);
 
         let data = self.data.data_mut();
-        let header = FdtPropertyHeader::new(
-            u32::try_from(val_len).expect("len fits in u32"),
-            u32::try_from(nameoff).expect("nameoff fits in u32"),
-        );
+        let header =
+            FdtPropertyHeader::new(u32::try_from(val_len).expect("len fits in u32"), nameoff);
         data[insert_offset..insert_offset + size_of::<FdtPropertyHeader>()]
             .copy_from_slice(header.as_bytes());
 
@@ -141,7 +140,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
             prop_offset: insert_offset,
             value_offset: val_offset,
             len: val_len,
-            nameoff,
+            nameoff: nameoff as usize,
             data: self.data,
         })
     }
