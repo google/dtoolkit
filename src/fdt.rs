@@ -37,7 +37,7 @@ pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
 use crate::Node;
 use crate::error::{FdtErrorKind, FdtParseError};
-use crate::memreserve::MemoryReservation;
+use crate::memreserve::{MemoryReservation, RawMemoryReservation};
 
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
@@ -547,11 +547,11 @@ impl<'a> Fdt<'a> {
                 ));
             }
 
-            let (reservation, _) = MemoryReservation::ref_from_prefix(&self.data[offset..])
+            let (reservation, _) = RawMemoryReservation::ref_from_prefix(&self.data[offset..])
                 .map_err(|_| FdtParseError::new(FdtErrorKind::MemReserveInvalid, offset))?;
-            offset += size_of::<MemoryReservation>();
+            offset += size_of::<RawMemoryReservation>();
 
-            if *reservation == MemoryReservation::TERMINATOR {
+            if *reservation == RawMemoryReservation::TERMINATOR {
                 break;
             }
         }
@@ -750,14 +750,14 @@ impl<'a> Fdt<'a> {
     pub fn memory_reservations(self) -> impl Iterator<Item = MemoryReservation> + 'a {
         let mut offset = self.header().off_mem_rsvmap() as usize;
         core::iter::from_fn(move || {
-            let (reservation, _) = MemoryReservation::ref_from_prefix(&self.data[offset..])
+            let (reservation, _) = RawMemoryReservation::ref_from_prefix(&self.data[offset..])
                 .expect("Fdt should be valid");
-            offset += size_of::<MemoryReservation>();
+            offset += size_of::<RawMemoryReservation>();
 
-            if *reservation == MemoryReservation::TERMINATOR {
+            if *reservation == RawMemoryReservation::TERMINATOR {
                 return None;
             }
-            Some(*reservation)
+            Some(MemoryReservation::from_raw(*reservation))
         })
     }
 
@@ -1197,7 +1197,7 @@ mod tests {
         ];
 
         let prop_tag_offset =
-            size_of::<FdtHeader>() + size_of::<MemoryReservation>() + 2 * FDT_TAGSIZE;
+            size_of::<FdtHeader>() + size_of::<RawMemoryReservation>() + 2 * FDT_TAGSIZE;
         assert_eq!(
             Fdt::new(&data).unwrap_err(),
             FdtParseError::new(

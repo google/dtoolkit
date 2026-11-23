@@ -322,12 +322,6 @@ impl Cells<'_> {
     }
 }
 
-impl AsRef<[big_endian::U32]> for Cells<'_> {
-    fn as_ref(&self) -> &[big_endian::U32] {
-        self.0
-    }
-}
-
 impl Display for Cells<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("0x")?;
