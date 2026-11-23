@@ -1045,6 +1045,10 @@ impl<'a> Fdt<'a> {
     }
 }
 
+/// Formats the device tree as DTS source.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be valid DTS.
 impl Display for Fdt<'_> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         writeln!(f, "/dts-v1/;")?;

@@ -312,17 +312,17 @@ mod tests {
     #[cfg(feature = "write")]
     fn test_get_phandle() {
         let mut node = DeviceTreeNode::new("test").unwrap();
-        assert_eq!(get_phandle(&node), None);
+        assert_eq!(get_phandle(node.as_read_only()), None);
 
         node.add_property(
             DeviceTreeProperty::new("linux,phandle", 42u32.to_be_bytes().to_vec()).unwrap(),
         );
-        assert_eq!(get_phandle(&node), Some(42));
+        assert_eq!(get_phandle(node.as_read_only()), Some(42));
 
         // phandle should take precedence if both are present
         node.add_property(
             DeviceTreeProperty::new("phandle", 100u32.to_be_bytes().to_vec()).unwrap(),
         );
-        assert_eq!(get_phandle(&node), Some(100));
+        assert_eq!(get_phandle(node.as_read_only()), Some(100));
     }
 }
