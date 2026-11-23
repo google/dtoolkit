@@ -822,3 +822,57 @@ fn from_slice_rejects_struct_block_shorter_than_contents() {
     let err = FdtMut::from_slice(&mut data).unwrap_err();
     assert!(matches!(err.kind, FdtErrorKind::InvalidHeader(_)));
 }
+
+#[test]
+fn add_property_rejects_invalid_names() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut buf = [0u8; 2048];
+    buf[..dtb.len()].copy_from_slice(dtb);
+
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+
+    for bad_name in [
+        "",
+        "\0",
+        "foo\0bar",
+        "foo\0",
+        "my prop",
+        "my@prop",
+        "pröp",
+        "prop/slash",
+    ] {
+        let err = node.add_property(bad_name, 1u32).unwrap_err();
+        assert_eq!(err, FdtMutError::InvalidPropertyName);
+    }
+
+    assert_eq!(fdt_mut.as_read_only().data(), dtb);
+}
+
+#[test]
+fn add_property_accepts_dtc_valid_names() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut buf = [0u8; 2048];
+    buf[..dtb.len()].copy_from_slice(dtb);
+
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+
+    for name in [
+        "a,b.c_d+e*f#g?h-0Z",
+        "0leading-digit",
+        "snps,dis-u2-freeclk-exists-quirk",
+    ] {
+        node.add_property(name, 1u32).unwrap();
+    }
+
+    let fdt = Fdt::new(fdt_mut.as_read_only().data()).unwrap();
+    let node = fdt.find_node("/test-props").unwrap();
+    for name in [
+        "a,b.c_d+e*f#g?h-0Z",
+        "0leading-digit",
+        "snps,dis-u2-freeclk-exists-quirk",
+    ] {
+        assert_eq!(node.property(name).unwrap().value_as::<u32>().unwrap(), 1);
+    }
+}
