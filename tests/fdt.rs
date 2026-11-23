@@ -19,7 +19,7 @@ mod common;
 
 use common::{
     FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_NOP, FDT_PROP, build_chain_dtb, build_dtb,
-    build_flat_dtb, push_begin_node, push_token,
+    build_flat_dtb, push_begin_node, push_prop, push_token,
 };
 
 #[test]
@@ -127,7 +127,7 @@ fn standard_properties() {
     // Explicit values.
     assert_eq!(standard_props_node.address_cells().unwrap(), 1);
     assert_eq!(standard_props_node.size_cells().unwrap(), 1);
-    assert_eq!(standard_props_node.status().unwrap(), Status::Fail);
+    assert_eq!(standard_props_node.status().unwrap(), Status::Fail(None));
     assert_eq!(standard_props_node.model().unwrap(), Some("Some Model"));
     assert!(standard_props_node.dma_coherent());
     assert_eq!(standard_props_node.phandle().unwrap(), Some(0x1234));
@@ -176,6 +176,23 @@ fn standard_properties() {
         0xbbbb_0000_cccc
     );
     assert_eq!(dma_ranges[0].length::<u32>().unwrap(), 0xdddd);
+}
+
+#[test]
+fn status_device_specific_failure() {
+    let mut structure = Vec::new();
+    push_begin_node(&mut structure, "");
+    push_prop(&mut structure, 0, b"fail-cache\0");
+    push_token(&mut structure, FDT_END_NODE);
+    push_token(&mut structure, FDT_END);
+    let dtb = build_dtb(&structure, b"status\0");
+
+    let status = {
+        let fdt = Fdt::new(&dtb).unwrap();
+        fdt.root().status().unwrap()
+    };
+    assert_eq!(status, Status::Fail(Some("cache")));
+    assert_eq!(status.to_string(), "fail-cache");
 }
 
 #[test]
