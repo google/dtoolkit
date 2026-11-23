@@ -20,6 +20,7 @@ use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::util::impl_read_only_node_methods;
 use crate::{Node, Property, ToPropertyValue};
 
 /// A mutable device tree node.
@@ -81,12 +82,13 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ///
     /// # Errors
     ///
-    /// Returns an error if resizing the buffer fails.
+    /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
+    /// property length or resulting FDT size exceeds `u32::MAX`.
     ///
     /// # Panics
     ///
-    /// Panics if the node name or existing structure is invalid, or if lengths
-    /// exceed `u32::MAX`.
+    /// Panics if the [`FdtMut`] structure was constructed using an
+    /// `*_unchecked` constructor and the existing FDT is not valid.
     pub fn add_property<T: ToPropertyValue>(
         &mut self,
         name: &str,
@@ -102,10 +104,14 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
             .expect("Fdt should be valid");
 
         let val_len = value.property_value_len();
-        let padded_val_len = Fdt::align_tag_offset(val_len);
-        let required_space = size_of::<FdtPropertyHeader>() + padded_val_len;
+        let padded_val_len_u64 = (val_len as u64)
+            .checked_next_multiple_of(FDT_TAGSIZE as u64)
+            .unwrap_or(u64::MAX);
+        let required_space =
+            padded_val_len_u64.saturating_add(size_of::<FdtPropertyHeader>() as u64);
 
         self.data.shift_dt_struct(insert_offset, required_space)?;
+        let padded_val_len = Fdt::align_tag_offset(val_len);
 
         let data = self.data.data_mut();
         let header = FdtPropertyHeader::new(
@@ -282,41 +288,12 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         self.as_read_only().offset()
     }
 
-    /// Returns the name of this node.
-    #[must_use]
-    pub fn name(&self) -> &str {
-        self.as_read_only().name()
-    }
-
-    /// Returns the name of this node without the unit address, if any.
-    #[must_use]
-    pub fn name_without_address(&self) -> &str {
-        self.as_read_only().name_without_address()
-    }
-
-    /// Returns the property with the given name, if any.
-    #[must_use]
-    pub fn property(&self, name: &str) -> Option<FdtProperty<'_>> {
-        self.as_read_only().property(name)
-    }
-
-    /// Returns an iterator over the properties of this node.
-    #[must_use]
-    pub fn properties(&self) -> FdtPropIter<'_> {
-        self.as_read_only().properties()
-    }
-
-    /// Returns a child node by its name.
-    #[must_use]
-    pub fn child(&self, name: &str) -> Option<FdtNode<'_>> {
-        self.as_read_only().child(name)
-    }
-
-    /// Returns an iterator over the children of this node.
-    #[must_use]
-    pub fn children(&self) -> FdtChildIter<'_> {
-        self.as_read_only().children()
-    }
+    impl_read_only_node_methods!(
+        node = FdtNode<'_>,
+        property = FdtProperty<'_>,
+        properties = FdtPropIter<'_>,
+        children = FdtChildIter<'_>,
+    );
 }
 
 impl<B: FdtBuffer> Display for FdtNodeMut<'_, B> {

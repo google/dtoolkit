@@ -9,8 +9,8 @@
 #![cfg(feature = "write")]
 
 use dtoolkit::fdt::Fdt;
-use dtoolkit::model::DeviceTree;
 use dtoolkit::model::overlay::OverlayApplier;
+use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
 use dtoolkit::{Node, Property};
 
 macro_rules! apply_overlay {
@@ -98,5 +98,45 @@ fn apply_overlay_dependent_fragments() {
     let _base = apply_overlay!(
         "overlay_dependent_base.dtb",
         "overlay_dependent_overlay.dtb"
+    );
+}
+
+#[test]
+fn apply_overlay_target_path_without_unit_address() {
+    let mut base = DeviceTree::new();
+    base.root.add_child(
+        DeviceTreeNode::builder("soc")
+            .unwrap()
+            .child(
+                DeviceTreeNode::builder("serial@1000")
+                    .unwrap()
+                    .property(DeviceTreeProperty::new("status", "disabled").unwrap())
+                    .build(),
+            )
+            .build(),
+    );
+
+    // Equivalent to `&{/soc/serial} { status = "okay"; };`
+    let mut overlay = DeviceTree::new();
+    overlay.root.add_child(
+        DeviceTreeNode::builder("fragment@0")
+            .unwrap()
+            .property(DeviceTreeProperty::new("target-path", "/soc/serial").unwrap())
+            .child(
+                DeviceTreeNode::builder("__overlay__")
+                    .unwrap()
+                    .property(DeviceTreeProperty::new("status", "okay").unwrap())
+                    .build(),
+            )
+            .build(),
+    );
+
+    let mut applier = OverlayApplier::new(&mut base);
+    applier.apply_overlay_tree(overlay).unwrap();
+
+    let serial = base.find_node("/soc/serial@1000").unwrap();
+    assert_eq!(
+        serial.property("status").unwrap().value_as::<&str>(),
+        Ok("okay")
     );
 }

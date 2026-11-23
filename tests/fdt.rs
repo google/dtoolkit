@@ -336,6 +336,7 @@ macro_rules! load_dtb_dts_pair {
 const ALL_DT_FILES: &[(&[u8], &str, &str)] = &[
     load_dtb_dts_pair!("test_children_nested"),
     load_dtb_dts_pair!("test_children"),
+    load_dtb_dts_pair!("test_escapes"),
     load_dtb_dts_pair!("test_memreserve"),
     load_dtb_dts_pair!("test_pretty_print"),
     load_dtb_dts_pair!("test_props"),
@@ -355,6 +356,35 @@ fn pretty_print() {
             .replace("\r\n", "\n");
         assert_eq!(s, expected, "Mismatch for {name}");
     }
+}
+
+#[test]
+fn property_display_escapes_quotes_and_backslashes() {
+    let dtb = include_bytes!("dtb/test_escapes.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+    let root = fdt.root();
+
+    let prop = root.property("quote").unwrap();
+    assert_eq!(prop.value(), b"foo\"bar\0");
+    assert_eq!(prop.to_string(), concat!(r#"quote = "foo\"bar";"#, "\n"));
+
+    let prop = root.property("backslash").unwrap();
+    assert_eq!(prop.value(), b"a\\b\0");
+    assert_eq!(prop.to_string(), concat!(r#"backslash = "a\\b";"#, "\n"));
+
+    let prop = root.property("trailing-backslash").unwrap();
+    assert_eq!(prop.value(), b"abc\\\0");
+    assert_eq!(
+        prop.to_string(),
+        concat!(r#"trailing-backslash = "abc\\";"#, "\n")
+    );
+
+    let prop = root.property("str-list").unwrap();
+    assert_eq!(prop.value(), b"\"\0\\\0x\\\"y\0");
+    assert_eq!(
+        prop.to_string(),
+        concat!(r#"str-list = "\"", "\\", "x\\\"y";"#, "\n")
+    );
 }
 
 #[test]
@@ -971,4 +1001,44 @@ fn events_skip_nops() {
     };
     assert_eq!(prop.name(), "prop");
     assert_eq!(prop.value_as::<u32>().unwrap(), 42);
+}
+
+#[test]
+fn struct_block_shorter_than_contents_is_rejected() {
+    // A root node with one child, `a`. The structure block is 28 bytes and
+    // the header fields below declare exactly that.
+    assert!(Fdt::new(&build_chain_dtb(1)).is_ok());
+
+    // `size_dt_struct` covers only part of the structure block that the walk
+    // to FDT_END covers. In the last case the strings block begins inside the
+    // structure block, which the header checks allow because
+    // `off_dt_struct + size_dt_struct <= off_dt_strings` still holds.
+    for (size_dt_struct, off_dt_strings) in [(8, 84), (4, 84), (8, 64)] {
+        let mut dtb = build_chain_dtb(1);
+        dtb[12..16].copy_from_slice(&u32::to_be_bytes(off_dt_strings));
+        dtb[36..40].copy_from_slice(&u32::to_be_bytes(size_dt_struct));
+        let err = Fdt::new(&dtb).unwrap_err();
+        assert_eq!(
+            err.kind,
+            FdtErrorKind::InvalidHeader("struct block does not contain FDT_END")
+        );
+    }
+}
+
+#[test]
+fn struct_block_may_extend_past_fdt_end() {
+    // Both NOPs and padding after FDT_END are accepted as long as they lie
+    // within `size_dt_struct`, which `build_dtb` sets to the structure's
+    // length.
+    for trailer in [[FDT_NOP, FDT_NOP], [0, 0]] {
+        let mut structure = Vec::new();
+        push_begin_node(&mut structure, "");
+        push_token(&mut structure, FDT_END_NODE);
+        push_token(&mut structure, FDT_END);
+        for token in trailer {
+            push_token(&mut structure, token);
+        }
+        let dtb = build_dtb(&structure, &[]);
+        assert!(Fdt::new(&dtb).is_ok());
+    }
 }
