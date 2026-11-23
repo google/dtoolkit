@@ -22,7 +22,7 @@ mod writer;
 use alloc::vec::Vec;
 use core::fmt::Display;
 
-pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder};
+pub use node::{DeviceTreeNode, DeviceTreeNodeBuilder, DeviceTreeNodeRef};
 pub use property::DeviceTreeProperty;
 
 use crate::Node;
@@ -92,7 +92,13 @@ impl DeviceTree {
         }
     }
 
-    /// Finds a node by its path and returns a reference to it.
+    /// Returns a read-only view of the root node of the device tree.
+    #[must_use]
+    pub fn root(&self) -> DeviceTreeNodeRef<'_> {
+        self.root.as_read_only()
+    }
+
+    /// Finds a node by its path and returns a read-only view of it.
     ///
     /// # Performance
     ///
@@ -112,11 +118,11 @@ impl DeviceTree {
     /// assert_eq!(child.name(), "child");
     /// ```
     #[must_use]
-    pub fn find_node(&self, path: &str) -> Option<&DeviceTreeNode> {
+    pub fn find_node(&self, path: &str) -> Option<DeviceTreeNodeRef<'_>> {
         if !path.starts_with('/') {
             return None;
         }
-        let mut current_node = &self.root;
+        let mut current_node = self.root();
         if path == "/" {
             return Some(current_node);
         }
@@ -159,7 +165,7 @@ impl DeviceTree {
             } else {
                 current_node
                     .children_mut()
-                    .find(|child| (&**child).name_without_address() == component)?
+                    .find(|child| child.name_without_address() == component)?
             };
         }
         Some(current_node)
@@ -172,6 +178,10 @@ impl Default for DeviceTree {
     }
 }
 
+/// Formats the device tree as DTS source.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be valid DTS.
 impl Display for DeviceTree {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         Fdt::new(&self.to_dtb())
