@@ -165,7 +165,7 @@ impl DeviceTree {
             } else {
                 current_node
                     .children_mut()
-                    .find(|child| (&**child).name_without_address() == component)?
+                    .find(|child| child.name_without_address() == component)?
             };
         }
         Some(current_node)
