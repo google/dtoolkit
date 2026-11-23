@@ -561,9 +561,9 @@ fn add_string_deduplication() {
     let initial_size = fdt_mut.as_read_only().data().len();
 
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
-    // adding property with an existing name should not grow the dt_strings
-    // block
-    node.add_property("str-prop", [1u8, 2, 3, 4]).unwrap();
+    // adding property with a name already in dt_strings should not grow the
+    // dt_strings block
+    node.add_property("model", [1u8, 2, 3, 4]).unwrap();
 
     // DTB should grow exactly by the property block size (FDT_TAGSIZE * 3 +
     // value length)
@@ -875,4 +875,30 @@ fn add_property_accepts_dtc_valid_names() {
     ] {
         assert_eq!(node.property(name).unwrap().value_as::<u32>().unwrap(), 1);
     }
+}
+
+#[test]
+fn add_property_rejects_duplicate() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    let mut buf = [0u8; 2048];
+    buf[..dtb.len()].copy_from_slice(dtb);
+
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+
+    let err = node.add_property("str-prop", "duplicate").unwrap_err();
+    assert_eq!(err, FdtMutError::DuplicateProperty);
+    assert_eq!(fdt_mut.as_read_only().data(), dtb);
+
+    // re-adding after removing should succeed
+    let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
+    assert!(node.remove_property("str-prop"));
+    node.add_property("str-prop", "replacement").unwrap();
+    assert_eq!(
+        node.property("str-prop")
+            .unwrap()
+            .value_as::<&str>()
+            .unwrap(),
+        "replacement"
+    );
 }
