@@ -65,6 +65,20 @@ pub(crate) fn push_begin_node(structure: &mut Vec<u8>, name: &str) {
     structure.resize(structure.len().next_multiple_of(4), 0);
 }
 
+/// Appends an `FDT_PROP` token, its header, and the padded property value.
+///
+/// `name_offset` is the offset of the property name in the strings block.
+pub(crate) fn push_prop(structure: &mut Vec<u8>, name_offset: u32, value: &[u8]) {
+    push_token(structure, FDT_PROP);
+    push_token(
+        structure,
+        u32::try_from(value.len()).expect("DTB property length should fit in u32"),
+    );
+    push_token(structure, name_offset);
+    structure.extend_from_slice(value);
+    structure.resize(structure.len().next_multiple_of(4), 0);
+}
+
 /// Builds a DTB with `depth` nested nodes named `a` below the root.
 pub(crate) fn build_chain_dtb(depth: usize) -> Vec<u8> {
     let mut structure = Vec::new();

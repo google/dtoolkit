@@ -19,7 +19,7 @@ mod common;
 
 use common::{
     FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_NOP, FDT_PROP, build_chain_dtb, build_dtb,
-    build_flat_dtb, push_begin_node, push_token,
+    build_flat_dtb, push_begin_node, push_prop, push_token,
 };
 
 #[test]
@@ -180,14 +180,9 @@ fn standard_properties() {
 
 #[test]
 fn status_device_specific_failure() {
-    let value = b"fail-cache\0";
     let mut structure = Vec::new();
     push_begin_node(&mut structure, "");
-    push_token(&mut structure, FDT_PROP);
-    push_token(&mut structure, u32::try_from(value.len()).unwrap());
-    push_token(&mut structure, 0);
-    structure.extend_from_slice(value);
-    structure.resize(structure.len().next_multiple_of(4), 0);
+    push_prop(&mut structure, 0, b"fail-cache\0");
     push_token(&mut structure, FDT_END_NODE);
     push_token(&mut structure, FDT_END);
     let dtb = build_dtb(&structure, b"status\0");

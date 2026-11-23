@@ -14,6 +14,8 @@ use crate::error::StandardError;
 ///
 /// Device-specific failure codes borrow from the property's value.
 ///
+/// # Examples
+///
 /// ```
 /// use dtoolkit::standard::Status;
 ///
