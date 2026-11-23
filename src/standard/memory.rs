@@ -40,12 +40,11 @@ impl<'a> Fdt<'a> {
     /// ```
     /// use dtoolkit::fdt::Fdt;
     ///
-    /// # let dtb = include_bytes!("../../../tests/dtb/test_pretty_print.dtb");
+    /// # let dtb = include_bytes!("../../tests/dtb/test_pretty_print.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
     /// let memory_nodes: Vec<_> = fdt.memory_nodes().collect();
     /// assert!(!memory_nodes.is_empty());
     /// ```
-    #[must_use]
     pub fn memory_nodes(self) -> impl Iterator<Item = Memory<FdtNode<'a>>> + 'a {
         self.root().children().filter_map(|node| {
             let name = node.name();
