@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use crate::error::OverlayError;
 use crate::fdt::Fdt;
-use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
+use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeNodeRef, DeviceTreeProperty};
 use crate::overlay::{
     FixupLocation, Fragment, FragmentTarget, NODE_FIXUPS, NODE_LOCAL_FIXUPS, NODE_SYMBOLS, Overlay,
     PHANDLE_PROPS, get_phandle,
@@ -54,7 +54,7 @@ impl<'a> OverlayApplier<'a> {
         phandles: &mut BTreeMap<u32, String>,
         max_ph: &mut u32,
     ) {
-        if let Some(p) = get_phandle(node) {
+        if let Some(p) = get_phandle(node.as_read_only()) {
             *max_ph = (*max_ph).max(p);
             let p_str = if current_path.is_empty() {
                 "/".to_string()
@@ -63,7 +63,7 @@ impl<'a> OverlayApplier<'a> {
             };
             phandles.insert(p, p_str);
         }
-        for child in node.children() {
+        for child in node.children.values() {
             let old_len = current_path.len();
             if !current_path.ends_with('/') {
                 current_path.push('/');
@@ -103,7 +103,7 @@ impl<'a> OverlayApplier<'a> {
         )?;
 
         let overlay_view = Overlay {
-            node: &overlay.root,
+            node: overlay.root(),
         };
         let mut fragment_targets = Vec::new();
 
@@ -182,7 +182,7 @@ impl<'a> OverlayApplier<'a> {
 
     fn resolve_fragment_target_path(
         &self,
-        fragment: Fragment<&DeviceTreeNode>,
+        fragment: Fragment<DeviceTreeNodeRef<'_>>,
     ) -> Result<String, OverlayError> {
         match fragment.target()? {
             FragmentTarget::Phandle(phandle) => {
@@ -279,11 +279,11 @@ fn update_phandles_recursive(
     phandles: &mut BTreeMap<u32, String>,
     max_ph: &mut u32,
 ) {
-    if let Some(p) = get_phandle(node) {
+    if let Some(p) = get_phandle(node.as_read_only()) {
         *max_ph = (*max_ph).max(p);
         phandles.insert(p, current_path.clone());
     }
-    for child in node.children() {
+    for child in node.children.values() {
         let old_len = current_path.len();
         if !current_path.ends_with('/') {
             current_path.push('/');
@@ -387,7 +387,7 @@ fn update_local_references(
         target_prop.set_value(new_value);
     }
 
-    for fixup_child in fixup_node.children() {
+    for fixup_child in fixup_node.children.values() {
         let child_name = fixup_child.name();
         let target_child =
             target_node
@@ -431,7 +431,7 @@ fn resolve_external_fixups(
             .find_node_mut(&target_path)
             .ok_or_else(|| OverlayError::TargetNotFound(target_path.clone()))?;
 
-        let phandle = if let Some(p) = get_phandle(&*target_node) {
+        let phandle = if let Some(p) = get_phandle(target_node.as_read_only()) {
             p
         } else {
             *max_phandle = max_phandle
