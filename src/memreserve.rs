@@ -23,9 +23,15 @@ pub struct MemoryReservation {
 
 impl MemoryReservation {
     /// Creates a new [`MemoryReservation`].
+    ///
+    /// Returns `None` if both `address` and `size` are `0`, as `(0, 0)` is
+    /// reserved as the terminator of the memory reservation block.
     #[must_use]
-    pub const fn new(address: u64, size: u64) -> Self {
-        Self { address, size }
+    pub const fn new(address: u64, size: u64) -> Option<Self> {
+        if address == 0 && size == 0 {
+            return None;
+        }
+        Some(Self { address, size })
     }
 
     /// Returns the physical address of the reserved memory region.
@@ -41,7 +47,10 @@ impl MemoryReservation {
     }
 
     pub(crate) const fn from_raw(raw: RawMemoryReservation) -> Self {
-        Self::new(raw.address.get(), raw.size.get())
+        let address = raw.address.get();
+        let size = raw.size.get();
+        debug_assert!(address != 0 || size != 0);
+        Self { address, size }
     }
 
     #[cfg(feature = "write")]
@@ -78,9 +87,13 @@ mod tests {
 
     #[test]
     fn memory_reservation_new() {
-        let res = MemoryReservation::new(0x1000, 0x100);
+        let res = MemoryReservation::new(0x1000, 0x100).unwrap();
 
         assert_eq!(res.address(), 0x1000);
         assert_eq!(res.size(), 0x100);
+
+        assert_eq!(MemoryReservation::new(0, 0), None);
+        assert!(MemoryReservation::new(0, 1).is_some());
+        assert!(MemoryReservation::new(1, 0).is_some());
     }
 }
