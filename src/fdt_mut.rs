@@ -159,17 +159,20 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 
     fn find_existing_string(&self, name: &str) -> Option<u32> {
-        let fdt = self.as_read_only();
-        let header = fdt.header();
+        let header = self.as_read_only().header();
+        let str_block_offset = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
+        let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
 
+        // Comparing raw bytes to avoid decoding UTF-8 (validation only covers
+        // strings referenced by properties, so the string block may contain
+        // strings that are not valid UTF-8).
         let mut curr_offset = 0;
-        while curr_offset < str_block_size {
-            let s = fdt.string(curr_offset).expect("FdtMut should be valid");
-            if s == name {
+        for s in str_block.split_inclusive(|&b| b == b'\0') {
+            if s.strip_suffix(b"\0") == Some(name.as_bytes()) {
                 return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
             }
-            curr_offset += s.len() + 1; // plus null terminator
+            curr_offset += s.len();
         }
 
         None

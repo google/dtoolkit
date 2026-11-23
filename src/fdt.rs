@@ -524,6 +524,15 @@ impl<'a> Fdt<'a> {
             ));
         }
 
+        // Validate that the entire structure block fits within what the header
+        // declares in `size_dt_struct`.
+        if end_offset + FDT_TAGSIZE > offset + header.size_dt_struct() as usize {
+            return Err(FdtParseError::new(
+                FdtErrorKind::InvalidHeader("struct block does not contain FDT_END"),
+                offset_of!(FdtHeader, size_dt_struct),
+            ));
+        }
+
         Ok(())
     }
 

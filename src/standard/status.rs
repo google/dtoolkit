@@ -7,13 +7,26 @@
 // except according to those terms.
 
 use core::fmt::{self, Display, Formatter};
-use core::str::FromStr;
 
 use crate::error::StandardError;
 
 /// The value of a `status` property.
+///
+/// Device-specific failure codes borrow from the property's value.
+///
+/// # Examples
+///
+/// ```
+/// use dtoolkit::standard::Status;
+///
+/// assert_eq!(
+///     Status::try_from("fail-cache"),
+///     Ok(Status::Fail(Some("cache")))
+/// );
+/// assert_eq!(Status::try_from("fail"), Ok(Status::Fail(None)));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum Status {
+pub enum Status<'a> {
     /// The device is operational.
     #[default]
     Okay,
@@ -21,42 +34,36 @@ pub enum Status {
     Disabled,
     /// The device is operational but shouldn't be used.
     Reserved,
-    /// The device is not operational.
-    Fail,
-    /// The device is not operational, with some device-specific error
-    /// condition.
-    FailSss,
+    /// The device is not operational, optionally with a device-specific error
+    /// code (the suffix of a `fail-` status).
+    Fail(Option<&'a str>),
 }
 
-impl Status {
-    fn as_str(self) -> &'static str {
+impl Display for Status<'_> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Status::Okay => "okay",
-            Status::Disabled => "disabled",
-            Status::Reserved => "reserved",
-            Status::Fail => "fail",
-            Status::FailSss => "fail-sss",
+            Self::Okay => f.write_str("okay"),
+            Self::Disabled => f.write_str("disabled"),
+            Self::Reserved => f.write_str("reserved"),
+            Self::Fail(None) => f.write_str("fail"),
+            Self::Fail(Some(code)) => write!(f, "fail-{code}"),
         }
     }
 }
 
-impl Display for Status {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
+impl<'a> TryFrom<&'a str> for Status<'a> {
+    type Error = StandardError;
 
-impl FromStr for Status {
-    type Err = StandardError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         match s {
             "okay" => Ok(Self::Okay),
             "disabled" => Ok(Self::Disabled),
             "reserved" => Ok(Self::Reserved),
-            "fail" => Ok(Self::Fail),
-            "fail-sss" => Ok(Self::FailSss),
-            _ => Err(StandardError::InvalidStatus),
+            "fail" => Ok(Self::Fail(None)),
+            _ => s
+                .strip_prefix("fail-")
+                .map(|code| Self::Fail(Some(code)))
+                .ok_or(StandardError::InvalidStatus),
         }
     }
 }
@@ -71,23 +78,46 @@ mod tests {
     }
 
     #[test]
+    fn status_device_specific_failure() {
+        for (value, code) in [
+            ("fail-cache", "cache"),
+            ("fail-42", "42"),
+            ("fail-device-specific", "device-specific"),
+            ("fail-", ""),
+        ] {
+            let status = Status::try_from(value).unwrap();
+            assert_eq!(status, Status::Fail(Some(code)));
+            assert_eq!(status.to_string(), value);
+        }
+    }
+
+    #[test]
     fn status_parse_and_display() {
         let cases = [
             (Status::Okay, "okay"),
             (Status::Disabled, "disabled"),
             (Status::Reserved, "reserved"),
-            (Status::Fail, "fail"),
-            (Status::FailSss, "fail-sss"),
+            (Status::Fail(None), "fail"),
+            (Status::Fail(Some("sss")), "fail-sss"),
         ];
 
         for (status, s) in cases {
-            assert_eq!(s.parse::<Status>(), Ok(status));
+            assert_eq!(Status::try_from(s), Ok(status));
             assert_eq!(status.to_string(), s);
         }
+    }
 
-        assert_eq!(
-            "unknown".parse::<Status>(),
-            Err(StandardError::InvalidStatus)
-        );
+    #[test]
+    fn status_invalid() {
+        for value in [
+            "",
+            "unknown",
+            "failed",
+            "fail_cache",
+            "FAIL-cache",
+            " fail-cache",
+        ] {
+            assert_eq!(Status::try_from(value), Err(StandardError::InvalidStatus));
+        }
     }
 }
