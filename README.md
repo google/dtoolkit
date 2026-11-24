@@ -15,6 +15,7 @@ This library provides a comprehensive API for working with FDTs, including:
   computationally efficient data structures.
 - Support for applying device tree overlays.
 - Outputting device trees in DTS source format.
+- Support for 32-bit and 64-bit targets.
 
 The library is written purely in Rust and is `#![no_std]` compatible. If
 you don't need the Device Tree manipulation functionality, the library is

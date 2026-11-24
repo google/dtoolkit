@@ -540,7 +540,9 @@ impl<'a> Fdt<'a> {
         let header = self.header();
         let mut offset = header.off_mem_rsvmap() as usize;
         loop {
-            if offset >= header.off_dt_struct() as usize {
+            // The whole entry, including the terminator, must end before the
+            // structure block starts.
+            if offset + size_of::<MemoryReservation>() > header.off_dt_struct() as usize {
                 return Err(FdtParseError::new(
                     FdtErrorKind::MemReserveNotTerminated,
                     offset,
@@ -1325,5 +1327,216 @@ mod tests {
         }
         .unwrap();
         assert_eq!(fdt.data().len(), FDT_HEADER_OK.len());
+    }
+
+    /// Builds an FDT blob for the memory reservation tests below.
+    ///
+    /// The header is placed at 0..40 with `off_mem_rsvmap = 40`, version 17
+    /// and last compatible version 16. `body` is everything from offset 40 to
+    /// the end of the blob. The structure block runs from `off_dt_struct` to
+    /// the end of the blob, and the strings block is empty and starts right
+    /// after it, so every header field is consistent with the data length.
+    fn memreserve_test_blob(off_dt_struct: u32, body: &[u8]) -> Vec<u8> {
+        let totalsize = u32::try_from(size_of::<FdtHeader>() + body.len()).unwrap();
+        let size_dt_struct = totalsize - off_dt_struct;
+        let off_dt_strings = totalsize;
+        let mut data = Vec::new();
+        for value in [
+            FDT_MAGIC,
+            totalsize,
+            off_dt_struct,
+            off_dt_strings,
+            40, // off_mem_rsvmap
+            17, // version
+            16, // last_comp_version
+            0,  // boot_cpuid_phys
+            0,  // size_dt_strings
+            size_dt_struct,
+        ] {
+            data.extend_from_slice(&value.to_be_bytes());
+        }
+        assert_eq!(data.len(), size_of::<FdtHeader>());
+        data.extend_from_slice(body);
+        data
+    }
+
+    #[test]
+    fn memreserve_terminator_spills_8_bytes_into_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 32] = [
+            // Memreserve (40..56), structure block starts at 48
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR), overlaps struct
+            // Rest of the structure block (56..72)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(48, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 40)
+        );
+    }
+
+    #[test]
+    fn memreserve_terminator_spills_4_bytes_into_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 32] = [
+            // Memreserve (40..56), structure block starts at 52
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR), high half
+            0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR), low half, overlaps struct
+            // Rest of the structure block (56..72)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(52, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 40)
+        );
+    }
+
+    #[test]
+    fn memreserve_terminator_spills_12_bytes_into_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 32] = [
+            // Memreserve (40..56), structure block starts at 44
+            0x00, 0x00, 0x00, 0x00, // address = 0 (TERMINATOR), high half
+            0x00, 0x00, 0x00, 0x00, // address = 0 (TERMINATOR), low half, overlaps struct
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR), overlaps struct
+            // Rest of the structure block (56..72)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(44, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 40)
+        );
+    }
+
+    #[test]
+    fn memreserve_terminator_after_entry_spills_into_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 48] = [
+            // Memreserve entry (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, // address = 0x8000_0000
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, // size = 0x10_0000
+            // Memreserve terminator (56..72), structure block starts at 64
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR), overlaps struct
+            // Rest of the structure block (72..88)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(64, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 56)
+        );
+    }
+
+    #[test]
+    fn memreserve_non_terminator_entry_spills_into_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 24] = [
+            // Memreserve entry (40..56), structure block starts at 48
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, // address = 0x8000_0000
+            0x00, 0x00, 0x00, 0x01, // size high half, also FDT_BEGIN_NODE at 48
+            0x00, 0x00, 0x00, 0x00, // size low half, also "" at 52
+            // Rest of the structure block (56..64)
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(48, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 40)
+        );
+    }
+
+    #[test]
+    fn memreserve_block_empty() {
+        #[rustfmt::skip]
+        let body: [u8; 16] = [
+            // No memreserve block, structure block starts at 40 (40..56)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(40, &body);
+
+        let err = Fdt::new(&data).unwrap_err();
+        assert_eq!(
+            err,
+            FdtParseError::new(FdtErrorKind::MemReserveNotTerminated, 40)
+        );
+    }
+
+    #[test]
+    fn memreserve_entry_and_terminator_fit_exactly() {
+        #[rustfmt::skip]
+        let body: [u8; 48] = [
+            // Memreserve entry (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, // address = 0x8000_0000
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, // size = 0x10_0000
+            // Memreserve terminator (56..72)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR)
+            // Structure block (72..88)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(72, &body);
+
+        let fdt = Fdt::new(&data).unwrap();
+        let mut reservations = fdt.memory_reservations();
+        let reservation = reservations.next().unwrap();
+        assert_eq!(reservation.address(), 0x8000_0000);
+        assert_eq!(reservation.size(), 0x10_0000);
+        assert!(reservations.next().is_none());
+    }
+
+    #[test]
+    fn memreserve_padding_before_struct() {
+        #[rustfmt::skip]
+        let body: [u8; 40] = [
+            // Memreserve terminator (40..56)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // address = 0
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // size = 0 (TERMINATOR)
+            // Padding (56..64)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // Structure block (64..80)
+            0x00, 0x00, 0x00, 0x01, // FDT_BEGIN_NODE
+            0x00, 0x00, 0x00, 0x00, // ""
+            0x00, 0x00, 0x00, 0x02, // FDT_END_NODE
+            0x00, 0x00, 0x00, 0x09, // FDT_END
+        ];
+        let data = memreserve_test_blob(64, &body);
+
+        let fdt = Fdt::new(&data).unwrap();
+        assert_eq!(fdt.memory_reservations().count(), 0);
     }
 }

@@ -54,6 +54,11 @@ jobs:
       matrix:
         rust: [stable, nightly, "1.88"] # 1.88 is the MSRV
         os: [ubuntu-latest, macos-latest, windows-latest]
+        target: [""] # Ensures `include` adds a new job instead of mutating (stable, ubuntu-latest)
+        include:
+          - rust: stable
+            os: ubuntu-latest
+            target: i686-unknown-linux-gnu
 
     name: Build & test
     runs-on: ${{ matrix.os }}
@@ -64,10 +69,22 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install 32-bit linker and C library
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-multilib
+
+      - name: Set Cargo target
+        if: matrix.target != ''
+        shell: bash
+        run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -234,6 +251,9 @@ jobs:
 
   miri:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, i686-unknown-linux-gnu]
 
     name: Miri test
     runs-on: ubuntu-latest
@@ -259,12 +279,10 @@ jobs:
           save-if: 'false'
 
       - name: Miri setup
-        run: cargo miri setup
+        run: cargo miri setup --target ${{ matrix.target }}
 
       - name: Miri test
-        run: cargo miri test --no-fail-fast --all-features
-        env:
-          MIRIFLAGS: -Zmiri-disable-isolation
+        run: cargo miri test --target ${{ matrix.target }} --no-fail-fast --all-features
 
   coverage:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
