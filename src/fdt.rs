@@ -1252,16 +1252,20 @@ mod tests {
         let size_dt_struct = totalsize - off_dt_struct;
         let off_dt_strings = totalsize;
         let mut data = Vec::new();
-        data.extend_from_slice(&FDT_MAGIC.to_be_bytes()); // magic
-        data.extend_from_slice(&totalsize.to_be_bytes()); // totalsize
-        data.extend_from_slice(&off_dt_struct.to_be_bytes()); // off_dt_struct
-        data.extend_from_slice(&off_dt_strings.to_be_bytes()); // off_dt_strings
-        data.extend_from_slice(&40u32.to_be_bytes()); // off_mem_rsvmap = 40
-        data.extend_from_slice(&17u32.to_be_bytes()); // version = 17
-        data.extend_from_slice(&16u32.to_be_bytes()); // last_comp_version = 16
-        data.extend_from_slice(&0u32.to_be_bytes()); // boot_cpuid_phys = 0
-        data.extend_from_slice(&0u32.to_be_bytes()); // size_dt_strings = 0
-        data.extend_from_slice(&size_dt_struct.to_be_bytes()); // size_dt_struct
+        for value in [
+            FDT_MAGIC,
+            totalsize,
+            off_dt_struct,
+            off_dt_strings,
+            40, // off_mem_rsvmap
+            17, // version
+            16, // last_comp_version
+            0,  // boot_cpuid_phys
+            0,  // size_dt_strings
+            size_dt_struct,
+        ] {
+            data.extend_from_slice(&value.to_be_bytes());
+        }
         assert_eq!(data.len(), size_of::<FdtHeader>());
         data.extend_from_slice(body);
         data
