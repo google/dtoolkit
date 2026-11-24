@@ -24,3 +24,17 @@ fn memreserve() {
     assert!(dts.contains("/memreserve/ 0x1000 0x100;"));
     assert!(dts.contains("/memreserve/ 0x2000 0x200;"));
 }
+
+#[test]
+fn memreserve_iterator_is_fused() {
+    for dtb in [
+        include_bytes!("dtb/test_memreserve.dtb").as_slice(),
+        include_bytes!("dtb/test.dtb").as_slice(),
+    ] {
+        let fdt = Fdt::new(dtb).unwrap();
+        let mut iter = fdt.memory_reservations();
+        while iter.next().is_some() {}
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+    }
+}

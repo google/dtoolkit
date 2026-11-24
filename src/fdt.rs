@@ -752,11 +752,10 @@ impl<'a> Fdt<'a> {
         core::iter::from_fn(move || {
             let (reservation, _) = RawMemoryReservation::ref_from_prefix(&self.data[offset..])
                 .expect("Fdt should be valid");
-            offset += size_of::<RawMemoryReservation>();
-
             if *reservation == RawMemoryReservation::TERMINATOR {
                 return None;
             }
+            offset += size_of::<RawMemoryReservation>();
             Some(MemoryReservation::from_raw(*reservation))
         })
     }
