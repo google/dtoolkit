@@ -60,7 +60,7 @@ jobs:
             os: ubuntu-latest
             target: i686-unknown-linux-gnu
 
-    name: Build & test (${{ matrix.rust }}, ${{ matrix.os }}${{ matrix.target && format(', {0}', matrix.target) || '' }})
+    name: Build & test
     runs-on: ${{ matrix.os }}
     needs: ["check"]
     permissions:
