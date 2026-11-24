@@ -433,15 +433,11 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
 
     /// Creates a new `FdtMut` from a mutable byte slice without validation.
     ///
-    /// # Safety
-    ///
     /// The caller must ensure that `slice` contains a valid Flattened Device
     /// Tree (FDT) blob. If the blob is invalid, methods on `FdtMut` and
     /// related types may panic.
     #[must_use]
     pub fn from_slice_unchecked(slice: &'a mut [u8]) -> Self {
-        // SAFETY: The caller guarantees that the slice contains a valid device
-        // tree.
         let buffer = SliceBuffer::new_unchecked(slice);
         Self::new_unchecked(buffer)
     }
