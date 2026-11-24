@@ -54,8 +54,13 @@ jobs:
       matrix:
         rust: [stable, nightly, "1.88"] # 1.88 is the MSRV
         os: [ubuntu-latest, macos-latest, windows-latest]
+        target: [""] # Ensures `include` adds a new job instead of mutating (stable, ubuntu-latest)
+        include:
+          - rust: stable
+            os: ubuntu-latest
+            target: i686-unknown-linux-gnu
 
-    name: Build & test
+    name: Build & test (${{ matrix.rust }}, ${{ matrix.os }}${{ matrix.target && format(', {0}', matrix.target) || '' }})
     runs-on: ${{ matrix.os }}
     needs: ["check"]
     permissions:
@@ -64,39 +69,8 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: 'rust-ci'
-          cache-bin: 'false'
-
-      - name: Fetch dependencies
-        run: cargo +${{ matrix.rust }} fetch
-
-      - name: Build
-        run: cargo +${{ matrix.rust }} build --all-features --tests
-
-      - name: Test
-        run: cargo +${{ matrix.rust }} test --all-features
-
-  build-32bit:
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
-
-    name: Build & test (32-bit)
-    runs-on: ubuntu-latest
-    needs: ["check"]
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Install 32-bit linker and C library
+        if: matrix.target == 'i686-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-multilib
@@ -104,24 +78,24 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: stable
-          targets: i686-unknown-linux-gnu
+          toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: 'rust-ci'
           cache-bin: 'false'
-          save-if: 'false'
+          save-if: ${{ !matrix.target }}
 
       - name: Fetch dependencies
-        run: cargo fetch
+        run: cargo +${{ matrix.rust }} fetch
 
       - name: Build
-        run: cargo build --target i686-unknown-linux-gnu --all-features --tests
+        run: cargo +${{ matrix.rust }} build ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --all-features --tests
 
       - name: Test
-        run: cargo test --target i686-unknown-linux-gnu --all-features
+        run: cargo +${{ matrix.rust }} test ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --all-features
 
   clippy:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
@@ -279,7 +253,7 @@ jobs:
 
     name: Miri test
     runs-on: ubuntu-latest
-    needs: ["build", "build-32bit"]
+    needs: ["build"]
     permissions:
       contents: read
     steps:
