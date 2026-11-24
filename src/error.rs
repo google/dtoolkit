@@ -90,10 +90,6 @@ pub enum FdtErrorKind {
     /// Memory reservation block has not been terminated with a null entry.
     #[error("Memory reservation block was not terminated with a null entry")]
     MemReserveNotTerminated,
-    /// Memory reservation block has an entry that is unaligned or has invalid
-    /// size.
-    #[error("Memory reservation block has an entry that is unaligned or has invalid size")]
-    MemReserveInvalid,
 }
 
 /// An error that can occur when parsing a property.

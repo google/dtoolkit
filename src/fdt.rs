@@ -22,6 +22,7 @@ pub(crate) mod property;
 
 use core::ffi::CStr;
 use core::fmt::{self, Debug, Display, Formatter};
+use core::iter::FusedIterator;
 use core::mem::offset_of;
 use core::ptr;
 
@@ -546,27 +547,14 @@ impl<'a> Fdt<'a> {
     }
 
     fn validate_mem_reservations(self) -> Result<(), FdtParseError> {
-        let header = self.header();
-        let mut offset = header.off_mem_rsvmap() as usize;
+        let mut iter = self.memory_reservations();
         loop {
-            // The whole entry, including the terminator, must end before the
-            // structure block starts.
-            if offset + size_of::<MemoryReservation>() > header.off_dt_struct() as usize {
-                return Err(FdtParseError::new(
-                    FdtErrorKind::MemReserveNotTerminated,
-                    offset,
-                ));
-            }
-
-            let (reservation, _) = RawMemoryReservation::ref_from_prefix(&self.data[offset..])
-                .map_err(|_| FdtParseError::new(FdtErrorKind::MemReserveInvalid, offset))?;
-            offset += size_of::<RawMemoryReservation>();
-
-            if *reservation == RawMemoryReservation::TERMINATOR {
-                break;
+            match iter.try_next() {
+                Ok(Some(_)) => {}
+                Ok(None) => return Ok(()),
+                Err(kind) => return Err(FdtParseError::new(kind, self.subslice_offset(iter.data))),
             }
         }
-        Ok(())
     }
 
     pub(crate) fn skip_props(
@@ -758,17 +746,14 @@ impl<'a> Fdt<'a> {
     /// Panics if the [`Fdt`] structure was constructed using
     /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
     /// valid.
-    pub fn memory_reservations(self) -> impl Iterator<Item = MemoryReservation> + 'a {
-        let mut offset = self.header().off_mem_rsvmap() as usize;
-        core::iter::from_fn(move || {
-            let (reservation, _) = RawMemoryReservation::ref_from_prefix(&self.data[offset..])
-                .expect("Fdt should be valid");
-            if *reservation == RawMemoryReservation::TERMINATOR {
-                return None;
-            }
-            offset += size_of::<RawMemoryReservation>();
-            Some(MemoryReservation::from_raw(*reservation))
-        })
+    #[must_use]
+    pub fn memory_reservations(self) -> MemoryReservationIter<'a> {
+        let header = self.header();
+        let start = header.off_mem_rsvmap() as usize;
+        let end = header.off_dt_struct() as usize;
+        MemoryReservationIter {
+            data: &self.data[start..end],
+        }
     }
 
     /// Returns the node at the given byte offset relative to the start of the
@@ -964,7 +949,47 @@ impl<'a> Fdt<'a> {
         debug_assert!(offset <= isize::MAX.cast_unsigned());
         offset.next_multiple_of(FDT_TAGSIZE)
     }
+
+    /// Returns the byte offset of `subslice` within `self.data`.
+    ///
+    /// `subslice` must be a subslice of `self.data`.
+    fn subslice_offset(self, subslice: &[u8]) -> usize {
+        let base = self.data.as_ptr_range();
+        let sub = subslice.as_ptr_range();
+        debug_assert!(sub.start.addr() >= base.start.addr() && sub.end.addr() <= base.end.addr());
+        sub.start.addr() - base.start.addr()
+    }
 }
+
+/// An iterator over the memory reservations of a device tree.
+///
+/// Returned by [`Fdt::memory_reservations`].
+#[derive(Debug, Clone)]
+pub struct MemoryReservationIter<'a> {
+    data: &'a [u8],
+}
+
+impl MemoryReservationIter<'_> {
+    fn try_next(&mut self) -> Result<Option<MemoryReservation>, FdtErrorKind> {
+        let (reservation, rest) = RawMemoryReservation::read_from_prefix(self.data)
+            .map_err(|_| FdtErrorKind::MemReserveNotTerminated)?;
+        if reservation == RawMemoryReservation::TERMINATOR {
+            return Ok(None);
+        }
+        self.data = rest;
+        Ok(Some(MemoryReservation::from_raw(reservation)))
+    }
+}
+
+impl Iterator for MemoryReservationIter<'_> {
+    type Item = MemoryReservation;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.try_next().expect("Fdt should be valid")
+    }
+}
+
+impl FusedIterator for MemoryReservationIter<'_> {}
 
 /// Formats the device tree as DTS source.
 ///
