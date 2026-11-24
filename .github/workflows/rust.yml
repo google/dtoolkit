@@ -75,6 +75,11 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-multilib
 
+      - name: Set Cargo target
+        if: matrix.target != ''
+        shell: bash
+        run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
@@ -86,16 +91,15 @@ jobs:
         with:
           shared-key: 'rust-ci'
           cache-bin: 'false'
-          save-if: ${{ !matrix.target }}
 
       - name: Fetch dependencies
         run: cargo +${{ matrix.rust }} fetch
 
       - name: Build
-        run: cargo +${{ matrix.rust }} build ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --all-features --tests
+        run: cargo +${{ matrix.rust }} build --all-features --tests
 
       - name: Test
-        run: cargo +${{ matrix.rust }} test ${{ matrix.target && format('--target {0}', matrix.target) || '' }} --all-features
+        run: cargo +${{ matrix.rust }} test --all-features
 
   clippy:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event.pull_request.head.repo.full_name != github.repository
