@@ -9,7 +9,7 @@
 use dtoolkit::error::{BufferError, FdtErrorKind, FdtMutError};
 use dtoolkit::fdt::{Fdt, FdtOptions};
 use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
-use dtoolkit::{Node, Property, ToPropertyValue};
+use dtoolkit::{Node, Property, ToPropertyValue, Tree};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 

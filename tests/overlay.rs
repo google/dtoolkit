@@ -11,7 +11,7 @@
 use dtoolkit::fdt::Fdt;
 use dtoolkit::model::overlay::OverlayApplier;
 use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-use dtoolkit::{Node, Property};
+use dtoolkit::{Node, Property, Tree};
 
 macro_rules! apply_overlay {
     ($base_file:expr, $overlay_file:expr) => {{

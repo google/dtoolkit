@@ -35,9 +35,9 @@ use zerocopy_derive::*;
 pub use self::event::{FdtEvent, FdtEventIter};
 pub use self::node::FdtNode;
 pub use self::property::FdtProperty;
-use crate::Node;
 use crate::error::{FdtErrorKind, FdtParseError};
 use crate::memreserve::{MemoryReservation, RawMemoryReservation};
+use crate::{Node, Tree};
 
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
@@ -248,6 +248,15 @@ impl TryFrom<u32> for FdtToken {
             FDT_END => Ok(FdtToken::End),
             _ => Err(value),
         }
+    }
+}
+
+impl<'a> Tree<'a> for Fdt<'a> {
+    type Node = FdtNode<'a>;
+
+    fn root(self) -> FdtNode<'a> {
+        let offset = self.header().off_dt_struct() as usize;
+        FdtNode::new(self, offset)
     }
 }
 
@@ -762,95 +771,6 @@ impl<'a> Fdt<'a> {
         })
     }
 
-    /// Returns the root node of the device tree.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::Node;
-    /// use dtoolkit::fdt::Fdt;
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let root = fdt.root();
-    /// assert_eq!(root.name(), "");
-    /// ```
-    #[must_use]
-    pub fn root(self) -> FdtNode<'a> {
-        let offset = self.header().off_dt_struct() as usize;
-        FdtNode::new(self, offset)
-    }
-
-    /// Finds a node by its path.
-    ///
-    /// If a name in the given path contains a _unit-address_ (the part after
-    /// the `@` sign) then both the _node-name_ and _unit-address_ must
-    /// match. If it doesn't have a _unit-address_, then nodes with any
-    /// _unit-address_ or none will be allowed.
-    ///
-    /// For example, searching for `/cpus/cpu` would match either `/cpus/cpu`,
-    /// `/cpus/cpu@0` or `/cpus/cpu@1`, while `/cpus/cpu@1` would match only the
-    /// latter.
-    ///
-    /// # Performance
-    ///
-    /// This method traverses the device tree and its performance is linear in
-    /// the number of nodes in the path. If you need to call this often,
-    /// consider using
-    /// [`DeviceTree::from_fdt`](crate::model::DeviceTree::from_fdt)
-    /// first. [`DeviceTree`](crate::model::DeviceTree) stores the nodes in a
-    /// hash map for constant-time lookup.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the [`Fdt`] structure was constructed using
-    /// [`Fdt::new_unchecked`] or [`Fdt::from_raw_unchecked`] and the FDT is not
-    /// valid.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::Node;
-    /// use dtoolkit::fdt::Fdt;
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/a/b/c").unwrap();
-    /// assert_eq!(node.name(), "c");
-    /// ```
-    ///
-    /// ```
-    /// use dtoolkit::Node;
-    /// use dtoolkit::fdt::Fdt;
-    ///
-    /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
-    /// let fdt = Fdt::new(dtb).unwrap();
-    /// let node = fdt.find_node("/child2").unwrap();
-    /// assert_eq!(node.name(), "child2@42");
-    /// let node = fdt.find_node("/child2@42").unwrap();
-    /// assert_eq!(node.name(), "child2@42");
-    /// ```
-    #[must_use]
-    pub fn find_node(self, path: &str) -> Option<FdtNode<'a>> {
-        if !path.starts_with('/') {
-            return None;
-        }
-        let mut current_node = self.root();
-        if path == "/" {
-            return Some(current_node);
-        }
-        for component in path.split('/').filter(|s| !s.is_empty()) {
-            current_node = current_node.child(component)?;
-        }
-        Some(current_node)
-    }
-
     /// Returns the node at the given byte offset relative to the start of the
     /// `dt_struct` block, or `None` if `offset` does not point to a node's
     /// `FDT_BEGIN_NODE` tag.
@@ -873,8 +793,8 @@ impl<'a> Fdt<'a> {
     /// # Examples
     ///
     /// ```
-    /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
     ///
     /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();

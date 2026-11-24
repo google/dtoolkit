@@ -53,7 +53,7 @@
 //! ```
 //! use dtoolkit::fdt::Fdt;
 //! use dtoolkit::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-//! use dtoolkit::{Node, Property};
+//! use dtoolkit::{Node, Property, Tree};
 //!
 //! // Create a new device tree from scratch.
 //! let mut tree = DeviceTree::new();
@@ -144,6 +144,77 @@ pub use crate::values::{
     FdtStringListIterator, FromPropertyValue, PropEncodedArrayIterator, ToPropertyValue,
 };
 
+/// A device tree.
+pub trait Tree<'a>: Copy {
+    /// The type used for nodes of the device tree.
+    type Node: Node<'a>;
+
+    /// Returns the root node of the device tree.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let root = fdt.root();
+    /// assert_eq!(root.name(), "");
+    /// ```
+    #[must_use]
+    fn root(self) -> Self::Node;
+
+    /// Finds a node by its path.
+    ///
+    /// If a name in the given path contains a _unit-address_ (the part after
+    /// the `@` sign) then both the _node-name_ and _unit-address_ must
+    /// match. If it doesn't have a _unit-address_, then nodes with any
+    /// _unit-address_ or none will be allowed.
+    ///
+    /// For example, searching for `/cpus/cpu` would match either `/cpus/cpu`,
+    /// `/cpus/cpu@0` or `/cpus/cpu@1`, while `/cpus/cpu@1` would match only the
+    /// latter.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/a/b/c").unwrap();
+    /// assert_eq!(node.name(), "c");
+    /// ```
+    ///
+    /// ```
+    /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
+    ///
+    /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let node = fdt.find_node("/child2").unwrap();
+    /// assert_eq!(node.name(), "child2@42");
+    /// let node = fdt.find_node("/child2@42").unwrap();
+    /// assert_eq!(node.name(), "child2@42");
+    /// ```
+    #[must_use]
+    fn find_node(self, path: &str) -> Option<Self::Node> {
+        if !path.starts_with('/') {
+            return None;
+        }
+        let mut current_node = self.root();
+        if path == "/" {
+            return Some(current_node);
+        }
+        for component in path.split('/').filter(|s| !s.is_empty()) {
+            current_node = current_node.child(component)?;
+        }
+        Some(current_node)
+    }
+}
+
 /// A device tree node.
 pub trait Node<'a>: Copy {
     /// The type used for properties of the node.
@@ -160,8 +231,8 @@ pub trait Node<'a>: Copy {
     /// # Examples
     ///
     /// ```
-    /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
     ///
     /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
@@ -194,7 +265,7 @@ pub trait Node<'a>: Copy {
     ///
     /// ```
     /// use dtoolkit::fdt::Fdt;
-    /// use dtoolkit::{Node, Property};
+    /// use dtoolkit::{Node, Property, Tree};
     ///
     /// # let dtb = include_bytes!("../tests/dtb/test_props.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
@@ -233,8 +304,8 @@ pub trait Node<'a>: Copy {
     /// # Examples
     ///
     /// ```
-    /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
     ///
     /// # let dtb = include_bytes!("../tests/dtb/test_children.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();

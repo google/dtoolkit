@@ -89,8 +89,8 @@ impl<'a> FdtNode<'a> {
     /// # Examples
     ///
     /// ```
-    /// use dtoolkit::Node;
     /// use dtoolkit::fdt::Fdt;
+    /// use dtoolkit::{Node, Tree};
     ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
     /// let fdt = Fdt::new(dtb).unwrap();
@@ -142,6 +142,7 @@ impl<'a> FdtNode<'a> {
     /// # Examples
     ///
     /// ```
+    /// use dtoolkit::Tree;
     /// use dtoolkit::fdt::{Fdt, FdtEvent};
     ///
     /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
