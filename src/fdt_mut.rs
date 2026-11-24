@@ -159,17 +159,20 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 
     fn find_existing_string(&self, name: &str) -> Option<u32> {
-        let fdt = self.as_read_only();
-        let header = fdt.header();
+        let header = self.as_read_only().header();
+        let str_block_offset = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
+        let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
 
+        // Comparing raw bytes to avoid decoding UTF-8 (validation only covers
+        // strings referenced by properties, so the string block may contain
+        // strings that are not valid UTF-8).
         let mut curr_offset = 0;
-        while curr_offset < str_block_size {
-            let s = fdt.string(curr_offset).expect("FdtMut should be valid");
-            if s == name {
+        for s in str_block.split_inclusive(|&b| b == b'\0') {
+            if s.strip_suffix(b"\0") == Some(name.as_bytes()) {
                 return Some(u32::try_from(curr_offset).expect("string offset fits in u32"));
             }
-            curr_offset += s.len() + 1; // plus null terminator
+            curr_offset += s.len();
         }
 
         None
@@ -183,7 +186,7 @@ impl<B: FdtBuffer> FdtMut<B> {
         let name_bytes = name.as_bytes();
         let name_len = name_bytes.len() + 1; // plus null terminator
         let target = str_block_offset + str_block_size;
-        let required_size = target + name_len;
+        let required_size = target as u64 + name_len as u64;
 
         self.ensure_totalsize(required_size)?;
 
@@ -204,7 +207,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// This method assumes that `offset` is within the device tree structure
     /// block. It grows the structure block by `amount` and shifts the
     /// offset of the strings block, which comes after the structure block.
-    fn shift_dt_struct(&mut self, offset: usize, amount: usize) -> Result<(), BufferError> {
+    fn shift_dt_struct(&mut self, offset: usize, amount: u64) -> Result<(), BufferError> {
         debug_assert!(
             {
                 let header = self.as_read_only().header();
@@ -216,21 +219,25 @@ impl<B: FdtBuffer> FdtMut<B> {
         );
 
         let header = self.as_read_only().header();
-        let old_totalsize = header.totalsize.get();
         let old_size_dt_struct = header.size_dt_struct.get();
         let old_off_dt_strings = header.off_dt_strings.get();
 
         let old_size = self.data.as_ref().len();
-        let new_size = old_size + amount;
+        let new_size_u64 = (old_size as u64).saturating_add(amount);
+        let new_totalsize =
+            u32::try_from(new_size_u64).map_err(|_| BufferError::FdtLimitExceeded {
+                requested: new_size_u64,
+            })?;
+        let new_size = new_totalsize as usize;
 
         self.data.try_resize(new_size)?;
         self.data
             .as_mut()
-            .copy_within(offset..old_size, offset + amount);
+            .copy_within(offset..old_size, offset + (new_size - old_size));
 
         let header = self.header_mut();
         let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
-        header.totalsize.set(old_totalsize + amount_u32);
+        header.totalsize.set(new_totalsize);
         header.size_dt_struct.set(old_size_dt_struct + amount_u32);
         header.off_dt_strings.set(old_off_dt_strings + amount_u32);
 
@@ -240,14 +247,16 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// Ensures the underlying buffer and `totalsize` are large enough to hold
     /// at least `required_size` bytes, dynamically expanding and updating
     /// the header where necessary.
-    fn ensure_totalsize(&mut self, required_size: usize) -> Result<(), BufferError> {
-        let old_size = self.data.as_ref().len();
+    fn ensure_totalsize(&mut self, required_size: u64) -> Result<(), BufferError> {
+        let old_size = self.data.as_ref().len() as u64;
         if required_size > old_size {
-            self.data.try_resize(required_size)?;
+            let required_u32 =
+                u32::try_from(required_size).map_err(|_| BufferError::FdtLimitExceeded {
+                    requested: required_size,
+                })?;
+            self.data.try_resize(required_u32 as usize)?;
             let header = self.header_mut();
-            header
-                .totalsize
-                .set(u32::try_from(required_size).expect("totalsize fits in u32"));
+            header.totalsize.set(required_u32);
         }
         Ok(())
     }
@@ -574,6 +583,10 @@ impl<B: FdtBuffer> Debug for FdtMut<B> {
     }
 }
 
+/// Formats the device tree as DTS source.
+///
+/// The exact output may change between minor versions of this library, but it
+/// should always be valid DTS.
 impl<B: FdtBuffer> Display for FdtMut<B> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.as_read_only())

@@ -13,13 +13,13 @@ use alloc::vec::Vec;
 
 use zerocopy::IntoBytes;
 
+use crate::Property;
 use crate::fdt::{
     FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_MAGIC, FDT_TAGSIZE, Fdt, FdtHeader,
     FdtPropertyHeader,
 };
-use crate::memreserve::MemoryReservation;
+use crate::memreserve::RawMemoryReservation;
 use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-use crate::{Node, Property};
 
 // https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html#header
 const LAST_VERSION: u32 = 17;
@@ -59,7 +59,7 @@ impl DeviceTree {
     fn generate_header(&self, string_map: &mut StringMap) -> FdtHeader {
         // entries + terminator
         let mem_reservations_size =
-            (self.memory_reservations.len() + 1) * size_of::<MemoryReservation>();
+            (self.memory_reservations.len() + 1) * size_of::<RawMemoryReservation>();
         // +FDT_TAGSIZE for FDT_END
         let dt_struct_size = Self::calculate_node_size(string_map, &self.root) + FDT_TAGSIZE;
         let dt_strings_size = string_map.next_offset as usize;
@@ -111,7 +111,7 @@ impl DeviceTree {
             size += Self::calculate_prop_size(string_map, prop);
         }
 
-        for child in node.children() {
+        for child in node.children.values() {
             size += Self::calculate_node_size(string_map, child);
         }
 
@@ -132,9 +132,9 @@ impl DeviceTree {
 
     fn write_memory_reservations(&self, dtb: &mut Vec<u8>) {
         for reservation in &self.memory_reservations {
-            dtb.extend_from_slice(reservation.as_bytes());
+            dtb.extend_from_slice(reservation.to_raw().as_bytes());
         }
-        dtb.extend_from_slice(MemoryReservation::TERMINATOR.as_bytes());
+        dtb.extend_from_slice(RawMemoryReservation::TERMINATOR.as_bytes());
     }
 
     fn write_root(&self, dtb: &mut Vec<u8>, string_map: &StringMap) {
@@ -152,7 +152,7 @@ impl DeviceTree {
             Self::write_prop(dtb, string_map, prop);
         }
 
-        for child in node.children() {
+        for child in node.children.values() {
             Self::write_node(dtb, string_map, child);
         }
 

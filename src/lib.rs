@@ -139,6 +139,7 @@ use core::ops::{BitOr, Shl};
 use zerocopy::big_endian;
 
 use crate::error::{PropertyError, StandardError};
+use crate::standard::AddressSpaceProperties;
 pub use crate::values::{
     FdtStringListIterator, FromPropertyValue, PropEncodedArrayIterator, ToPropertyValue,
 };
@@ -244,6 +245,11 @@ pub trait Node<'a>: Copy {
     /// assert!(children.next().is_none());
     /// ```
     fn children(self) -> Self::Children;
+
+    /// Returns the `#address-cells` and `#size-cells` properties of this
+    /// node's parent node.
+    #[must_use]
+    fn parent_address_space(self) -> AddressSpaceProperties;
 }
 
 /// A property of a device tree node.
@@ -313,12 +319,6 @@ impl Cells<'_> {
             }
             Ok(value)
         }
-    }
-}
-
-impl AsRef<[big_endian::U32]> for Cells<'_> {
-    fn as_ref(&self) -> &[big_endian::U32] {
-        self.0
     }
 }
 
