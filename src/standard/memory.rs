@@ -15,18 +15,26 @@ use crate::standard::Reg;
 use crate::{Cells, Node, Property};
 
 impl<'a> Fdt<'a> {
-    /// Returns the `/memory` node.
+    /// Returns an iterator over the `/memory` nodes.
     ///
-    /// This should always be included in a valid device tree.
+    /// The Device Tree specification allows multiple memory nodes, for example
+    /// to describe discontiguous regions of memory. At least one memory node
+    /// should always be included in a valid device tree.
     ///
     /// # Errors
     ///
-    /// Returns [`StandardError::MemoryMissing`] if the memory node is missing.
-    pub fn memory(self) -> Result<Memory<FdtNode<'a>>, StandardError> {
-        let node = self
-            .find_node("/memory")
-            .ok_or(StandardError::MemoryMissing)?;
-        Ok(Memory { node })
+    /// Returns [`StandardError::MemoryMissing`] if there are no memory nodes.
+    pub fn memory(self) -> Result<impl Iterator<Item = Memory<FdtNode<'a>>> + 'a, StandardError> {
+        let mut memories = self
+            .root()
+            .children()
+            .filter(|node| node.name_without_address() == "memory")
+            .map(|node| Memory { node })
+            .peekable();
+        if memories.peek().is_none() {
+            return Err(StandardError::MemoryMissing);
+        }
+        Ok(memories)
     }
 
     /// Returns the `/reserved-memory/*` nodes, if any.
