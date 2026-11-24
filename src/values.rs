@@ -532,7 +532,7 @@ mod tests {
         assert_eq!(cells_buf, [0, 0, 0, 0x10, 0, 0, 0, 0x20]);
         let decoded_cells = Cells::from_property_value(&cells_buf).unwrap();
         assert_eq!(decoded_cells, cells);
-        assert_eq!(cells.as_ref(), &cells_be[..]);
+        assert_eq!(cells.to_int::<u64>(), Ok(0x10_0000_0020));
     }
 
     #[cfg(feature = "alloc")]

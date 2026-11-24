@@ -94,9 +94,9 @@ pub trait NodeStandard<'a>: Node<'a> {
     /// # Errors
     ///
     /// Returns an error if the value isn't a valid status.
-    fn status(self) -> Result<Status, StandardError> {
+    fn status(self) -> Result<Status<'a>, StandardError> {
         if let Some(status) = self.property("status") {
-            Ok(status.value_as::<&'a str>()?.parse()?)
+            Status::try_from(status.value_as::<&'a str>()?)
         } else {
             Ok(Status::Okay)
         }

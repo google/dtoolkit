@@ -13,6 +13,12 @@ use dtoolkit::{Node, Property, ToPropertyValue};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
 
+// The helpers are shared with `tests/fdt.rs`; this crate uses only some.
+#[allow(dead_code)]
+mod common;
+
+use common::{FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, build_dtb, push_token};
+
 #[test]
 fn modify_property_in_place() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -581,6 +587,51 @@ fn add_string_deduplication() {
     );
 }
 
+/// Adds a property to the root node of a tree whose strings block is
+/// `strings`, and returns how many bytes the tree grew by.
+fn add_property_with_strings(strings: &[u8]) -> usize {
+    // A root node with an empty name and no properties.
+    let mut structure = Vec::new();
+    for word in [FDT_BEGIN_NODE, 0, FDT_END_NODE, FDT_END] {
+        push_token(&mut structure, word);
+    }
+    let mut dtb = build_dtb(&structure, strings);
+    dtb.resize(dtb.len() + 64, 0);
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).expect("the DTB should be valid");
+    let initial_size = fdt_mut.as_read_only().data().len();
+
+    fdt_mut
+        .root_mut()
+        .add_property("x", 0x1234_5678u32)
+        .expect("the buffer should have enough spare capacity");
+
+    let fdt = fdt_mut.as_read_only();
+    let prop = fdt
+        .root()
+        .property("x")
+        .expect("the added property should be present");
+    assert_eq!(
+        prop.value_as::<u32>().expect("the value should be a u32"),
+        0x1234_5678
+    );
+    fdt.data().len() - initial_size
+}
+
+#[test]
+fn add_property_with_unreferenced_bytes_in_strings_block() {
+    // Validation does not check strings that no property references, so the
+    // lookup for an existing string must not fail on them. A new property adds
+    // 16 bytes to the structure block (FDT_TAGSIZE * 3 + value length) and, if
+    // its name is not found, 2 bytes ("x\0") to the strings block.
+
+    // not null-terminated
+    assert_eq!(add_property_with_strings(&[0xff]), 16 + 2);
+    // null-terminated, but not valid UTF-8
+    assert_eq!(add_property_with_strings(&[0xff, 0x00]), 16 + 2);
+    // the name already exists before the invalid bytes and should be reused
+    assert_eq!(add_property_with_strings(b"x\0\xff"), 16);
+}
+
 #[test]
 fn property_mut_methods() {
     let dtb = include_bytes!("dtb/test_props.dtb");
@@ -756,4 +807,18 @@ fn oversized_property_rejected_without_corrupting_fdt() {
         .add_property("zero-prop", OversizedValue(FDT_TAG_SIZE))
         .unwrap();
     assert_eq!(added.as_read_only().value(), &[0; FDT_TAG_SIZE]);
+}
+
+#[test]
+fn from_slice_rejects_struct_block_shorter_than_contents() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut data = dtb.to_vec();
+
+    // Shrink `size_dt_struct` to cover the root node's FDT_BEGIN_NODE and
+    // name only; the rest of the structure block is still walked by the
+    // parser, but editing the tree would use the shrunken size.
+    data[36..40].copy_from_slice(&8u32.to_be_bytes());
+
+    let err = FdtMut::from_slice(&mut data).unwrap_err();
+    assert!(matches!(err.kind, FdtErrorKind::InvalidHeader(_)));
 }

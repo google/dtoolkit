@@ -15,48 +15,60 @@ use zerocopy::big_endian;
 use zerocopy_derive::*;
 
 /// A 64-bit memory reservation.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    FromBytes,
-    IntoBytes,
-    Immutable,
-    KnownLayout,
-)]
-#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MemoryReservation {
-    address: big_endian::U64,
-    size: big_endian::U64,
+    address: u64,
+    size: u64,
 }
 
 impl MemoryReservation {
-    pub(crate) const TERMINATOR: Self = Self::new(0, 0);
-
     /// Creates a new [`MemoryReservation`].
     #[must_use]
     pub const fn new(address: u64, size: u64) -> Self {
-        Self {
-            address: big_endian::U64::new(address),
-            size: big_endian::U64::new(size),
-        }
+        Self { address, size }
     }
 
     /// Returns the physical address of the reserved memory region.
     #[must_use]
     pub const fn address(&self) -> u64 {
-        self.address.get()
+        self.address
     }
 
     /// Returns the size of the reserved memory region.
     #[must_use]
     pub const fn size(&self) -> u64 {
-        self.size.get()
+        self.size
+    }
+
+    pub(crate) const fn from_raw(raw: RawMemoryReservation) -> Self {
+        Self::new(raw.address.get(), raw.size.get())
+    }
+
+    #[cfg(feature = "write")]
+    pub(crate) const fn to_raw(self) -> RawMemoryReservation {
+        RawMemoryReservation::new(self.address, self.size)
+    }
+}
+
+/// The on-disk (big-endian) representation of a [`MemoryReservation`].
+///
+/// This is deliberately private to the crate so that `zerocopy` traits do not
+/// become part of the public API.
+#[derive(Clone, Copy, PartialEq, Eq, FromBytes, IntoBytes, Immutable, KnownLayout)]
+#[repr(C)]
+pub(crate) struct RawMemoryReservation {
+    address: big_endian::U64,
+    size: big_endian::U64,
+}
+
+impl RawMemoryReservation {
+    pub(crate) const TERMINATOR: Self = Self::new(0, 0);
+
+    pub(crate) const fn new(address: u64, size: u64) -> Self {
+        Self {
+            address: big_endian::U64::new(address),
+            size: big_endian::U64::new(size),
+        }
     }
 }
 
