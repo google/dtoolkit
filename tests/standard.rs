@@ -121,6 +121,25 @@ fn memory_missing() {
 }
 
 #[test]
+fn memory_nodes() {
+    let dtb = include_bytes!("dtb/test_pretty_print.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    // Test that memory_nodes() returns at least one memory node
+    let memory_nodes: Vec<_> = fdt.memory_nodes().collect();
+    assert!(!memory_nodes.is_empty());
+
+    // Test that we can access memory node properties
+    let first_memory = &memory_nodes[0];
+    assert_eq!(first_memory.name(), "memory@80000000");
+    assert!(first_memory.hotpluggable());
+
+    // Test that the method returns an iterator
+    let count = fdt.memory_nodes().count();
+    assert!(count >= 1);
+}
+
+#[test]
 fn node_standard() {
     let dtb = include_bytes!("dtb/test_standard.dtb");
     let fdt = Fdt::new(dtb).unwrap();

@@ -29,6 +29,33 @@ impl<'a> Fdt<'a> {
         Ok(Memory { node })
     }
 
+    /// Returns an iterator over all `/memory` nodes.
+    ///
+    /// The Device Tree specification allows multiple memory nodes. This method
+    /// returns all memory nodes at the root level (nodes named "memory" or
+    /// "memory@*").
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt::Fdt;
+    ///
+    /// # let dtb = include_bytes!("../../tests/dtb/test_pretty_print.dtb");
+    /// let fdt = Fdt::new(dtb).unwrap();
+    /// let memory_nodes: Vec<_> = fdt.memory_nodes().collect();
+    /// assert!(!memory_nodes.is_empty());
+    /// ```
+    pub fn memory_nodes(self) -> impl Iterator<Item = Memory<FdtNode<'a>>> + 'a {
+        self.root().children().filter_map(|node| {
+            let name = node.name();
+            if name == "memory" || name.starts_with("memory@") {
+                Some(Memory { node })
+            } else {
+                None
+            }
+        })
+    }
+
     /// Returns the `/reserved-memory/*` nodes, if any.
     #[must_use]
     pub fn reserved_memory(self) -> Option<impl Iterator<Item = ReservedMemory<FdtNode<'a>>>> {
