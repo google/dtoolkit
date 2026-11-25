@@ -135,7 +135,7 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
 
         let val_offset = insert_offset + size_of::<FdtPropertyHeader>();
         self.data
-            .write_property_value_with_padding(&value, padded_val_len, val_offset);
+            .write_property_value_with_padding(&value, val_len, padded_val_len, val_offset);
 
         Ok(FdtPropertyMut {
             prop_offset: insert_offset,

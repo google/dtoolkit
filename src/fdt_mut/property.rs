@@ -94,8 +94,12 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
         .expect("Fdt should be valid");
         len_bytes.set(new_len.try_into().expect("length should fit in u32"));
 
-        self.data
-            .write_property_value_with_padding(&new_value, new_padded, self.value_offset);
+        self.data.write_property_value_with_padding(
+            &new_value,
+            new_len,
+            new_padded,
+            self.value_offset,
+        );
 
         if new_padded < old_padded {
             self.data.replace_with_nops(
