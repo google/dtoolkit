@@ -170,6 +170,12 @@ pub enum FdtMutError {
     /// A property with the same name already exists on the node.
     #[error("property already exists")]
     DuplicateProperty,
+    /// The node name is invalid.
+    #[error("invalid node name")]
+    InvalidNodeName,
+    /// A child node with the same name already exists on the node.
+    #[error("child node already exists")]
+    DuplicateNode,
 }
 
 /// An error that can occur when inspecting or applying a device tree overlay.
