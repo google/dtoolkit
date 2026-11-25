@@ -65,6 +65,12 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 
     /// Returns the data of this FDT as a mutable slice.
+    ///
+    /// Modifying the returned bytes directly bypasses all FDT validation.
+    /// Corrupting the FDT header (including `totalsize`), structure block,
+    /// strings block, or memory reservation block may cause subsequent calls on
+    /// this `FdtMut` and any views derived from it to panic or produce invalid
+    /// results.
     pub fn data_mut(&mut self) -> &mut [u8] {
         self.data.as_mut()
     }
