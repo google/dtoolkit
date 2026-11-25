@@ -157,11 +157,11 @@ impl<'a, const N: usize> FromPropertyValue<'a> for [u8; N] {
 
 impl<const N: usize> ToPropertyValue for [u8; N] {
     fn property_value_len(&self) -> usize {
-        self.len()
+        self.as_slice().property_value_len()
     }
 
     fn write_property_value(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(self);
+        self.as_slice().write_property_value(buffer);
     }
 }
 
@@ -181,11 +181,11 @@ impl<'a> FromPropertyValue<'a> for Vec<u8> {
 #[cfg(feature = "alloc")]
 impl ToPropertyValue for Vec<u8> {
     fn property_value_len(&self) -> usize {
-        self.len()
+        self.as_slice().property_value_len()
     }
 
     fn write_property_value(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(self);
+        self.as_slice().write_property_value(buffer);
     }
 }
 
@@ -291,13 +291,11 @@ impl<'a> FromPropertyValue<'a> for String {
 #[cfg(feature = "alloc")]
 impl ToPropertyValue for String {
     fn property_value_len(&self) -> usize {
-        self.len() + 1
+        self.as_str().property_value_len()
     }
 
     fn write_property_value(&self, buffer: &mut [u8]) {
-        let len = self.len();
-        buffer[..len].copy_from_slice(self.as_bytes());
-        buffer[len] = 0;
+        self.as_str().write_property_value(buffer);
     }
 }
 
@@ -306,10 +304,11 @@ impl ToPropertyValue for [u32] {
         size_of_val(self)
     }
 
-    fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for val in self {
-            buffer[..size_of::<u32>()].copy_from_slice(&val.to_be_bytes());
-            buffer = &mut buffer[size_of::<u32>()..];
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        assert_eq!(buffer.len(), self.property_value_len());
+        let (chunks, _) = buffer.as_chunks_mut::<{ size_of::<u32>() }>();
+        for (chunk, val) in chunks.iter_mut().zip(self) {
+            *chunk = val.to_be_bytes();
         }
     }
 }
@@ -334,14 +333,11 @@ impl<'a, const N: usize> FromPropertyValue<'a> for [u32; N] {
 
 impl<const N: usize> ToPropertyValue for [u32; N] {
     fn property_value_len(&self) -> usize {
-        self.len() * size_of::<u32>()
+        self.as_slice().property_value_len()
     }
 
     fn write_property_value(&self, buffer: &mut [u8]) {
-        let (chunks, _) = buffer.as_chunks_mut::<{ size_of::<u32>() }>();
-        for (chunk, val) in chunks.iter_mut().zip(self) {
-            *chunk = val.to_be_bytes();
-        }
+        self.as_slice().write_property_value(buffer);
     }
 }
 
@@ -362,14 +358,11 @@ impl<'a> FromPropertyValue<'a> for Vec<u32> {
 #[cfg(feature = "alloc")]
 impl ToPropertyValue for Vec<u32> {
     fn property_value_len(&self) -> usize {
-        self.len() * size_of::<u32>()
+        self.as_slice().property_value_len()
     }
 
-    fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for val in self {
-            buffer[..size_of::<u32>()].copy_from_slice(&val.to_be_bytes());
-            buffer = &mut buffer[size_of::<u32>()..];
-        }
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        self.as_slice().write_property_value(buffer);
     }
 }
 
@@ -379,15 +372,14 @@ impl ToPropertyValue for [&str] {
         // the lengths may exceed `usize` without exceeding the available
         // memory.
         self.iter()
-            .fold(0usize, |acc, s| acc.saturating_add(s.len() + 1))
+            .fold(0usize, |acc, s| acc.saturating_add(s.property_value_len()))
     }
 
     fn write_property_value(&self, mut buffer: &mut [u8]) {
         for s in self {
-            let len = s.len();
-            buffer[..len].copy_from_slice(s.as_bytes());
-            buffer[len] = 0;
-            buffer = &mut buffer[len + 1..];
+            let len = s.property_value_len();
+            s.write_property_value(&mut buffer[..len]);
+            buffer = &mut buffer[len..];
         }
     }
 }
