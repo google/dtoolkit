@@ -27,12 +27,15 @@ fn memreserve() {
 
 #[test]
 fn memreserve_iterator_is_fused() {
+    fn assert_fused<I: core::iter::FusedIterator>(_: &I) {}
+
     for dtb in [
         include_bytes!("dtb/test_memreserve.dtb").as_slice(),
         include_bytes!("dtb/test.dtb").as_slice(),
     ] {
         let fdt = Fdt::new(dtb).unwrap();
         let mut iter = fdt.memory_reservations();
+        assert_fused(&iter);
         while iter.next().is_some() {}
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next(), None);
