@@ -15,7 +15,9 @@ const fn is_valid_node_char(c: char) -> bool {
 }
 
 const fn is_valid_property_char(c: char) -> bool {
-    is_valid_node_char(c) || matches!(c, '?' | '#')
+    // `*` is not allowed by the Devicetree Specification, but is allowed by
+    // dtc.
+    is_valid_node_char(c) || matches!(c, '*' | '?' | '#')
 }
 
 /// Validates a node name according to the Devicetree Specification.
@@ -59,7 +61,8 @@ pub(crate) fn is_valid_node_name(name: &str, strict_length: bool) -> bool {
     true
 }
 
-/// Validates a property name according to the Devicetree Specification.
+/// Validates a property name according to `dtc`'s non-strict rules
+/// (`[a-zA-Z0-9,._+*#?-]+`).
 ///
 /// If `strict_length` is `true`, the property name must not exceed 31
 /// characters.
@@ -98,6 +101,8 @@ mod tests {
         assert!(!is_valid_node_name("@0", false)); // Empty node name
         assert!(!is_valid_node_name("cpu name", false)); // Invalid space
         assert!(!is_valid_node_name("cpu#name", false)); // Invalid '#'
+        assert!(!is_valid_node_name("cpu*name", false)); // Invalid '*'
+        assert!(!is_valid_node_name("cpu?name", false)); // Invalid '?'
         assert!(!is_valid_node_name(
             "this-is-a-very-long-node-name-that-exceeds-thirty-one-characters",
             true
@@ -110,7 +115,7 @@ mod tests {
         assert!(is_valid_property_name("#address-cells", true));
         assert!(is_valid_property_name("device_type", true));
         assert!(is_valid_property_name("compatible", true));
-        assert!(is_valid_property_name("a,b.c_d+e-f?#", true));
+        assert!(is_valid_property_name("a,b.c_d+e*f-g?#", true));
         assert!(is_valid_property_name(
             "snps,dis-u2-freeclk-exists-quirk",
             false

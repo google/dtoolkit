@@ -164,6 +164,9 @@ pub enum FdtMutError {
     /// The root node of a device tree cannot be removed.
     #[error("cannot remove the root node")]
     RemoveRootNode,
+    /// The property name is invalid.
+    #[error("invalid property name")]
+    InvalidPropertyName,
 }
 
 /// An error that can occur when inspecting or applying a device tree overlay.

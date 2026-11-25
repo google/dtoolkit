@@ -82,6 +82,9 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ///
     /// # Errors
     ///
+    /// Returns [`FdtMutError::InvalidPropertyName`] if `name` is not a valid
+    /// device tree property name.
+    ///
     /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
     /// property length or resulting FDT size exceeds `u32::MAX`.
     ///
@@ -94,6 +97,9 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         name: &str,
         value: T,
     ) -> Result<FdtPropertyMut<'_, B>, FdtMutError> {
+        if !crate::validate::is_valid_property_name(name, false) {
+            return Err(FdtMutError::InvalidPropertyName);
+        }
         let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
         let mut offset = self.offset + FDT_TAGSIZE;
