@@ -121,13 +121,13 @@ pub trait ToPropertyValue {
     fn write_property_value(&self, buffer: &mut [u8]);
 }
 
-impl<T: ToPropertyValue> ToPropertyValue for &T {
+impl<T: ToPropertyValue + ?Sized> ToPropertyValue for &T {
     fn property_value_len(&self) -> usize {
-        (*self).property_value_len()
+        (**self).property_value_len()
     }
 
     fn write_property_value(&self, buffer: &mut [u8]) {
-        (*self).write_property_value(buffer);
+        (**self).write_property_value(buffer);
     }
 }
 
@@ -137,7 +137,7 @@ impl<'a> FromPropertyValue<'a> for &'a [u8] {
     }
 }
 
-impl ToPropertyValue for &[u8] {
+impl ToPropertyValue for [u8] {
     fn property_value_len(&self) -> usize {
         self.len()
     }
@@ -234,7 +234,7 @@ impl<'a> FromPropertyValue<'a> for &'a str {
     }
 }
 
-impl ToPropertyValue for &str {
+impl ToPropertyValue for str {
     fn property_value_len(&self) -> usize {
         self.len() + 1
     }
@@ -271,13 +271,13 @@ impl ToPropertyValue for String {
     }
 }
 
-impl ToPropertyValue for &[u32] {
+impl ToPropertyValue for [u32] {
     fn property_value_len(&self) -> usize {
-        size_of_val(*self)
+        size_of_val(self)
     }
 
     fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for val in *self {
+        for val in self {
             buffer[..size_of::<u32>()].copy_from_slice(&val.to_be_bytes());
             buffer = &mut buffer[size_of::<u32>()..];
         }
@@ -343,9 +343,9 @@ impl ToPropertyValue for Vec<u32> {
     }
 }
 
-impl ToPropertyValue for &[&str] {
+impl ToPropertyValue for [&str] {
     fn property_value_len(&self) -> usize {
-        // `&[&str]` may contain the same string multiple times, so the sum of
+        // `[&str]` may contain the same string multiple times, so the sum of
         // the lengths may exceed `usize` without exceeding the available
         // memory.
         self.iter()
@@ -353,7 +353,7 @@ impl ToPropertyValue for &[&str] {
     }
 
     fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for s in *self {
+        for s in self {
             let len = s.len();
             buffer[..len].copy_from_slice(s.as_bytes());
             buffer[len] = 0;
