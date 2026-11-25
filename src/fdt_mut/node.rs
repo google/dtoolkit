@@ -85,6 +85,9 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// Returns [`FdtMutError::InvalidPropertyName`] if `name` is not a valid
     /// device tree property name.
     ///
+    /// Returns [`FdtMutError::DuplicateProperty`] if a property with the same
+    /// name already exists on this node.
+    ///
     /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
     /// property length or resulting FDT size exceeds `u32::MAX`.
     ///
@@ -99,6 +102,9 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     ) -> Result<FdtPropertyMut<'_, B>, FdtMutError> {
         if !crate::validate::is_valid_property_name(name, false) {
             return Err(FdtMutError::InvalidPropertyName);
+        }
+        if self.property(name).is_some() {
+            return Err(FdtMutError::DuplicateProperty);
         }
         let nameoff = self.data.add_string(name)? as usize;
         let fdt = self.as_read_only().fdt;
