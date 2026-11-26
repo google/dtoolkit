@@ -90,6 +90,9 @@ pub enum FdtErrorKind {
     /// Memory reservation block has not been terminated with a null entry.
     #[error("Memory reservation block was not terminated with a null entry")]
     MemReserveNotTerminated,
+    /// Node nesting depth exceeded the configured limit.
+    #[error("FDT nesting depth exceeds maximum allowed")]
+    MaxDepthExceeded,
 }
 
 /// An error that can occur when parsing a property.

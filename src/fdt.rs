@@ -42,6 +42,8 @@ use crate::{Node, Tree};
 
 /// Version of the FDT specification supported by this library.
 const FDT_VERSION: u32 = 17;
+/// Default maximum allowed node nesting depth (including the root node).
+const DEFAULT_MAX_DEPTH: usize = 64;
 pub(crate) const FDT_TAGSIZE: usize = size_of::<u32>();
 pub(crate) const FDT_MAGIC: u32 = 0xd00d_feed;
 pub(crate) const FDT_BEGIN_NODE: u32 = 0x1;
@@ -159,6 +161,12 @@ pub struct FdtOptions {
     ///
     /// Defaults to `usize::MAX`.
     pub max_size: usize,
+    /// Maximum allowed node nesting depth (number of nested nodes, including
+    /// the root node).
+    ///
+    /// For example, `1` allows only the root node and `2` allows the root node
+    /// and its direct children. Defaults to `64`.
+    pub max_depth: usize,
 }
 
 impl Default for FdtOptions {
@@ -174,6 +182,7 @@ impl FdtOptions {
         Self {
             strict_name_length: false,
             max_size: usize::MAX,
+            max_depth: DEFAULT_MAX_DEPTH,
         }
     }
 
@@ -189,6 +198,13 @@ impl FdtOptions {
     #[must_use]
     pub const fn max_size(mut self, max_size: usize) -> Self {
         self.max_size = max_size;
+        self
+    }
+
+    /// Sets the maximum allowed node nesting depth (including the root node).
+    #[must_use]
+    pub const fn max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
         self
     }
 }
@@ -304,6 +320,9 @@ impl<'a> Fdt<'a> {
     /// [`FdtErrorKind::InvalidPropertyName`] if a node or property name is
     /// invalid (including exceeding 31 characters when
     /// `options.strict_name_length` is `true`).
+    ///
+    /// Returns [`FdtErrorKind::MaxDepthExceeded`] if node nesting depth exceeds
+    /// `options.max_depth`.
     ///
     /// This function can also return any of the other errors returned by
     /// [`Fdt::new`].
@@ -524,7 +543,8 @@ impl<'a> Fdt<'a> {
             ));
         }
 
-        let end_offset = self.traverse_node(offset, NameValidation::from(options))?;
+        let max_depth = options.max_depth;
+        let end_offset = self.traverse_node(offset, NameValidation::from(options), max_depth)?;
 
         // Check FDT_END
         if self.read_token(end_offset)? != FdtToken::End {
@@ -579,6 +599,7 @@ impl<'a> Fdt<'a> {
         self,
         offset: usize,
         name_validation: NameValidation,
+        max_depth: usize,
     ) -> Result<usize, FdtParseError> {
         let mut offset = offset;
         let mut depth = 0;
@@ -586,6 +607,9 @@ impl<'a> Fdt<'a> {
             let token = self.read_token(offset)?;
             match token {
                 FdtToken::BeginNode => {
+                    if depth >= max_depth {
+                        return Err(FdtParseError::new(FdtErrorKind::MaxDepthExceeded, offset));
+                    }
                     depth += 1;
                     offset += FDT_TAGSIZE;
                     let end_offset = self.find_string_end(offset)?;
@@ -906,7 +930,7 @@ impl<'a> Fdt<'a> {
     }
 
     pub(crate) fn next_sibling_offset(self, offset: usize) -> Result<usize, FdtParseError> {
-        self.traverse_node(offset, NameValidation::Skip)
+        self.traverse_node(offset, NameValidation::Skip, usize::MAX)
     }
 
     pub(crate) fn next_property_offset(
