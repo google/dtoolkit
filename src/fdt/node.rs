@@ -249,9 +249,12 @@ impl InnerChildIter {
 
     #[must_use]
     fn next_child_parsed(fdt: Fdt<'_>, offset: &mut usize) -> Option<usize> {
-        *offset = fdt
-            .next_sibling_offset(*offset)
-            .expect("Fdt should be valid");
+        // advance past the child unless it was removed or iteration ended
+        if fdt.read_token(*offset).expect("Fdt should be valid") == FdtToken::BeginNode {
+            *offset = fdt
+                .next_sibling_offset(*offset)
+                .expect("Fdt should be valid");
+        }
         loop {
             let token = fdt.read_token(*offset).expect("Fdt should be valid");
             match token {
