@@ -155,9 +155,12 @@ impl InnerPropIter {
 
     #[must_use]
     fn next_property_parsed<'a>(fdt: Fdt<'a>, offset: &mut usize) -> Option<ParsedProperty<'a>> {
-        *offset = fdt
-            .next_property_offset(*offset, NameValidation::Skip)
-            .expect("Fdt should be valid");
+        // advance past the property unless it was removed or iteration ended
+        if fdt.read_token(*offset).expect("Fdt should be valid") == FdtToken::Prop {
+            *offset = fdt
+                .next_property_offset(*offset, NameValidation::Skip)
+                .expect("Fdt should be valid");
+        }
         Self::find_property(fdt, offset)
     }
 

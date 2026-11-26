@@ -1,0 +1,17 @@
+/dts-v1/;
+
+/ {
+    empty1;
+    prop1 = <0x1>;
+    empty2;
+
+    child1 {
+        nested {
+            prop = <0x2>;
+        };
+    };
+
+    child2 {
+        empty-leaf;
+    };
+};
