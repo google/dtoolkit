@@ -15,7 +15,10 @@ use crate::error::FdtMutError;
 use crate::fdt::node::InnerChildIter;
 use crate::fdt::node::private::FdtChildIter;
 use crate::fdt::property::{FdtPropIter, InnerPropIter};
-use crate::fdt::{FDT_TAGSIZE, Fdt, FdtNode, FdtProperty, FdtPropertyHeader, NameValidation};
+use crate::fdt::{
+    FDT_BEGIN_NODE, FDT_END_NODE, FDT_TAGSIZE, Fdt, FdtNode, FdtProperty, FdtPropertyHeader,
+    NameValidation,
+};
 use crate::fdt_mut::buffer::FdtBuffer;
 use crate::fdt_mut::property::FdtPropMutIter;
 use crate::fdt_mut::{FdtMut, FdtPropertyMut};
@@ -174,6 +177,81 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
         } else {
             false
         }
+    }
+
+    /// Adds a new empty child node to this node and returns a mutable handle to
+    /// it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FdtMutError::InvalidNodeName`] if `name` is empty or not a
+    /// valid device tree node name.
+    ///
+    /// Returns [`FdtMutError::DuplicateNode`] if a matching child already
+    /// exists on this node (using the same name-matching rules as
+    /// [`Node::child`]).
+    ///
+    /// Returns [`FdtMutError::Resize`] if resizing the buffer fails or if the
+    /// resulting FDT size exceeds `u32::MAX`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`FdtMut`] structure was constructed using an
+    /// `*_unchecked` constructor and the existing FDT is not valid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::Node;
+    /// use dtoolkit::fdt_mut::FdtMut;
+    ///
+    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// # let mut buf = dtb.to_vec();
+    /// # buf.resize(dtb.len() + 64, 0);
+    /// let mut fdt = FdtMut::from_slice(&mut buf).unwrap();
+    /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
+    /// let child = parent.add_child("new-child").unwrap();
+    /// assert_eq!(child.name(), "new-child");
+    /// assert!(parent.child("new-child").is_some());
+    /// ```
+    pub fn add_child(&mut self, name: &str) -> Result<FdtNodeMut<'_, B>, FdtMutError> {
+        if name.is_empty() || !crate::validate::is_valid_node_name(name, false) {
+            return Err(FdtMutError::InvalidNodeName);
+        }
+        if self.child(name).is_some() {
+            return Err(FdtMutError::DuplicateNode);
+        }
+
+        let node = self.as_read_only();
+        let parent_address_space = node.address_space();
+        let insert_offset = node
+            .fdt
+            .next_sibling_offset(self.offset)
+            .expect("Fdt should be valid")
+            - FDT_TAGSIZE;
+
+        let required_space = (name.len() + 1).next_multiple_of(FDT_TAGSIZE) + 2 * FDT_TAGSIZE;
+        self.data
+            .shift_dt_struct(insert_offset, required_space as u64)?;
+
+        let slot = &mut self.data.data_mut()[insert_offset..insert_offset + required_space];
+        slot.fill(0);
+        FDT_BEGIN_NODE
+            .to_be_bytes()
+            .write_to_prefix(slot)
+            .expect("slot is large enough");
+        name.write_to_prefix(&mut slot[FDT_TAGSIZE..])
+            .expect("slot is large enough");
+        FDT_END_NODE
+            .to_be_bytes()
+            .write_to_suffix(slot)
+            .expect("slot is large enough");
+
+        Ok(FdtNodeMut {
+            offset: insert_offset,
+            parent_address_space,
+            data: self.data,
+        })
     }
 
     /// Removes a child node by its name.

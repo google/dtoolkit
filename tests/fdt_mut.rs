@@ -9,6 +9,7 @@
 use dtoolkit::error::{BufferError, FdtErrorKind, FdtMutError};
 use dtoolkit::fdt::{Fdt, FdtOptions};
 use dtoolkit::fdt_mut::{FdtBuffer, FdtMut, SliceBuffer};
+use dtoolkit::standard::AddressSpaceProperties;
 use dtoolkit::{Node, Property, ToPropertyValue, Tree};
 #[cfg(feature = "alloc")]
 use zerocopy::FromBytes;
@@ -1102,4 +1103,97 @@ fn child_mut_iter_is_fused() {
     let mut empty_children = child2.children_mut();
     assert!(empty_children.next().is_none());
     assert!(empty_children.next().is_none());
+}
+
+#[test]
+fn add_child() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut buf = dtb.to_vec();
+    buf.resize(dtb.len() + 256, 0);
+
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut root = fdt_mut.root_mut();
+    for name in ["a", "abc", "abcd"] {
+        assert_eq!(root.add_child(name).unwrap().name(), name);
+    }
+
+    let mut dev = root.add_child("dev@1000").unwrap();
+    assert_eq!(
+        dev.as_read_only().parent_address_space(),
+        AddressSpaceProperties {
+            address_cells: 2,
+            size_cells: 1,
+        }
+    );
+    dev.add_property("#address-cells", 1u32).unwrap();
+    dev.add_property("#size-cells", 0u32).unwrap();
+
+    let mut sub = dev.add_child("sub@0").unwrap();
+    assert_eq!(
+        sub.as_read_only().parent_address_space(),
+        AddressSpaceProperties {
+            address_cells: 1,
+            size_cells: 0,
+        }
+    );
+    sub.add_property("status", "okay").unwrap();
+
+    let fdt = Fdt::new(fdt_mut.as_read_only().data()).unwrap();
+    let root_children: Vec<_> = fdt.root().children().map(Node::name).collect();
+    assert_eq!(root_children, ["a", "abc", "abcd", "dev@1000"]);
+    let status = fdt.find_node("/dev@1000/sub@0").unwrap().property("status");
+    assert_eq!(status.unwrap().value_as::<&str>().unwrap(), "okay");
+}
+
+#[test]
+fn add_child_rejects_invalid_names() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut buf = dtb.to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut root = fdt_mut.root_mut();
+
+    for invalid in ["", "bad name", "cpu@"] {
+        assert_eq!(
+            root.add_child(invalid).unwrap_err(),
+            FdtMutError::InvalidNodeName
+        );
+    }
+    assert_eq!(fdt_mut.as_read_only().data(), dtb);
+}
+
+#[test]
+fn add_child_rejects_duplicate() {
+    let dtb = include_bytes!("dtb/test_children.dtb");
+    let mut buf = dtb.to_vec();
+    buf.resize(dtb.len() + 128, 0);
+    let mut fdt_mut = FdtMut::from_slice(&mut buf).unwrap();
+    let mut root = fdt_mut.root_mut();
+
+    for dup in ["child1", "child2@42", "child2"] {
+        assert_eq!(root.add_child(dup).unwrap_err(), FdtMutError::DuplicateNode);
+    }
+    assert_eq!(fdt_mut.as_read_only().data(), dtb);
+
+    let mut root = fdt_mut.root_mut();
+    assert!(root.remove_child("child1"));
+    assert_eq!(root.add_child("child1").unwrap().name(), "child1");
+    assert_eq!(root.add_child("child2@43").unwrap().name(), "child2@43");
+    assert_eq!(root.add_child("child1@0").unwrap().name(), "child1@0");
+    assert!(Fdt::new(fdt_mut.as_read_only().data()).is_ok());
+}
+
+#[test]
+fn add_child_out_of_space_leaves_blob_unchanged() {
+    let dtb = include_bytes!("dtb/test.dtb");
+    let mut buf = dtb.to_vec();
+    let err = FdtMut::from_slice(&mut buf)
+        .unwrap()
+        .root_mut()
+        .add_child("new-child")
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        FdtMutError::Resize(BufferError::OutOfSpace { .. })
+    ));
+    assert_eq!(buf, dtb);
 }
