@@ -103,6 +103,12 @@ pub trait FromPropertyValue<'a>: Sized {
 /// A trait for types that can be serialized into a device tree property value.
 pub trait ToPropertyValue {
     /// Returns the length in bytes of the serialized property value.
+    ///
+    /// Implementations must return the same length across repeated calls on the
+    /// same value (until mutated) and must match the exact number of bytes
+    /// written by [`write_property_value`](Self::write_property_value).
+    /// Violating this contract may cause callers to panic or produce a
+    /// malformed device tree.
     #[must_use]
     fn property_value_len(&self) -> usize;
 
