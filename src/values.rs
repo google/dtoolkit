@@ -263,10 +263,9 @@ impl ToPropertyValue for CString {
 
 impl<'a> FromPropertyValue<'a> for &'a str {
     fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
-        let stripped = value
-            .strip_suffix(b"\0")
-            .ok_or(PropertyError::InvalidString)?;
-        core::str::from_utf8(stripped).map_err(|_| PropertyError::InvalidString)
+        <&CStr>::from_property_value(value)?
+            .to_str()
+            .map_err(|_| PropertyError::InvalidString)
     }
 }
 
@@ -285,12 +284,7 @@ impl ToPropertyValue for str {
 #[cfg(feature = "alloc")]
 impl<'a> FromPropertyValue<'a> for String {
     fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
-        let stripped = value
-            .strip_suffix(b"\0")
-            .ok_or(PropertyError::InvalidString)?;
-        core::str::from_utf8(stripped)
-            .map(String::from)
-            .map_err(|_| PropertyError::InvalidString)
+        <&str>::from_property_value(value).map(String::from)
     }
 }
 
@@ -592,6 +586,24 @@ mod tests {
         for invalid in [b"".as_slice(), b"hello", b"foo\0bar\0"] {
             assert_eq!(
                 CString::from_property_value(invalid),
+                Err(PropertyError::InvalidString)
+            );
+        }
+    }
+
+    #[test]
+    fn str_rejects_inner_nul_and_invalid_values() {
+        assert_eq!(<&str>::from_property_value(b"\0"), Ok(""));
+        assert_eq!(<&str>::from_property_value(b"hello\0"), Ok("hello"));
+
+        for invalid in [b"".as_slice(), b"hello", b"foo\0bar\0", b"\0\0", b"\xff\0"] {
+            assert_eq!(
+                <&str>::from_property_value(invalid),
+                Err(PropertyError::InvalidString)
+            );
+            #[cfg(feature = "alloc")]
+            assert_eq!(
+                String::from_property_value(invalid),
                 Err(PropertyError::InvalidString)
             );
         }
