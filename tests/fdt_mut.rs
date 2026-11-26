@@ -965,3 +965,64 @@ fn add_property_resizes_once() {
     assert!(Fdt::new(fdt_mut.as_read_only().data()).is_ok());
     assert_eq!(buf.resize_calls, 1);
 }
+
+#[test]
+fn properties_mut_remove_empty_before_property() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut props = root.properties_mut();
+    let mut visited = Vec::new();
+    while let Some(prop) = props.next() {
+        let name = prop.name().to_owned();
+        visited.push(name.clone());
+        if name == "empty1" {
+            prop.remove();
+        }
+    }
+    assert_eq!(visited, ["empty1", "prop1", "empty2"]);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert!(fdt.root().property("empty1").is_none());
+    assert!(fdt.root().property("prop1").is_some());
+    assert!(fdt.root().property("empty2").is_some());
+}
+
+#[test]
+fn properties_mut_remove_all_before_child() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut props = root.properties_mut();
+    let mut visited = Vec::new();
+    while let Some(prop) = props.next() {
+        visited.push(prop.name().to_owned());
+        prop.remove();
+    }
+    assert_eq!(visited, ["empty1", "prop1", "empty2"]);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert!(fdt.root().properties().next().is_none());
+    assert!(fdt.root().child("child1").is_some());
+}
+
+#[test]
+fn properties_mut_remove_empty_before_end_node() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut child2 = fdt_mut.find_node_mut("/child2").unwrap();
+    let mut props = child2.properties_mut();
+    let mut visited = Vec::new();
+    while let Some(prop) = props.next() {
+        visited.push(prop.name().to_owned());
+        prop.remove();
+    }
+    assert_eq!(visited, ["empty-leaf"]);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    let child2 = fdt.find_node("/child2").unwrap();
+    assert!(child2.properties().next().is_none());
+}
