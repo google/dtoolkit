@@ -153,15 +153,25 @@ impl<B: FdtBuffer> FdtMut<B> {
         })
     }
 
-    /// Adds a string to the `dt_strings` block. If the string is already
-    /// present, it returns the existing offset without modifying the block
-    /// to deduplicate data.
-    pub(crate) fn add_string(&mut self, name: &str) -> Result<u32, BufferError> {
-        if let Some(offset) = self.find_existing_string(name) {
-            Ok(offset)
+    /// Makes room in `dt_struct` and adds `name` to the `dt_strings` block.
+    ///
+    /// If the string is already present, it returns the existing offset without
+    /// modifying the block to deduplicate data. Leaves the FDT unchanged on
+    /// error.
+    pub(crate) fn insert_dt_struct_and_string(
+        &mut self,
+        insert_offset: usize,
+        struct_growth: u64,
+        name: &str,
+    ) -> Result<u32, BufferError> {
+        let existing = self.find_existing_string(name);
+        let extra_strings = if existing.is_some() {
+            0
         } else {
-            self.append_raw_string(name)
-        }
+            name.len() as u64 + 1
+        };
+        self.shift_dt_struct_and_reserve_strings(insert_offset, struct_growth, extra_strings)?;
+        Ok(existing.unwrap_or_else(|| self.append_raw_string(name)))
     }
 
     fn find_existing_string(&self, name: &str) -> Option<u32> {
@@ -184,7 +194,7 @@ impl<B: FdtBuffer> FdtMut<B> {
         None
     }
 
-    fn append_raw_string(&mut self, name: &str) -> Result<u32, BufferError> {
+    fn append_raw_string(&mut self, name: &str) -> u32 {
         let header = self.as_read_only().header();
         let str_block_offset = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
@@ -192,9 +202,6 @@ impl<B: FdtBuffer> FdtMut<B> {
         let name_bytes = name.as_bytes();
         let name_len = name_bytes.len() + 1; // plus null terminator
         let target = str_block_offset + str_block_size;
-        let required_size = target as u64 + name_len as u64;
-
-        self.ensure_totalsize(required_size)?;
 
         self.data.as_mut()[target..target + name_bytes.len()].copy_from_slice(name_bytes);
         self.data.as_mut()[target + name_bytes.len()] = 0;
@@ -205,7 +212,7 @@ impl<B: FdtBuffer> FdtMut<B> {
                 + u32::try_from(name_len).expect("name_len fits in u32"),
         );
 
-        Ok(u32::try_from(str_block_size).expect("str_block_size fits in u32"))
+        u32::try_from(str_block_size).expect("str_block_size fits in u32")
     }
 
     /// Shifts data starting from `offset` by `amount` bytes to make space.
@@ -214,6 +221,15 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// block. It grows the structure block by `amount` and shifts the
     /// offset of the strings block, which comes after the structure block.
     fn shift_dt_struct(&mut self, offset: usize, amount: u64) -> Result<(), BufferError> {
+        self.shift_dt_struct_and_reserve_strings(offset, amount, 0)
+    }
+
+    fn shift_dt_struct_and_reserve_strings(
+        &mut self,
+        offset: usize,
+        amount: u64,
+        extra_strings: u64,
+    ) -> Result<(), BufferError> {
         debug_assert!(
             {
                 let header = self.as_read_only().header();
@@ -227,23 +243,20 @@ impl<B: FdtBuffer> FdtMut<B> {
         let header = self.as_read_only().header();
         let old_size_dt_struct = header.size_dt_struct.get();
         let old_off_dt_strings = header.off_dt_strings.get();
+        let strings_end = u64::from(old_off_dt_strings)
+            .saturating_add(u64::from(header.size_dt_strings()))
+            .saturating_add(extra_strings);
 
         let old_size = self.data.as_ref().len();
-        let new_size_u64 = (old_size as u64).saturating_add(amount);
-        let new_totalsize =
-            u32::try_from(new_size_u64).map_err(|_| BufferError::FdtLimitExceeded {
-                requested: new_size_u64,
-            })?;
-        let new_size = new_totalsize as usize;
+        let new_size_u64 = (old_size as u64).max(strings_end).saturating_add(amount);
+        self.ensure_totalsize(new_size_u64)?;
 
-        self.data.try_resize(new_size)?;
+        let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
         self.data
             .as_mut()
-            .copy_within(offset..old_size, offset + (new_size - old_size));
+            .copy_within(offset..old_size, offset + amount_u32 as usize);
 
         let header = self.header_mut();
-        let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
-        header.totalsize.set(new_totalsize);
         header.size_dt_struct.set(old_size_dt_struct + amount_u32);
         header.off_dt_strings.set(old_off_dt_strings + amount_u32);
 
