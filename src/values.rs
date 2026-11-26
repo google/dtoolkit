@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::ffi::CStr;
 use core::mem::{size_of, size_of_val};
 
-use zerocopy::{FromBytes, big_endian};
+use zerocopy::{FromBytes, IntoBytes, big_endian};
 
 use crate::Cells;
 use crate::error::PropertyError;
@@ -315,19 +315,12 @@ impl ToPropertyValue for [u32] {
 
 impl<'a, const N: usize> FromPropertyValue<'a> for [u32; N] {
     fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
-        if value.len() != N * size_of::<u32>() {
-            return Err(PropertyError::InvalidLength);
-        }
-        let mut out = [0u32; N];
-        for (i, chunk) in value
-            .as_chunks::<{ size_of::<u32>() }>()
+        let cells = Cells::from_property_value(value)?;
+        let arr: &[big_endian::U32; N] = cells
             .0
-            .iter()
-            .enumerate()
-        {
-            out[i] = u32::from_be_bytes(*chunk);
-        }
-        Ok(out)
+            .try_into()
+            .map_err(|_| PropertyError::InvalidLength)?;
+        Ok(arr.map(big_endian::U32::get))
     }
 }
 
@@ -344,14 +337,11 @@ impl<const N: usize> ToPropertyValue for [u32; N] {
 #[cfg(feature = "alloc")]
 impl<'a> FromPropertyValue<'a> for Vec<u32> {
     fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
-        if !value.len().is_multiple_of(size_of::<u32>()) {
-            return Err(PropertyError::InvalidLength);
-        }
-        let mut out = Vec::with_capacity(value.len() / size_of::<u32>());
-        for chunk in value.as_chunks::<{ size_of::<u32>() }>().0 {
-            out.push(u32::from_be_bytes(*chunk));
-        }
-        Ok(out)
+        Ok(Cells::from_property_value(value)?
+            .0
+            .iter()
+            .map(|c| c.get())
+            .collect())
     }
 }
 
@@ -412,14 +402,11 @@ impl<'a> FromPropertyValue<'a> for Cells<'a> {
 
 impl ToPropertyValue for Cells<'_> {
     fn property_value_len(&self) -> usize {
-        self.0.len() * size_of::<u32>()
+        size_of_val(self.0)
     }
 
-    fn write_property_value(&self, mut buffer: &mut [u8]) {
-        for val in self.0 {
-            buffer[..size_of::<u32>()].copy_from_slice(&val.get().to_be_bytes());
-            buffer = &mut buffer[size_of::<u32>()..];
-        }
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(self.0.as_bytes());
     }
 }
 
