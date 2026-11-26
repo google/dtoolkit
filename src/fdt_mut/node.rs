@@ -60,8 +60,8 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
     /// let child = parent.child_mut("c").unwrap();
     ///
@@ -162,8 +162,8 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::fdt_mut::FdtMut;
     /// use dtoolkit::{Node, Property};
     ///
-    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert!(node.property("prop").is_some());
     /// assert!(node.remove_property("prop"));
@@ -205,10 +205,10 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let dtb = include_bytes!("../../tests/dtb/test_traversal.dtb");
-    /// # let mut buf = dtb.to_vec();
-    /// # buf.resize(dtb.len() + 64, 0);
-    /// let mut fdt = FdtMut::new(buf.as_mut_slice()).unwrap();
+    /// # let raw = include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// # let mut dtb = [0u8; 512];
+    /// # dtb[..raw.len()].copy_from_slice(raw);
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
     /// let child = parent.add_child("new-child").unwrap();
     /// assert_eq!(child.name(), "new-child");
@@ -268,8 +268,8 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b").unwrap();
     /// assert!(node.child("c").is_some());
     /// assert!(node.remove_child("c"));
@@ -308,8 +308,8 @@ impl<B: FdtBuffer> FdtNodeMut<'_, B> {
     /// use dtoolkit::Node;
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut parent = fdt.find_node_mut("/a/b").unwrap();
     /// let child = parent.child_mut("c").unwrap();
     /// child.remove().unwrap();

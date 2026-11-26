@@ -117,6 +117,25 @@ impl FdtBuffer for [u8] {
     }
 }
 
+/// Uses `totalsize` from the FDT header as the active length and any remaining
+/// bytes as spare capacity.
+///
+/// The array needs to be at least 40 bytes long (the length of the FDT header);
+/// otherwise, resizing the buffer to any non-zero length will fail.
+impl<const N: usize> FdtBuffer for [u8; N] {
+    fn data(&self) -> &[u8] {
+        self.as_slice().data()
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        self.as_mut_slice().data_mut()
+    }
+
+    fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
+        self.as_mut_slice().try_resize(new_len)
+    }
+}
+
 #[cfg(feature = "alloc")]
 impl FdtBuffer for Vec<u8> {
     fn data(&self) -> &[u8] {
@@ -258,6 +277,26 @@ mod tests {
                 })
             );
         }
+    }
+
+    #[test]
+    fn array_buffer() {
+        let mut buf = [0u8; 100];
+        buf[size_of::<u32>()..2 * size_of::<u32>()].copy_from_slice(&40u32.to_be_bytes());
+
+        assert_eq!(buf.data().len(), 40);
+        assert_eq!(buf.try_resize(50), Ok(()));
+        assert_eq!(buf.data().len(), 50);
+        assert_eq!(
+            buf.try_resize(150),
+            Err(BufferError::OutOfSpace {
+                requested: 150,
+                capacity: 100,
+            })
+        );
+
+        buf.try_resize(45).unwrap();
+        assert_eq!(buf.data().len(), 45);
     }
 
     #[cfg(feature = "alloc")]
