@@ -1026,3 +1026,46 @@ fn properties_mut_remove_empty_before_end_node() {
     let child2 = fdt.find_node("/child2").unwrap();
     assert!(child2.properties().next().is_none());
 }
+
+#[test]
+fn children_mut_remove_before_sibling() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut children = root.children_mut();
+    let mut visited = Vec::new();
+    while let Some(child) = children.next() {
+        let name = child.name().to_owned();
+        visited.push(name.clone());
+        if name == "child1" {
+            child.remove().unwrap();
+        }
+    }
+    assert_eq!(visited, ["child1", "child2"]);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert!(fdt.root().child("child1").is_none());
+    assert!(fdt.root().child("child2").is_some());
+}
+
+#[test]
+fn children_mut_remove_all() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut children = root.children_mut();
+    let mut visited = Vec::new();
+    while let Some(child) = children.next() {
+        visited.push(child.name().to_owned());
+        child.remove().unwrap();
+    }
+    assert_eq!(visited, ["child1", "child2"]);
+
+    let fdt = Fdt::new(&dtb).unwrap();
+    assert!(fdt.root().children().next().is_none());
+    assert!(fdt.root().property("empty1").is_some());
+    assert!(fdt.root().property("prop1").is_some());
+    assert!(fdt.root().property("empty2").is_some());
+}
