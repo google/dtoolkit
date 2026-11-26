@@ -8,7 +8,7 @@
 
 use dtoolkit::error::{BufferError, FdtErrorKind, FdtMutError};
 use dtoolkit::fdt::{Fdt, FdtOptions};
-use dtoolkit::fdt_mut::{FdtBuffer, FdtMut};
+use dtoolkit::fdt_mut::{EMPTY_FDT_SIZE, FdtBuffer, FdtMut};
 use dtoolkit::standard::AddressSpaceProperties;
 use dtoolkit::{Node, Property, ToPropertyValue, Tree};
 #[cfg(feature = "alloc")]
@@ -1252,4 +1252,92 @@ fn add_child_out_of_space_leaves_blob_unchanged() {
         FdtMutError::Resize(BufferError::OutOfSpace { .. })
     ));
     assert_eq!(buf, dtb);
+}
+
+#[test]
+fn create_empty_fdt() {
+    #[cfg(any(feature = "alloc", feature = "arrayvec07", feature = "heapless09"))]
+    fn assert_empty<B: FdtBuffer>(buf: B, expected: &[u8]) {
+        assert_eq!(FdtMut::create(buf).unwrap().as_read_only().data(), expected);
+    }
+
+    let exact = FdtMut::create([0u8; EMPTY_FDT_SIZE]).unwrap();
+    let empty_bytes = exact.as_read_only().data().to_vec();
+    assert_eq!(empty_bytes.len(), EMPTY_FDT_SIZE);
+
+    let fdt = Fdt::new(&empty_bytes).unwrap();
+    assert_eq!(fdt.root().name(), "");
+    assert_eq!(fdt.root().properties().count(), 0);
+    assert_eq!(fdt.root().children().count(), 0);
+    assert_eq!(fdt.memory_reservations().count(), 0);
+
+    let mut raw = [0xffu8; EMPTY_FDT_SIZE + 64];
+    let from_slice = FdtMut::create(raw.as_mut_slice()).unwrap();
+    assert_eq!(from_slice.as_read_only().data(), empty_bytes);
+
+    #[cfg(feature = "write")]
+    assert_eq!(
+        dtoolkit::model::DeviceTree::new().to_dtb(),
+        &empty_bytes[..]
+    );
+
+    #[cfg(feature = "alloc")]
+    {
+        assert_empty(Vec::new(), &empty_bytes);
+        assert_empty(vec![0xaau8; 128], &empty_bytes);
+    }
+    #[cfg(feature = "arrayvec07")]
+    assert_empty(arrayvec::ArrayVec::<u8, 256>::new(), &empty_bytes);
+    #[cfg(feature = "heapless09")]
+    assert_empty(heapless::Vec::<u8, 256>::new(), &empty_bytes);
+}
+
+#[test]
+fn created_fdt_is_editable() {
+    let mut from_slice = FdtMut::create([0u8; EMPTY_FDT_SIZE + 64]).unwrap();
+
+    from_slice
+        .root_mut()
+        .add_property("model", "from-scratch")
+        .unwrap();
+    let parsed = Fdt::new(from_slice.as_read_only().data()).unwrap();
+
+    let model = parsed.root().property("model").unwrap();
+    assert_eq!(model.value_as::<&str>().unwrap(), "from-scratch");
+}
+
+#[test]
+fn create_out_of_space_leaves_buffer_unchanged() {
+    let assert_oos = |err, capacity| {
+        assert_eq!(
+            err,
+            BufferError::OutOfSpace {
+                requested: EMPTY_FDT_SIZE,
+                capacity,
+            }
+        );
+    };
+
+    let mut almost = [0xaau8; EMPTY_FDT_SIZE - 1];
+    assert_oos(
+        FdtMut::create(almost.as_mut_slice()).unwrap_err(),
+        EMPTY_FDT_SIZE - 1,
+    );
+    assert_eq!(almost, [0xaau8; EMPTY_FDT_SIZE - 1]);
+
+    let mut short = [0xaau8; 16];
+    assert_oos(FdtMut::create(short.as_mut_slice()).unwrap_err(), 0);
+    assert_eq!(short, [0xaau8; 16]);
+
+    #[cfg(feature = "arrayvec07")]
+    assert_oos(
+        FdtMut::create(arrayvec::ArrayVec::<u8, { EMPTY_FDT_SIZE - 1 }>::new()).unwrap_err(),
+        EMPTY_FDT_SIZE - 1,
+    );
+
+    #[cfg(feature = "heapless09")]
+    assert_oos(
+        FdtMut::create(heapless::Vec::<u8, { EMPTY_FDT_SIZE - 1 }>::new()).unwrap_err(),
+        EMPTY_FDT_SIZE - 1,
+    );
 }

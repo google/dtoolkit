@@ -41,9 +41,8 @@ use crate::memreserve::{MemoryReservation, RawMemoryReservation};
 use crate::{Node, Tree};
 
 /// Version of the FDT specification supported by this library.
-const FDT_VERSION: u32 = 17;
-/// Default maximum allowed node nesting depth (including the root node).
-const DEFAULT_MAX_DEPTH: usize = 64;
+pub(crate) const FDT_VERSION: u32 = 17;
+pub(crate) const FDT_LAST_COMP_VERSION: u32 = 16;
 pub(crate) const FDT_TAGSIZE: usize = size_of::<u32>();
 pub(crate) const FDT_MAGIC: u32 = 0xd00d_feed;
 pub(crate) const FDT_BEGIN_NODE: u32 = 0x1;
@@ -51,6 +50,9 @@ pub(crate) const FDT_END_NODE: u32 = 0x2;
 pub(crate) const FDT_END: u32 = 0x9;
 pub(crate) const FDT_PROP: u32 = 0x3;
 pub(crate) const FDT_NOP: u32 = 0x4;
+
+/// Default maximum allowed node nesting depth (including the root node).
+const DEFAULT_MAX_DEPTH: usize = 64;
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout)]

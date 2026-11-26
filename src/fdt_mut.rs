@@ -21,11 +21,50 @@ use core::ptr;
 pub use buffer::FdtBuffer;
 pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
-use zerocopy::{FromBytes, big_endian};
+use zerocopy::{FromBytes, IntoBytes, big_endian};
 
 use crate::error::{BufferError, FdtParseError};
-use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtToken};
+use crate::fdt::{
+    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_LAST_COMP_VERSION, FDT_MAGIC, FDT_NOP, FDT_TAGSIZE,
+    FDT_VERSION, Fdt, FdtHeader, FdtOptions, FdtToken,
+};
+use crate::memreserve::RawMemoryReservation;
 use crate::{ToPropertyValue, Tree};
+
+const EMPTY_FDT_MEMRSV_OFFSET: usize = size_of::<FdtHeader>();
+const EMPTY_FDT_STRUCT_OFFSET: usize = EMPTY_FDT_MEMRSV_OFFSET + size_of::<RawMemoryReservation>();
+const EMPTY_FDT_STRUCT_SIZE: usize = size_of_val(&EMPTY_FDT_TOKENS);
+
+/// Size in bytes of an empty FDT blob created by [`FdtMut::create`].
+pub const EMPTY_FDT_SIZE: usize = EMPTY_FDT_STRUCT_OFFSET + EMPTY_FDT_STRUCT_SIZE;
+
+const EMPTY_FDT_HEADER: FdtHeader = {
+    const fn to_u32(val: usize) -> big_endian::U32 {
+        assert!(val <= u32::MAX as usize);
+        #[expect(clippy::cast_possible_truncation, reason = "asserted above")]
+        big_endian::U32::new(val as u32)
+    }
+
+    FdtHeader {
+        magic: big_endian::U32::new(FDT_MAGIC),
+        totalsize: to_u32(EMPTY_FDT_SIZE),
+        off_dt_struct: to_u32(EMPTY_FDT_STRUCT_OFFSET),
+        off_dt_strings: to_u32(EMPTY_FDT_SIZE),
+        off_mem_rsvmap: to_u32(EMPTY_FDT_MEMRSV_OFFSET),
+        version: big_endian::U32::new(FDT_VERSION),
+        last_comp_version: big_endian::U32::new(FDT_LAST_COMP_VERSION),
+        boot_cpuid_phys: big_endian::U32::new(0),
+        size_dt_strings: big_endian::U32::new(0),
+        size_dt_struct: to_u32(EMPTY_FDT_STRUCT_SIZE),
+    }
+};
+
+const EMPTY_FDT_TOKENS: [big_endian::U32; 4] = [
+    big_endian::U32::new(FDT_BEGIN_NODE),
+    big_endian::U32::new(0),
+    big_endian::U32::new(FDT_END_NODE),
+    big_endian::U32::new(FDT_END),
+];
 
 /// A mutable flattened device tree.
 ///
@@ -58,6 +97,43 @@ pub struct FdtMut<B> {
 }
 
 impl<B: FdtBuffer> FdtMut<B> {
+    /// Initializes an empty device tree (containing only the root node `/`) in
+    /// `data`.
+    ///
+    /// Any existing contents of `data` are overwritten. The buffer must be able
+    /// to hold at least [`EMPTY_FDT_SIZE`] bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`BufferError`] if resizing `data` to [`EMPTY_FDT_SIZE`]
+    /// fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dtoolkit::fdt_mut::{EMPTY_FDT_SIZE, FdtMut};
+    /// use dtoolkit::{Node, Property, Tree};
+    ///
+    /// let mut fdt = FdtMut::create([0u8; EMPTY_FDT_SIZE + 64]).unwrap();
+    /// fdt.root_mut().add_property("model", "example").unwrap();
+    /// let ro = fdt.as_read_only();
+    /// let prop = ro.root().property("model").unwrap();
+    /// assert_eq!(prop.value_as::<&str>().unwrap(), "example");
+    /// ```
+    pub fn create(mut data: B) -> Result<Self, BufferError> {
+        data.try_resize(EMPTY_FDT_SIZE)?;
+
+        let bytes = data.data_mut();
+        bytes[..EMPTY_FDT_MEMRSV_OFFSET].copy_from_slice(EMPTY_FDT_HEADER.as_bytes());
+        bytes[EMPTY_FDT_MEMRSV_OFFSET..EMPTY_FDT_STRUCT_OFFSET]
+            .copy_from_slice(RawMemoryReservation::TERMINATOR.as_bytes());
+        bytes[EMPTY_FDT_STRUCT_OFFSET..EMPTY_FDT_SIZE].copy_from_slice(EMPTY_FDT_TOKENS.as_bytes());
+
+        let fdt = Self { data };
+        debug_assert!(Fdt::new(fdt.as_read_only().data()).is_ok());
+        Ok(fdt)
+    }
+
     /// Creates a new mutable FDT from a buffer.
     ///
     /// # Errors
