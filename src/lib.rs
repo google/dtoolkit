@@ -88,7 +88,7 @@
 //! use dtoolkit::{Node, Property};
 //!
 //! # let mut dtb = include_bytes!("../tests/dtb/test_props.dtb").to_vec();
-//! let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+//! let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
 //!
 //! let mut node = fdt.find_node_mut("/test-props").unwrap();
 //! node.property_mut("str-prop")

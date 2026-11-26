@@ -18,7 +18,7 @@ mod property;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::ptr;
 
-pub use buffer::{FdtBuffer, SliceBuffer};
+pub use buffer::FdtBuffer;
 pub use node::FdtNodeMut;
 pub use property::FdtPropertyMut;
 use zerocopy::{FromBytes, big_endian};
@@ -28,6 +28,30 @@ use crate::fdt::{FDT_NOP, FDT_TAGSIZE, Fdt, FdtHeader, FdtOptions, FdtToken};
 use crate::{ToPropertyValue, Tree};
 
 /// A mutable flattened device tree.
+///
+/// This is the read-write counterpart to [`Fdt`], providing in-place access to
+/// nodes ([`FdtNodeMut`]) and properties ([`FdtPropertyMut`]) backed by an
+/// [`FdtBuffer`].
+///
+/// # Backing buffer
+///
+/// The backing storage is abstracted by [`FdtBuffer`]. Fixed-size buffers such
+/// as `&mut [u8]` use the FDT header's `totalsize` as the active length, treat
+/// any trailing bytes as spare capacity for growth, and never reallocate.
+///
+/// Growable containers such as `Vec<u8>` instead track the active length
+/// themselves and resize as needed. Because of this, passing `&mut vec` and
+/// passing `&mut vec[..]` (or `vec.as_mut_slice()`) behave differently:
+/// `&mut vec` grows or shrinks the vector, while `&mut vec[..]` uses the
+/// fixed-capacity `[u8]` implementation.
+///
+/// The `from_raw*` constructors ([`FdtMut::from_raw`],
+/// [`FdtMut::from_raw_with_options`], and [`FdtMut::from_raw_unchecked`])
+/// conservatively take `totalsize` as the maximum buffer size, leaving no spare
+/// capacity for growth. If you know that more writable memory is available,
+/// construct the slice yourself (e.g. with [`core::slice::from_raw_parts_mut`])
+/// and pass it to [`FdtMut::new`] (or [`FdtMut::with_options`] /
+/// [`FdtMut::new_unchecked`]).
 pub struct FdtMut<B> {
     pub(crate) data: B,
 }
@@ -50,7 +74,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// Returns an [`FdtParseError`] if the data is not a valid device tree
     /// according to `options`.
     pub fn with_options(data: B, options: FdtOptions) -> Result<Self, FdtParseError> {
-        Fdt::with_options(data.as_ref(), options)?;
+        Fdt::with_options(data.data(), options)?;
         Ok(Self { data })
     }
 
@@ -72,14 +96,14 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// this `FdtMut` and any views derived from it to panic or produce invalid
     /// results.
     pub fn data_mut(&mut self) -> &mut [u8] {
-        self.data.as_mut()
+        self.data.data_mut()
     }
 
     /// Returns a read-only view of this FDT.
     #[must_use]
     pub fn as_read_only(&self) -> Fdt<'_> {
         Fdt {
-            data: self.data.as_ref(),
+            data: self.data.data(),
         }
     }
 
@@ -105,7 +129,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
@@ -137,7 +161,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
     /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
     /// let offset = fdt.find_node_mut("/a/b/c").unwrap().offset();
     /// let node = fdt.node_at_offset_mut(offset).unwrap();
     /// assert_eq!(node.name(), "c");
@@ -178,7 +202,7 @@ impl<B: FdtBuffer> FdtMut<B> {
         let header = self.as_read_only().header();
         let str_block_offset = header.off_dt_strings() as usize;
         let str_block_size = header.size_dt_strings() as usize;
-        let str_block = &self.data.as_ref()[str_block_offset..str_block_offset + str_block_size];
+        let str_block = &self.data.data()[str_block_offset..str_block_offset + str_block_size];
 
         // Comparing raw bytes to avoid decoding UTF-8 (validation only covers
         // strings referenced by properties, so the string block may contain
@@ -203,8 +227,8 @@ impl<B: FdtBuffer> FdtMut<B> {
         let name_len = name_bytes.len() + 1; // plus null terminator
         let target = str_block_offset + str_block_size;
 
-        self.data.as_mut()[target..target + name_bytes.len()].copy_from_slice(name_bytes);
-        self.data.as_mut()[target + name_bytes.len()] = 0;
+        self.data.data_mut()[target..target + name_bytes.len()].copy_from_slice(name_bytes);
+        self.data.data_mut()[target + name_bytes.len()] = 0;
 
         let header = self.header_mut();
         header.size_dt_strings.set(
@@ -247,13 +271,13 @@ impl<B: FdtBuffer> FdtMut<B> {
             .saturating_add(u64::from(header.size_dt_strings()))
             .saturating_add(extra_strings);
 
-        let old_size = self.data.as_ref().len();
+        let old_size = self.data.data().len();
         let new_size_u64 = (old_size as u64).max(strings_end).saturating_add(amount);
         self.ensure_totalsize(new_size_u64)?;
 
         let amount_u32 = u32::try_from(amount).expect("amount should fit in u32");
         self.data
-            .as_mut()
+            .data_mut()
             .copy_within(offset..old_size, offset + amount_u32 as usize);
 
         let header = self.header_mut();
@@ -267,7 +291,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// at least `required_size` bytes, dynamically expanding and updating
     /// the header where necessary.
     fn ensure_totalsize(&mut self, required_size: u64) -> Result<(), BufferError> {
-        let old_size = self.data.as_ref().len() as u64;
+        let old_size = self.data.data().len() as u64;
         if required_size > old_size {
             let required_u32 =
                 u32::try_from(required_size).map_err(|_| BufferError::FdtLimitExceeded {
@@ -333,7 +357,7 @@ impl<B: FdtBuffer> FdtMut<B> {
             if token != FdtToken::Nop {
                 if write_offset != read_offset {
                     self.data
-                        .as_mut()
+                        .data_mut()
                         .copy_within(read_offset..read_offset + chunk_len, write_offset);
                 }
                 write_offset += chunk_len;
@@ -358,7 +382,7 @@ impl<B: FdtBuffer> FdtMut<B> {
         let strings_end = strings_start + size_dt_strings;
 
         self.data
-            .as_mut()
+            .data_mut()
             .copy_within(strings_start..strings_end, write_offset);
 
         // Update header
@@ -382,7 +406,7 @@ impl<B: FdtBuffer> FdtMut<B> {
 
     fn header_mut(&mut self) -> &mut FdtHeader {
         let (header, _) =
-            FdtHeader::mut_from_prefix(self.data.as_mut()).expect("Fdt should be valid");
+            FdtHeader::mut_from_prefix(self.data.data_mut()).expect("Fdt should be valid");
         header
     }
 
@@ -391,7 +415,7 @@ impl<B: FdtBuffer> FdtMut<B> {
 
         let mut offset = start;
         while offset < end {
-            self.data.as_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
+            self.data.data_mut()[offset..offset + FDT_TAGSIZE].copy_from_slice(&nop_bytes);
             offset += FDT_TAGSIZE;
         }
     }
@@ -409,59 +433,19 @@ impl<B: FdtBuffer> FdtMut<B> {
     }
 }
 
-impl<'a> FdtMut<SliceBuffer<'a>> {
-    /// Creates a new `FdtMut` from a mutable byte slice by wrapping it in a
-    /// [`SliceBuffer`].
-    ///
-    /// Reads `totalsize` from the FDT header at the start of `slice` to
-    /// determine the active size of the device tree, while using the
-    /// remaining capacity of `slice` (if any) for future expansion.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`FdtParseError`] if `slice` does not contain a valid device
-    /// tree.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dtoolkit::fdt_mut::FdtMut;
-    ///
-    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
-    /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
-    /// ```
-    pub fn from_slice(slice: &'a mut [u8]) -> Result<Self, FdtParseError> {
-        Self::from_slice_with_options(slice, FdtOptions::new())
-    }
-
-    /// Creates a new `FdtMut` from a mutable byte slice using the specified
-    /// [`FdtOptions`] by wrapping it in a [`SliceBuffer`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`FdtParseError`] if `slice` does not contain a valid device
-    /// tree according to `options`.
-    pub fn from_slice_with_options(
-        slice: &'a mut [u8],
-        options: FdtOptions,
-    ) -> Result<Self, FdtParseError> {
-        let buffer = SliceBuffer::new(slice)?;
-        Self::with_options(buffer, options)
-    }
-
-    /// Creates a new `FdtMut` from a mutable byte slice without validation.
-    ///
-    /// The caller must ensure that `slice` contains a valid Flattened Device
-    /// Tree (FDT) blob. If the blob is invalid, methods on `FdtMut` and
-    /// related types may panic.
-    #[must_use]
-    pub fn from_slice_unchecked(slice: &'a mut [u8]) -> Self {
-        let buffer = SliceBuffer::new_unchecked(slice);
-        Self::new_unchecked(buffer)
-    }
-
+#[expect(
+    clippy::needless_lifetimes,
+    reason = "named lifetime is referenced in safety documentation"
+)]
+impl<'a> FdtMut<&'a mut [u8]> {
     /// Creates a new `FdtMut` from the given pointer without validation.
+    ///
+    /// The backing buffer of the returned `FdtMut` is sized to `totalsize`
+    /// bytes, leaving no spare capacity for in-place expansion. Callers with a
+    /// larger writable buffer that want to use the remaining space should
+    /// construct a slice manually (e.g. with
+    /// [`core::slice::from_raw_parts_mut`]) and pass it to
+    /// [`FdtMut::new_unchecked`] or [`FdtMut::new`].
     ///
     /// # Safety
     ///
@@ -491,17 +475,19 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         // `data` spans `totalsize` bytes (as specified in the FDT
         // header).
         let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
-        Self::from_slice_unchecked(slice)
+        Self::new_unchecked(slice)
     }
 
     /// Creates a new `FdtMut` from the given pointer using the specified
     /// [`FdtOptions`], verifying that the header and `totalsize` fit within
     /// `options.max_size` bytes before reading the rest of the blob.
     ///
-    /// The resulting [`SliceBuffer`] is sized to `totalsize` bytes (not
-    /// `options.max_size`); callers with a larger writable buffer that want to
-    /// use the remaining space for in-place expansion should use
-    /// [`FdtMut::from_slice`].
+    /// The backing buffer of the returned `FdtMut` is sized to `totalsize`
+    /// bytes (not `options.max_size`), leaving no spare capacity for in-place
+    /// expansion. Callers with a larger writable buffer that want to use the
+    /// remaining space should construct a slice manually (e.g. with
+    /// [`core::slice::from_raw_parts_mut`]) and pass it to
+    /// [`FdtMut::with_options`] or [`FdtMut::new`].
     ///
     /// # Safety
     ///
@@ -548,10 +534,16 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
         // FDT blob and verified `size <= options.max_size` (and
         // `size <= isize::MAX`).
         let slice = unsafe { core::slice::from_raw_parts_mut(data, size) };
-        Ok(Self::from_slice_unchecked(slice))
+        Ok(Self::new_unchecked(slice))
     }
 
     /// Creates a new `FdtMut` from the given pointer.
+    ///
+    /// The backing buffer of the returned `FdtMut` is sized to `totalsize`
+    /// bytes, leaving no spare capacity for in-place expansion. Callers with a
+    /// larger writable buffer that want to use the remaining space should
+    /// construct a slice manually (e.g. with
+    /// [`core::slice::from_raw_parts_mut`]) and pass it to [`FdtMut::new`].
     ///
     /// # Safety
     ///
@@ -588,7 +580,7 @@ impl<'a> FdtMut<SliceBuffer<'a>> {
 
 impl<B: FdtBuffer> Debug for FdtMut<B> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let slice = self.data.as_ref();
+        let slice = self.data.data();
         write!(
             f,
             "FdtMut {{ data: {} bytes at {:?} }}",
@@ -608,9 +600,10 @@ impl<B: FdtBuffer> Display for FdtMut<B> {
     }
 }
 
-impl<'a> From<FdtMut<SliceBuffer<'a>>> for Fdt<'a> {
-    fn from(fdt: FdtMut<SliceBuffer<'a>>) -> Self {
-        Self::new_unchecked(fdt.data.into_slice())
+impl<'a> From<FdtMut<&'a mut [u8]>> for Fdt<'a> {
+    fn from(fdt: FdtMut<&'a mut [u8]>) -> Self {
+        let len = fdt.data.data().len();
+        Self::new_unchecked(&fdt.data[..len])
     }
 }
 
