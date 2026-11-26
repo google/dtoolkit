@@ -9,6 +9,8 @@
 //! Helper types and traits for property value conversions.
 
 #[cfg(feature = "alloc")]
+use alloc::ffi::CString;
+#[cfg(feature = "alloc")]
 use alloc::string::String;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -222,6 +224,40 @@ impl ToPropertyValue for u64 {
 
     fn write_property_value(&self, buffer: &mut [u8]) {
         buffer.copy_from_slice(&self.to_be_bytes());
+    }
+}
+
+impl<'a> FromPropertyValue<'a> for &'a CStr {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        CStr::from_bytes_with_nul(value).map_err(|_| PropertyError::InvalidString)
+    }
+}
+
+impl ToPropertyValue for CStr {
+    fn property_value_len(&self) -> usize {
+        self.to_bytes_with_nul().len()
+    }
+
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(self.to_bytes_with_nul());
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> FromPropertyValue<'a> for CString {
+    fn from_property_value(value: &'a [u8]) -> Result<Self, PropertyError> {
+        <&CStr>::from_property_value(value).map(CString::from)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl ToPropertyValue for CString {
+    fn property_value_len(&self) -> usize {
+        self.as_c_str().property_value_len()
+    }
+
+    fn write_property_value(&self, buffer: &mut [u8]) {
+        self.as_c_str().write_property_value(buffer);
     }
 }
 
@@ -517,6 +553,48 @@ mod tests {
         assert_eq!(u32_arr_buf, [0, 0, 0, 0x11, 0, 0, 0, 0x22]);
         let decoded_arr: [u32; 2] = FromPropertyValue::from_property_value(&u32_arr_buf).unwrap();
         assert_eq!(decoded_arr, u32_arr);
+    }
+
+    #[test]
+    fn cstr_conversions() {
+        let cstr = c"hello";
+        assert_eq!(cstr.property_value_len(), 6);
+        let mut buf = [0u8; 6];
+        cstr.write_property_value(&mut buf);
+        assert_eq!(&buf, b"hello\0");
+        assert_eq!(<&CStr>::from_property_value(&buf), Ok(cstr));
+
+        // Non-UTF-8 bytes are still valid C strings.
+        assert_eq!(
+            <&CStr>::from_property_value(b"\xff\0").unwrap().to_bytes(),
+            b"\xff"
+        );
+        assert_eq!(<&CStr>::from_property_value(b"\0"), Ok(c""));
+
+        for invalid in [b"".as_slice(), b"hello", b"foo\0bar\0", b"\0\0"] {
+            assert_eq!(
+                <&CStr>::from_property_value(invalid),
+                Err(PropertyError::InvalidString)
+            );
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn cstring_conversions() {
+        let cstring = CString::from(c"hello");
+        assert_eq!(cstring.property_value_len(), 6);
+        let mut buf = [0u8; 6];
+        cstring.write_property_value(&mut buf);
+        assert_eq!(&buf, b"hello\0");
+        assert_eq!(CString::from_property_value(&buf), Ok(cstring));
+
+        for invalid in [b"".as_slice(), b"hello", b"foo\0bar\0"] {
+            assert_eq!(
+                CString::from_property_value(invalid),
+                Err(PropertyError::InvalidString)
+            );
+        }
     }
 
     #[test]
