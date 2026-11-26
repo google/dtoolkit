@@ -399,10 +399,10 @@ impl<B: FdtBuffer> FdtMut<B> {
     fn write_property_value_with_padding<T: ToPropertyValue>(
         &mut self,
         value: &T,
+        val_len: usize,
         padded_val_len: usize,
         val_offset: usize,
     ) {
-        let val_len = value.property_value_len();
         let data = self.data_mut();
         value.write_property_value(&mut data[val_offset..val_offset + val_len]);
         data[val_offset + val_len..val_offset + padded_val_len].fill(0);
