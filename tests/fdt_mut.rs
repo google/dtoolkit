@@ -1069,3 +1069,37 @@ fn children_mut_remove_all() {
     assert!(fdt.root().property("prop1").is_some());
     assert!(fdt.root().property("empty2").is_some());
 }
+
+#[test]
+fn prop_mut_iter_is_fused() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut props = root.properties_mut();
+    while props.next().is_some() {}
+    assert!(props.next().is_none());
+    assert!(props.next().is_none());
+
+    let mut child1 = fdt_mut.find_node_mut("/child1").unwrap();
+    let mut empty_props = child1.properties_mut();
+    assert!(empty_props.next().is_none());
+    assert!(empty_props.next().is_none());
+}
+
+#[test]
+fn child_mut_iter_is_fused() {
+    let mut dtb = include_bytes!("dtb/test_mut_iter.dtb").to_vec();
+    let mut fdt_mut = FdtMut::from_slice(&mut dtb).unwrap();
+
+    let mut root = fdt_mut.root_mut();
+    let mut children = root.children_mut();
+    while children.next().is_some() {}
+    assert!(children.next().is_none());
+    assert!(children.next().is_none());
+
+    let mut child2 = fdt_mut.find_node_mut("/child2").unwrap();
+    let mut empty_children = child2.children_mut();
+    assert!(empty_children.next().is_none());
+    assert!(empty_children.next().is_none());
+}
