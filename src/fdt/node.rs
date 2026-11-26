@@ -296,4 +296,6 @@ pub(crate) mod private {
             })
         }
     }
+
+    impl core::iter::FusedIterator for FdtChildIter<'_> {}
 }

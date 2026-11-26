@@ -218,3 +218,5 @@ impl<'a> Iterator for FdtPropIter<'a> {
         })
     }
 }
+
+impl core::iter::FusedIterator for FdtPropIter<'_> {}

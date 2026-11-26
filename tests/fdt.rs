@@ -1042,3 +1042,27 @@ fn struct_block_may_extend_past_fdt_end() {
         assert!(Fdt::new(&dtb).is_ok());
     }
 }
+
+fn assert_fused<I: core::iter::FusedIterator>(mut iter: I, expected_len: usize) {
+    assert_eq!(iter.by_ref().count(), expected_len);
+    assert!(iter.next().is_none());
+    assert!(iter.next().is_none());
+}
+
+#[test]
+fn prop_iter_is_fused() {
+    let dtb = include_bytes!("dtb/test_mut_iter.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    assert_fused(fdt.root().properties(), 3);
+    assert_fused(fdt.find_node("/child1").unwrap().properties(), 0);
+}
+
+#[test]
+fn child_iter_is_fused() {
+    let dtb = include_bytes!("dtb/test_mut_iter.dtb");
+    let fdt = Fdt::new(dtb).unwrap();
+
+    assert_fused(fdt.root().children(), 2);
+    assert_fused(fdt.find_node("/child2").unwrap().children(), 0);
+}
