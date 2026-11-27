@@ -36,8 +36,9 @@ use crate::{ToPropertyValue, Tree};
 /// # Backing buffer
 ///
 /// The backing storage is abstracted by [`FdtBuffer`]. Fixed-size buffers such
-/// as `&mut [u8]` use the FDT header's `totalsize` as the active length, treat
-/// any trailing bytes as spare capacity for growth, and never reallocate.
+/// as `&mut [u8]` and `[u8; N]` use the FDT header's `totalsize` as the active
+/// length, treat any trailing bytes as spare capacity for growth, and never
+/// reallocate.
 ///
 /// Growable containers such as `Vec<u8>` instead track the active length
 /// themselves and resize as needed. Because of this, passing `&mut vec` and
@@ -128,8 +129,8 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// use dtoolkit::fdt_mut::FdtMut;
     /// use dtoolkit::{Node, Property};
     ///
-    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
@@ -160,8 +161,8 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// ```
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let mut dtb = include_bytes!("../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
+    /// # let dtb = *include_bytes!("../tests/dtb/test_traversal.dtb");
+    /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let offset = fdt.find_node_mut("/a/b/c").unwrap().offset();
     /// let node = fdt.node_at_offset_mut(offset).unwrap();
     /// assert_eq!(node.name(), "c");
@@ -323,7 +324,7 @@ impl<B: FdtBuffer> FdtMut<B> {
     /// ```
     /// use dtoolkit::fdt_mut::FdtMut;
     ///
-    /// # let mut dtb = include_bytes!("../tests/dtb/test_props.dtb").to_vec();
+    /// # let dtb = *include_bytes!("../tests/dtb/test_props.dtb");
     /// let mut fdt = FdtMut::new(dtb).unwrap();
     /// let initial_size = fdt.as_read_only().data().len();
     ///
@@ -602,6 +603,13 @@ impl<B: FdtBuffer> Display for FdtMut<B> {
 
 impl<'a> From<FdtMut<&'a mut [u8]>> for Fdt<'a> {
     fn from(fdt: FdtMut<&'a mut [u8]>) -> Self {
+        let len = fdt.data.data().len();
+        Self::new_unchecked(&fdt.data[..len])
+    }
+}
+
+impl<'a, const N: usize> From<FdtMut<&'a mut [u8; N]>> for Fdt<'a> {
+    fn from(fdt: FdtMut<&'a mut [u8; N]>) -> Self {
         let len = fdt.data.data().len();
         Self::new_unchecked(&fdt.data[..len])
     }

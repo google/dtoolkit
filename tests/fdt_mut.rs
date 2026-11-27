@@ -218,6 +218,31 @@ fn modify_property_grow_slice_with_capacity() {
     assert_eq!(prop.value(), TEST_GROW_VAL);
 }
 
+#[test]
+fn modify_property_grow_array_owned() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+
+    let (fdt_mut, result) = modify_property_grow(dtb_in_array::<2048>(dtb));
+    result.unwrap();
+
+    let prop = fdt_mut
+        .as_read_only()
+        .find_node("/test-props")
+        .unwrap()
+        .property("str-prop")
+        .unwrap();
+    assert_eq!(prop.value(), TEST_GROW_VAL);
+}
+
+#[test]
+fn modify_property_grow_array_failure() {
+    let (_fdt_mut, result) = modify_property_grow(*include_bytes!("dtb/test_props.dtb"));
+    assert!(matches!(
+        result.unwrap_err(),
+        FdtMutError::Resize(BufferError::OutOfSpace { .. })
+    ));
+}
+
 #[cfg(feature = "alloc")]
 #[test]
 fn modify_property_grow_vec() {
@@ -344,6 +369,12 @@ fn compact_slice() {
     let fdt_mut = FdtMut::new(&mut data[..]).unwrap();
 
     test_compact(fdt_mut);
+}
+
+#[test]
+fn compact_array() {
+    let dtb = include_bytes!("dtb/test_props.dtb");
+    test_compact(FdtMut::new(dtb_in_array::<2048>(dtb)).unwrap());
 }
 
 #[cfg(feature = "arrayvec07")]
@@ -734,22 +765,31 @@ fn slice_buffer_into_fdt_uses_totalsize() {
     let fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
     let fdt = Fdt::from(fdt_mut);
     assert_eq!(fdt.data().len(), dtb.len());
+
+    let fdt_mut = FdtMut::new(&mut buf).unwrap();
+    let fdt = Fdt::from(fdt_mut);
+    assert_eq!(fdt.data().len(), dtb.len());
 }
 
 #[test]
-fn new_rejects_invalid_slice() {
+fn new_rejects_invalid_slice_and_array() {
+    let mut short = [0u8; 16];
     assert_eq!(
-        FdtMut::new([0u8; 16].as_mut_slice()).unwrap_err().kind,
+        FdtMut::new(short.as_mut_slice()).unwrap_err().kind,
         FdtErrorKind::InvalidLength
     );
     assert_eq!(
-        FdtMut::new([0u8; 64].as_mut_slice()).unwrap_err().kind,
+        FdtMut::new(short).unwrap_err().kind,
         FdtErrorKind::InvalidLength
     );
-    assert_eq!(
-        FdtMut::new([0xffu8; 64].as_mut_slice()).unwrap_err().kind,
-        FdtErrorKind::InvalidMagic
-    );
+
+    for (mut buf, expected) in [
+        ([0u8; 64], FdtErrorKind::InvalidLength),
+        ([0xffu8; 64], FdtErrorKind::InvalidMagic),
+    ] {
+        assert_eq!(FdtMut::new(buf.as_mut_slice()).unwrap_err().kind, expected);
+        assert_eq!(FdtMut::new(buf).unwrap_err().kind, expected);
+    }
 
     let dtb = include_bytes!("dtb/test.dtb");
     for bad_size in [16u32, 512] {
@@ -757,6 +797,10 @@ fn new_rejects_invalid_slice() {
         buf[size_of::<u32>()..2 * size_of::<u32>()].copy_from_slice(&bad_size.to_be_bytes());
         assert_eq!(
             FdtMut::new(buf.as_mut_slice()).unwrap_err().kind,
+            FdtErrorKind::InvalidLength
+        );
+        assert_eq!(
+            FdtMut::new(buf).unwrap_err().kind,
             FdtErrorKind::InvalidLength
         );
     }
@@ -797,8 +841,7 @@ fn oversized_property_rejected_without_corrupting_fdt() {
         max_u32_len,
         usize::MAX,
     ] {
-        let mut buf = dtb_in_array::<TEST_BUF_CAPACITY>(dtb);
-        let mut fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
+        let mut fdt_mut = FdtMut::new(dtb_in_array::<TEST_BUF_CAPACITY>(dtb)).unwrap();
         let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
         let err = node
             .add_property("brand-new-prop", OversizedValue(bad_len))
@@ -823,14 +866,13 @@ fn oversized_property_rejected_without_corrupting_fdt() {
             "bad_len={bad_len:#x} got {err:?}"
         );
 
-        let fdt_bytes = Fdt::from(fdt_mut).data();
+        let fdt_bytes = fdt_mut.as_read_only().data();
         assert_eq!(fdt_bytes, dtb);
         assert!(Fdt::new(fdt_bytes).is_ok());
     }
 
     // Verify a valid small `OversizedValue` writes cleanly too.
-    let mut buf = dtb_in_array::<TEST_BUF_CAPACITY>(dtb);
-    let mut fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
+    let mut fdt_mut = FdtMut::new(dtb_in_array::<TEST_BUF_CAPACITY>(dtb)).unwrap();
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
     let added = node
         .add_property("zero-prop", OversizedValue(FDT_TAG_SIZE))
@@ -855,8 +897,7 @@ fn slice_rejects_struct_block_shorter_than_contents() {
 #[test]
 fn add_property_rejects_invalid_names() {
     let dtb = include_bytes!("dtb/test_props.dtb");
-    let mut buf = dtb_in_array::<2048>(dtb);
-    let mut fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
+    let mut fdt_mut = FdtMut::new(dtb_in_array::<2048>(dtb)).unwrap();
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
 
     for bad_name in [
@@ -879,8 +920,7 @@ fn add_property_rejects_invalid_names() {
 #[test]
 fn add_property_accepts_dtc_valid_names() {
     let dtb = include_bytes!("dtb/test_props.dtb");
-    let mut buf = dtb_in_array::<2048>(dtb);
-    let mut fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
+    let mut fdt_mut = FdtMut::new(dtb_in_array::<2048>(dtb)).unwrap();
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
 
     for name in [
@@ -905,8 +945,7 @@ fn add_property_accepts_dtc_valid_names() {
 #[test]
 fn add_property_rejects_duplicate() {
     let dtb = include_bytes!("dtb/test_props.dtb");
-    let mut buf = dtb_in_array::<2048>(dtb);
-    let mut fdt_mut = FdtMut::new(buf.as_mut_slice()).unwrap();
+    let mut fdt_mut = FdtMut::new(dtb_in_array::<2048>(dtb)).unwrap();
     let mut node = fdt_mut.find_node_mut("/test-props").unwrap();
 
     let err = node.add_property("str-prop", "duplicate").unwrap_err();
@@ -970,10 +1009,8 @@ fn add_property_resizes_once() {
     }
 
     let dtb = include_bytes!("dtb/test_props.dtb");
-    let mut raw = vec![0u8; dtb.len() * 2];
-    raw[..dtb.len()].copy_from_slice(dtb);
     let mut buf = CountingBuffer {
-        inner: raw.as_mut_slice(),
+        inner: dtb_in_array::<2048>(dtb),
         resize_calls: 0,
     };
     let mut fdt_mut = FdtMut::new(&mut buf).unwrap();
