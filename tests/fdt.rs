@@ -933,7 +933,7 @@ fn count_nodes_and_depth(fdt: Fdt<'_>) -> (usize, usize) {
 #[test]
 fn events_deep_chain() {
     let dtb = build_chain_dtb(LARGE_TREE_NODES);
-    let fdt = Fdt::new(&dtb).unwrap();
+    let fdt = Fdt::with_options(&dtb, FdtOptions::new().max_depth(usize::MAX)).unwrap();
     assert_eq!(
         count_nodes_and_depth(fdt),
         (LARGE_TREE_NODES + 1, LARGE_TREE_NODES + 1)
@@ -954,11 +954,34 @@ fn events_match_recursive_traversal_on_generated_trees() {
     // so Miri uses smaller trees.
     let nodes = if cfg!(miri) { 32 } else { 100 };
     for dtb in [build_chain_dtb(nodes), build_flat_dtb(nodes)] {
-        let fdt = Fdt::new(&dtb).unwrap();
+        let fdt = Fdt::with_options(&dtb, FdtOptions::new().max_depth(usize::MAX)).unwrap();
         let mut expected = Vec::new();
         collect_events_recursive(fdt.root(), 0, &mut expected);
         assert_eq!(fdt.events().collect::<Vec<_>>(), expected);
     }
+}
+
+#[test]
+fn default_max_depth_rejects_overly_deep_tree() {
+    // root + 63 children = 64 nested nodes (allowed by default max_depth = 64)
+    assert!(Fdt::new(&build_chain_dtb(63)).is_ok());
+
+    let err = Fdt::new(&build_chain_dtb(64)).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MaxDepthExceeded);
+}
+
+#[test]
+fn custom_max_depth_option() {
+    let err = Fdt::with_options(&build_chain_dtb(0), FdtOptions::new().max_depth(0)).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MaxDepthExceeded);
+
+    assert!(Fdt::with_options(&build_chain_dtb(0), FdtOptions::new().max_depth(1)).is_ok());
+    let err = Fdt::with_options(&build_chain_dtb(1), FdtOptions::new().max_depth(1)).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MaxDepthExceeded);
+
+    assert!(Fdt::with_options(&build_chain_dtb(1), FdtOptions::new().max_depth(2)).is_ok());
+    let err = Fdt::with_options(&build_chain_dtb(2), FdtOptions::new().max_depth(2)).unwrap_err();
+    assert_eq!(err.kind, FdtErrorKind::MaxDepthExceeded);
 }
 
 #[test]
