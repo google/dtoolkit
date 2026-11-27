@@ -46,8 +46,8 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// # Panics
     ///
     /// Panics if the [`FdtMut`] structure was constructed using
-    /// [`FdtMut::new_unchecked`], [`FdtMut::from_slice_unchecked`], or
-    /// [`FdtMut::from_raw_unchecked`] and the FDT is not valid.
+    /// [`FdtMut::new_unchecked`] or [`FdtMut::from_raw_unchecked`] and the FDT
+    /// is not valid.
     ///
     /// # Examples
     ///
@@ -56,7 +56,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// assert_eq!(node.property("prop").unwrap().value(), b"\0\0\x04\xd2");
     /// node.property_mut("prop").unwrap().set_value(b"foo\0");
@@ -157,7 +157,7 @@ impl<B: FdtBuffer> FdtPropertyMut<'_, B> {
     /// use dtoolkit::{Node, Property};
     ///
     /// # let mut dtb = include_bytes!("../../tests/dtb/test_traversal.dtb").to_vec();
-    /// let mut fdt = FdtMut::from_slice(&mut dtb).unwrap();
+    /// let mut fdt = FdtMut::new(dtb.as_mut_slice()).unwrap();
     /// let mut node = fdt.find_node_mut("/a/b/c").unwrap();
     /// let prop = node.property_mut("prop").unwrap();
     /// prop.remove();

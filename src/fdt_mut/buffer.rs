@@ -15,11 +15,21 @@ use arrayvec::ArrayVec;
 use heapless::Vec as HeaplessVec;
 use zerocopy::FromBytes;
 
-use crate::error::{BufferError, FdtErrorKind, FdtParseError};
+use crate::error::BufferError;
 use crate::fdt::FdtHeader;
 
 /// A trait for buffers that can hold and mutate a Flattened Device Tree.
-pub trait FdtBuffer: AsRef<[u8]> + AsMut<[u8]> {
+pub trait FdtBuffer {
+    /// Returns the active bytes of the FDT blob.
+    fn data(&self) -> &[u8];
+
+    /// Returns the active bytes of the FDT blob as a mutable slice.
+    ///
+    /// Must return a mutable slice over the same underlying data (with the same
+    /// length) as [`data`](Self::data), so that mutations through this slice
+    /// are reflected in subsequent calls to [`data`](Self::data).
+    fn data_mut(&mut self) -> &mut [u8];
+
     /// Attempts to resize the buffer to `new_len`.
     ///
     /// If `new_len` is greater than the current length, the buffer is grown and
@@ -38,115 +48,69 @@ pub trait FdtBuffer: AsRef<[u8]> + AsMut<[u8]> {
 }
 
 impl<B: FdtBuffer + ?Sized> FdtBuffer for &mut B {
+    fn data(&self) -> &[u8] {
+        (**self).data()
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        (**self).data_mut()
+    }
+
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         (**self).try_resize(new_len)
     }
 }
 
-/// A buffer wrapping a mutable byte slice `&'a mut [u8]`.
+fn fdt_slice_active_len(slice: &[u8]) -> usize {
+    // slices shorter than FdtHeader cannot hold totalsize
+    let Ok((header, _)) = FdtHeader::ref_from_prefix(slice) else {
+        return 0;
+    };
+    // clamp to slice length to avoid panics for malformed DTBs
+    (header.totalsize() as usize).min(slice.len())
+}
+
+/// Uses `totalsize` from the FDT header as the active length and any remaining
+/// bytes as spare capacity.
 ///
-/// Instead of using the entire slice directly as the active FDT blob,
-/// `SliceBuffer` reads the active length (`totalsize`) from the FDT header upon
-/// creation. The remaining slice capacity can be used when expanding the
-/// buffer.
-#[derive(Debug, PartialEq, Eq)]
-pub struct SliceBuffer<'a> {
-    slice: &'a mut [u8],
-}
-
-impl<'a> SliceBuffer<'a> {
-    /// Creates a new `SliceBuffer` from a mutable slice containing an FDT blob.
-    ///
-    /// Reads `totalsize` from the FDT header at the start of `slice` to verify
-    /// the buffer length. The rest of `slice` is used as capacity for future
-    /// buffer expansion.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`FdtParseError`] if `slice` is smaller than an FDT header,
-    /// or if the header's `totalsize` is larger than the length of `slice`.
-    pub fn new(slice: &'a mut [u8]) -> Result<Self, FdtParseError> {
-        let (header, _) = FdtHeader::ref_from_prefix(slice)
-            .map_err(|_| FdtParseError::new(FdtErrorKind::InvalidLength, 0))?;
-        let len = header.totalsize() as usize;
-        if len < size_of::<FdtHeader>() || len > slice.len() {
-            return Err(FdtParseError::new(
-                FdtErrorKind::InvalidLength,
-                core::mem::offset_of!(FdtHeader, totalsize),
-            ));
-        }
-        Ok(Self::new_unchecked(slice))
+/// The slice needs to be at least 40 bytes long (the length of the FDT header);
+/// otherwise, resizing the buffer to any non-zero length will fail.
+impl FdtBuffer for [u8] {
+    fn data(&self) -> &[u8] {
+        &self[..fdt_slice_active_len(self)]
     }
 
-    /// Creates a new `SliceBuffer` without validating the FDT header.
-    ///
-    /// The caller must ensure that `slice` contains a valid Flattened Device
-    /// Tree (FDT) blob. If the blob is invalid, methods on `Fdt` and
-    /// related types may panic.
-    #[must_use]
-    pub fn new_unchecked(slice: &'a mut [u8]) -> Self {
-        Self { slice }
+    fn data_mut(&mut self) -> &mut [u8] {
+        let len = fdt_slice_active_len(self);
+        &mut self[..len]
     }
 
-    pub(super) fn into_slice(self) -> &'a [u8] {
-        &self.slice[..self.len()]
-    }
-
-    fn len(&self) -> usize {
-        self.header().totalsize() as usize
-    }
-
-    fn header(&self) -> &FdtHeader {
-        let (header, _) = FdtHeader::ref_from_prefix(self.slice)
-            .expect("FDT header should be valid after SliceBuffer construction");
-        header
-    }
-
-    fn header_mut(&mut self) -> &mut FdtHeader {
-        let (header, _) = FdtHeader::mut_from_prefix(self.slice)
-            .expect("FDT header should be valid after SliceBuffer construction");
-        header
-    }
-}
-
-impl AsRef<[u8]> for SliceBuffer<'_> {
-    fn as_ref(&self) -> &[u8] {
-        &self.slice[..self.len()]
-    }
-}
-
-impl AsMut<[u8]> for SliceBuffer<'_> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        let len = self.len();
-        &mut self.slice[..len]
-    }
-}
-
-impl<'a> TryFrom<&'a mut [u8]> for SliceBuffer<'a> {
-    type Error = FdtParseError;
-
-    fn try_from(slice: &'a mut [u8]) -> Result<Self, Self::Error> {
-        Self::new(slice)
-    }
-}
-
-impl FdtBuffer for SliceBuffer<'_> {
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
-        if new_len > self.slice.len() {
+        if self.len() < size_of::<FdtHeader>() {
+            if new_len == 0 {
+                return Ok(());
+            }
             return Err(BufferError::OutOfSpace {
                 requested: new_len,
-                capacity: self.slice.len(),
+                capacity: 0,
             });
         }
-        let current_len = self.len();
-        if new_len > current_len {
-            self.slice[current_len..new_len].fill(0);
+        if new_len > self.len() {
+            return Err(BufferError::OutOfSpace {
+                requested: new_len,
+                capacity: self.len(),
+            });
         }
-
-        let header = self.header_mut();
         let len_u32 = u32::try_from(new_len).map_err(|_e| BufferError::FdtLimitExceeded {
             requested: new_len as u64,
         })?;
+        let current_len = fdt_slice_active_len(self);
+        if new_len > current_len {
+            self[current_len..new_len].fill(0);
+        }
+
+        let (header, _) =
+            FdtHeader::mut_from_prefix(self).expect("buffer length checked against FdtHeader size");
         header.totalsize.set(len_u32);
 
         Ok(())
@@ -155,6 +119,14 @@ impl FdtBuffer for SliceBuffer<'_> {
 
 #[cfg(feature = "alloc")]
 impl FdtBuffer for Vec<u8> {
+    fn data(&self) -> &[u8] {
+        self
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        self
+    }
+
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > self.len() {
             let additional = new_len - self.len();
@@ -167,6 +139,14 @@ impl FdtBuffer for Vec<u8> {
 
 #[cfg(feature = "arrayvec07")]
 impl<const N: usize> FdtBuffer for ArrayVec<u8, N> {
+    fn data(&self) -> &[u8] {
+        self
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        self
+    }
+
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > N {
             return Err(BufferError::OutOfSpace {
@@ -186,6 +166,14 @@ impl<const N: usize> FdtBuffer for ArrayVec<u8, N> {
 
 #[cfg(feature = "heapless09")]
 impl<const N: usize> FdtBuffer for HeaplessVec<u8, N> {
+    fn data(&self) -> &[u8] {
+        self
+    }
+
+    fn data_mut(&mut self) -> &mut [u8] {
+        self
+    }
+
     fn try_resize(&mut self, new_len: usize) -> Result<(), BufferError> {
         if new_len > N {
             return Err(BufferError::OutOfSpace {
@@ -226,12 +214,12 @@ mod tests {
         };
         raw[..size_of::<FdtHeader>()].copy_from_slice(header.as_bytes());
 
-        let mut buf = SliceBuffer::new(&mut raw).unwrap();
-        assert_eq!(buf.as_ref().len(), 40);
+        let buf: &mut [u8] = &mut raw;
+        assert_eq!(buf.data().len(), 40);
 
         assert_eq!(buf.try_resize(50), Ok(()));
-        assert_eq!(buf.as_ref().len(), 50);
-        assert_eq!(buf.as_ref()[40..50], [0; 10]);
+        assert_eq!(buf.data().len(), 50);
+        assert_eq!(buf.data()[40..50], [0; 10]);
 
         assert_eq!(
             buf.try_resize(150),
@@ -240,10 +228,36 @@ mod tests {
                 capacity: 100,
             })
         );
-        assert_eq!(buf.as_ref().len(), 50);
+        assert_eq!(buf.data().len(), 50);
 
         buf.try_resize(45).unwrap();
-        assert_eq!(buf.as_ref().len(), 45);
+        assert_eq!(buf.data().len(), 45);
+
+        buf.try_resize(10).unwrap();
+        assert_eq!(buf.data().len(), 10);
+
+        buf.try_resize(0).unwrap();
+        assert_eq!(buf.data(), []);
+
+        buf.try_resize(50).unwrap();
+        assert_eq!(buf.data().len(), 50);
+    }
+
+    #[test]
+    fn small_slice_buffer() {
+        let mut raw = [0u8; 20];
+        let buf: &mut [u8] = &mut raw;
+        assert_eq!(buf.data(), []);
+        assert_eq!(buf.try_resize(0), Ok(()));
+        for req in [10, 30] {
+            assert_eq!(
+                buf.try_resize(req),
+                Err(BufferError::OutOfSpace {
+                    requested: req,
+                    capacity: 0,
+                })
+            );
+        }
     }
 
     #[cfg(feature = "alloc")]
