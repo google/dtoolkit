@@ -15,15 +15,11 @@ use zerocopy::IntoBytes;
 
 use crate::Property;
 use crate::fdt::{
-    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_MAGIC, FDT_TAGSIZE, Fdt, FdtHeader,
-    FdtPropertyHeader,
+    FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_LAST_COMP_VERSION, FDT_MAGIC, FDT_TAGSIZE,
+    FDT_VERSION, Fdt, FdtHeader, FdtPropertyHeader,
 };
 use crate::memreserve::RawMemoryReservation;
 use crate::model::{DeviceTree, DeviceTreeNode, DeviceTreeProperty};
-
-// https://devicetree-specification.readthedocs.io/en/latest/chapter5-flattened-format.html#header
-const LAST_VERSION: u32 = 17;
-const LAST_COMP_VERSION: u32 = 16;
 
 impl DeviceTree {
     /// Serializes the [`DeviceTree`] to a flattened device tree blob.
@@ -87,8 +83,8 @@ impl DeviceTree {
             off_mem_rsvmap: u32::try_from(off_mem_rsvmap)
                 .expect("off_mem_rsvmap exceeds u32")
                 .into(),
-            version: LAST_VERSION.into(),
-            last_comp_version: LAST_COMP_VERSION.into(),
+            version: FDT_VERSION.into(),
+            last_comp_version: FDT_LAST_COMP_VERSION.into(),
             boot_cpuid_phys: 0u32.into(),
             size_dt_strings: u32::try_from(size_dt_strings)
                 .expect("size_dt_strings exceeds u32")
