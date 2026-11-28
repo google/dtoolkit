@@ -8,6 +8,7 @@ edition = "2024"
 cargo-fuzz = true
 
 [dependencies]
+arbitrary = { version = "1.5.0", features = ["derive"] }
 libfuzzer-sys = "0.4"
 
 [dependencies.dtoolkit]
@@ -16,6 +17,13 @@ path = ".."
 [[bin]]
 name = "parse"
 path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fdt_mut"
+path = "fuzz_targets/fdt_mut.rs"
 test = false
 doc = false
 bench = false
