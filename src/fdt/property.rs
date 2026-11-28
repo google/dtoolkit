@@ -15,6 +15,7 @@ use zerocopy::FromBytes;
 
 use super::{FDT_TAGSIZE, Fdt, FdtPropertyHeader, FdtToken, NameValidation};
 use crate::Property;
+use crate::util::write_indent;
 
 /// A property of a device tree node.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,7 +46,8 @@ impl<'a> Property<'a> for FdtProperty<'a> {
 
 impl FdtProperty<'_> {
     pub(crate) fn fmt(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
-        write!(f, "{:indent$}{}", "", self.name, indent = indent)?;
+        write_indent(f, indent)?;
+        write!(f, "{}", self.name)?;
 
         if self.value.is_empty() {
             writeln!(f, ";")?;

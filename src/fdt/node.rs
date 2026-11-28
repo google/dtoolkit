@@ -15,6 +15,7 @@ use crate::Node;
 use crate::fdt::event::FdtEventIter;
 use crate::fdt::property::{FdtPropIter, FdtProperty, InnerPropIter};
 use crate::standard::{AddressSpaceProperties, NodeStandard};
+use crate::util::write_indent;
 
 /// A node in a flattened device tree.
 #[derive(Debug, Clone, Copy)]
@@ -170,9 +171,11 @@ impl<'a> FdtNode<'a> {
     pub(crate) fn fmt_recursive(&self, f: &mut Formatter, indent: usize) -> fmt::Result {
         let name = self.name();
         if name.is_empty() {
-            writeln!(f, "{:indent$}/ {{", "", indent = indent)?;
+            write_indent(f, indent)?;
+            writeln!(f, "/ {{")?;
         } else {
-            writeln!(f, "{:indent$}{} {{", "", name, indent = indent)?;
+            write_indent(f, indent)?;
+            writeln!(f, "{name} {{")?;
         }
 
         let mut has_properties = false;
@@ -191,7 +194,8 @@ impl<'a> FdtNode<'a> {
             child.fmt_recursive(f, indent + 4)?;
         }
 
-        writeln!(f, "{:indent$}}};", "", indent = indent)
+        write_indent(f, indent)?;
+        writeln!(f, "}};")
     }
 }
 
